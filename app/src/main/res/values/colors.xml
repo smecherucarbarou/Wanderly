@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#FFFDF0</color>
+    <color name="primary">#F5A623</color>
+    <color name="secondary">#1A1A1A</color>
+    <color name="accent">#FFD166</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="text_primary">#1A1A1A</color>
+    <color name="text_secondary">#666666</color>
+    <color name="pollen_white">#FAFAFA</color>
+    <color name="button_gradient_start">#F5A623</color>
+    <color name="button_gradient_end">#FFB800</color>
+    <color name="transparent">#00000000</color>
+    <color name="error">#E53935</color>
+</resources>

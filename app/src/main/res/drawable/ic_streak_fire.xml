@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Inelul de foc care va acoperi marginile pozei de profil -->
+    <!-- Baza inelului (Portocaliu Închis) -->
+    <path
+        android:fillColor="#FF5722"
+        android:fillType="evenOdd"
+        android:pathData="M100,190 C155,190 190,150 190,100 C190,45 155,10 100,10 C45,10 10,45 10,100 C10,150 45,190 100,190 Z
+                          M100,165 C60,165 35,135 35,100 C35,60 60,35 100,35 C140,35 165,60 165,100 C165,135 140,165 100,165 Z" />
+
+    <!-- Inel Median (Portocaliu Deschis) -->
+    <path
+        android:fillColor="#FF9800"
+        android:fillType="evenOdd"
+        android:pathData="M100,180 C145,180 180,145 180,100 C180,55 145,20 100,20 C55,20 20,55 20,100 C20,145 55,180 100,180 Z
+                          M100,160 C65,160 40,135 40,100 C40,65 65,40 100,40 C135,40 160,65 160,100 C160,135 135,160 100,160 Z" />
+
+    <!-- Inel Interior (Galben) -->
+    <path
+        android:fillColor="#FFEB3B"
+        android:fillType="evenOdd"
+        android:pathData="M100,170 C135,170 170,135 170,100 C170,65 135,30 100,30 C65,30 30,65 30,100 C30,135 65,170 100,170 Z
+                          M100,155 C70,155 45,130 45,100 C45,70 70,45 100,45 C130,45 155,70 155,100 C155,130 130,155 100,155 Z" />
+
+    <!-- Limbi de Foc care se ridică peste inel -->
+    <path
+        android:fillColor="#FF5722"
+        android:pathData="M100,10 Q80,-15 60,5 Q75,20 80,35 Z M100,10 Q120,-15 140,5 Q125,20 120,35 Z M30,60 Q0,30 20,15 Q35,40 45,50 Z M170,60 Q200,30 180,15 Q165,40 155,50 Z M20,130 Q-10,150 10,170 Q30,150 40,140 Z M180,130 Q210,150 190,170 Q170,150 160,140 Z M80,190 Q100,215 120,190 Q110,170 100,170 Q90,170 80,190 Z" />
+
+    <path
+        android:fillColor="#FF9800"
+        android:pathData="M100,20 Q85,0 70,15 Q80,30 85,40 Z M100,20 Q115,0 130,15 Q120,30 115,40 Z M40,70 Q15,45 30,35 Q40,55 50,65 Z M160,70 Q185,45 170,35 Q160,55 150,65 Z" />
+
+    <path
+        android:fillColor="#FFEB3B"
+        android:pathData="M100,30 Q90,15 80,25 Q85,35 90,45 Z M100,30 Q110,15 120,25 Q115,35 110,45 Z M50,80 Q30,60 40,50 Q45,65 55,75 Z M150,80 Q170,60 160,50 Q155,65 145,75 Z" />
+
+    <!-- Scântei dinamice -->
+    <path
+        android:fillColor="#FFEB3B"
+        android:pathData="M140,20 l3,3 l-3,3 l-3,-3 z M60,20 l3,3 l-3,3 l-3,-3 z M20,100 l4,4 l-4,4 l-4,-4 z M180,100 l4,4 l-4,4 l-4,-4 z M50,180 l2,2 l-2,2 l-2,-2 z M150,180 l2,2 l-2,2 l-2,-2 z" />
+
+</vector>

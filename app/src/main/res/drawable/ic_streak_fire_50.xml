@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Purple/Magic Intense Fire for 50 Day Streak -->
+    <path
+        android:fillColor="#A020F0"
+        android:fillType="evenOdd"
+        android:pathData="M100,200 C160,200 200,160 200,100 C200,40 160,0 100,0 C40,0 0,40 0,100 C0,160 40,200 100,200 Z M100,165 C64,165 35,136 35,100 C35,64 64,35 100,35 C136,35 165,64 165,100 C165,136 136,165 100,165 Z" />
+
+    <!-- Extreme licking flames -->
+    <path
+        android:fillColor="#E040FB"
+        android:pathData="M100,0 Q70,-30 40,15 Q65,40 70,60 Z M100,0 Q130,-30 160,15 Q135,40 130,60 Z M15,50 Q-20,10 10,-5 Q30,40 40,60 Z M185,50 Q220,10 190,-5 Q170,40 160,60 Z M70,195 Q100,230 130,195 Q115,175 100,175 Q85,175 70,195 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,15 Q85,-5 70,15 Q80,30 85,45 Z M100,15 Q115,-5 130,15 Q120,30 115,45 Z" />
+
+    <!-- Sparks -->
+    <path android:fillColor="#FFFFFF" android:pathData="M40,30 l4,4 l-4,4 l-4,-4 z M160,30 l4,4 l-4,4 l-4,-4 z M20,150 l3,3 l-3,3 l-3,-3 z M180,150 l3,3 l-3,3 l-3,-3 z" />
+</vector>

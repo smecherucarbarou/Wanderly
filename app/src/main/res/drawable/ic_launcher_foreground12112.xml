@@ -1,0 +1,69 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:translateX="18"
+        android:translateY="20">
+
+        <!-- Wing -->
+        <path
+            android:fillColor="#D1E9F6"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="3.5"
+            android:strokeLineJoin="round"
+            android:pathData="M38,22 C55,5 75,15 65,35 L40,35 Z" />
+
+        <!-- Bee Body / "B" Shape -->
+        <!-- Tail Stripes (Right Side) -->
+        <path
+            android:fillColor="#FFD54F"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="3.5"
+            android:strokeLineJoin="round"
+            android:pathData="M40,35 H65 V65 H40 Z" />
+
+        <!-- Black Stripes on Tail -->
+        <path
+            android:fillColor="#1A1A1A"
+            android:pathData="M40,43 H65 V49 H40 Z" />
+        <path
+            android:fillColor="#1A1A1A"
+            android:pathData="M40,56 H65 V62 H40 Z" />
+
+        <!-- Head (Left Side) -->
+        <path
+            android:fillColor="#FFD54F"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="3.5"
+            android:strokeLineJoin="round"
+            android:pathData="M40,35 H25 C15,35 15,65 25,65 H40 Z" />
+
+        <!-- Eye -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="1"
+            android:pathData="M28,45 m-3.5,0 a3.5,3.5 0 1,1 7,0 a3.5,3.5 0 1,1 -7,0" />
+        <path
+            android:fillColor="#1A1A1A"
+            android:pathData="M28,45 m-1.2,0 a1.2,1.2 0 1,1 2.4,0 a1.2,1.2 0 1,1 -2.4,0" />
+
+        <!-- Antennae -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round"
+            android:pathData="M25,35 Q22,25 15,28" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1A1A1A"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round"
+            android:pathData="M32,35 Q30,18 22,22" />
+
+    </group>
+</vector>

@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Simple Bronze/Orange Fire for 5 Day Streak -->
+    <path
+        android:fillColor="#CD7F32"
+        android:pathData="M100,190 C155,190 190,150 190,100 C190,45 155,10 100,10 C45,10 10,45 10,100 C10,150 45,190 100,190 Z M100,170 C65,170 40,145 40,100 C40,65 65,40 100,40 C135,40 160,65 160,100 C160,135 135,170 100,170 Z" />
+    <path
+        android:fillColor="#E67E22"
+        android:pathData="M100,20 Q80,-10 60,10 Q75,30 80,45 Z M100,20 Q120,-10 140,10 Q125,30 120,45 Z M40,60 Q10,40 25,20 Q40,50 50,60 Z M160,60 Q190,40 175,20 Q160,50 150,60 Z" />
+</vector>
