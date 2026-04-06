@@ -9,7 +9,14 @@
         android:id="@+id/mapFragment"
         android:name="com.novahorizon.wanderly.ui.map.MapFragment"
         android:label="Map"
-        tools:layout="@layout/fragment_map" />
+        tools:layout="@layout/fragment_map">
+        <action
+            android:id="@+id/action_map_to_missions"
+            app:destination="@id/missionsFragment"
+            app:launchSingleTop="true"
+            app:popUpTo="@id/mapFragment"
+            app:popUpToInclusive="false" />
+    </fragment>
 
     <fragment
         android:id="@+id/gemsFragment"

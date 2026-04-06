@@ -7,5 +7,8 @@ data class Gem(
     val name: String,
     val description: String,
     val location: String,
-    val reason: String // Why it's a hidden gem
+    val reason: String,
+    val category: String = "place",
+    val lat: Double = 0.0,
+    val lng: Double = 0.0
 )

@@ -89,6 +89,8 @@ class ProfileFragment : Fragment() {
             lifecycleScope.launch {
                 try {
                     SupabaseClient.client.auth.signOut()
+                    val prefs = requireActivity().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean("remember_me", false).apply()
                     requireActivity().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
                     startActivity(Intent(requireContext(), AuthActivity::class.java))
                     requireActivity().finish()

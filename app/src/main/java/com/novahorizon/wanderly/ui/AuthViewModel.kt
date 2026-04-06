@@ -24,6 +24,25 @@ class AuthViewModel(private val repository: WanderlyRepository) : ViewModel() {
         data class Error(val message: String) : AuthState()
     }
 
+    private fun friendlyAuthError(raw: String?): String {
+        val msg = raw?.lowercase() ?: return "Something went wrong. Please try again."
+        return when {
+            msg.contains("invalid login credentials")          -> "Incorrect email or password."
+            msg.contains("email not confirmed")                -> "Please verify your email before signing in."
+            msg.contains("user already registered")
+                || msg.contains("already registered")
+                || msg.contains("email already")               -> "An account with this email already exists."
+            msg.contains("password should be at least")        -> "Password must be at least 6 characters."
+            msg.contains("unable to validate email")
+                || msg.contains("invalid email")               -> "Please enter a valid email address."
+            msg.contains("network") || msg.contains("timeout")
+                || msg.contains("connect")                     -> "No internet connection. Please check your network."
+            msg.contains("rate limit") || msg.contains("too many") -> "Too many attempts. Please wait a moment and try again."
+            msg.contains("weak password")                      -> "Password is too weak. Use letters, numbers and symbols."
+            else                                               -> "Authentication failed. Please try again."
+        }
+    }
+
     fun login(email: String, pass: String) {
         _authState.value = AuthState.Loading
         viewModelScope.launch {
@@ -34,7 +53,7 @@ class AuthViewModel(private val repository: WanderlyRepository) : ViewModel() {
                 }
                 _authState.postValue(AuthState.Success)
             } catch (e: Exception) {
-                _authState.postValue(AuthState.Error(e.message ?: "Login failed"))
+                _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))
             }
         }
     }
@@ -61,7 +80,7 @@ class AuthViewModel(private val repository: WanderlyRepository) : ViewModel() {
                 // Baza de date (prin Trigger) va crea profilul folosind 'username' din data.
                 _authState.postValue(AuthState.Success)
             } catch (e: Exception) {
-                _authState.postValue(AuthState.Error(e.message ?: "Signup error"))
+                _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))
             }
         }
     }

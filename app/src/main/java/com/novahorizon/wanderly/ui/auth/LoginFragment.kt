@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.ui.auth
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Patterns
@@ -68,6 +69,11 @@ class LoginFragment : Fragment() {
                     binding.loginButton.isEnabled = false
                 }
                 is AuthViewModel.AuthState.Success -> {
+                    // Save Remember Me preference
+                    val isRememberMeChecked = binding.rememberMeCheckbox.isChecked
+                    val prefs = requireContext().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean("remember_me", isRememberMeChecked).apply()
+
                     startActivity(Intent(requireContext(), MainActivity::class.java))
                     requireActivity().finish()
                 }

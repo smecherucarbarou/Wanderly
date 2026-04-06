@@ -36,8 +36,23 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         android:indeterminateTint="@color/primary"
-        app:layout_constraintTop_toBottomOf="@id/gems_title"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/gems_loading_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:text="Buzzy is exploring..."
+        android:textSize="13sp"
+        android:textColor="?attr/colorOnSurface"
+        android:alpha="0.6"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/gems_loading"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

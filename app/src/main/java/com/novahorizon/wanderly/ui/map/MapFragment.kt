@@ -61,9 +61,14 @@ class MapFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        Configuration.getInstance().load(requireContext(), requireActivity().getPreferences(Context.MODE_PRIVATE))
-        Configuration.getInstance().cacheMapTileCount = 12
-        Configuration.getInstance().cacheMapTileOvershoot = 12
+        Configuration.getInstance().load(
+            requireContext(),
+            requireActivity().getPreferences(Context.MODE_PRIVATE)
+        )
+        Configuration.getInstance().cacheMapTileCount = 9.toShort()
+        Configuration.getInstance().cacheMapTileOvershoot = 9.toShort()
+        Configuration.getInstance().osmdroidTileCache =
+            requireContext().cacheDir.resolve("osmdroid")
         
         _binding = FragmentMapBinding.inflate(inflater, container, false)
         return binding.root
@@ -75,6 +80,14 @@ class MapFragment : Fragment() {
         binding.mapView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
         binding.mapView.setMultiTouchControls(true)
+        
+        // Map restrictions to prevent infinite tiling and out-of-bounds scrolling
+        binding.mapView.minZoomLevel = 3.0
+        binding.mapView.isVerticalMapRepetitionEnabled = false
+        binding.mapView.isHorizontalMapRepetitionEnabled = false
+        binding.mapView.setScrollableAreaLimitLatitude(85.0, -85.0, 0)
+        binding.mapView.setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
+
         binding.mapView.controller.setZoom(16.0)
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
@@ -97,9 +110,23 @@ class MapFragment : Fragment() {
 
         checkActiveMission()
         
+        binding.mapLoading.visibility = View.VISIBLE
+        binding.mapView.addMapListener(object : org.osmdroid.events.MapListener {
+            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean = false
+            override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
+                _binding?.mapLoading?.visibility = View.GONE
+                return false
+            }
+        })
+        // Hide after 3s regardless
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(3000)
+            _binding?.mapLoading?.visibility = View.GONE
+        }
+        
         // Observe friends to display on map
         viewModel.friends.observe(viewLifecycleOwner) { friends ->
-            binding.mapView.overlays.removeAll(friendMarkers)
+            _binding?.mapView?.overlays?.removeAll(friendMarkers)
             friendMarkers.clear()
             
             friends.forEach { friend ->
@@ -121,10 +148,10 @@ class MapFragment : Fragment() {
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     }
                     friendMarkers.add(marker)
-                    binding.mapView.overlays.add(marker)
+                    _binding?.mapView?.overlays?.add(marker)
                 }
             }
-            binding.mapView.invalidate()
+            _binding?.mapView?.invalidate()
         }
     }
 
@@ -143,7 +170,7 @@ class MapFragment : Fragment() {
                 binding.newFlightButton.text = "Go to Missions"
                 
                 binding.newFlightButton.setOnClickListener {
-                    findNavController().navigate(R.id.missionsFragment)
+                    findNavController().navigate(R.id.action_map_to_missions)
                 }
 
                 val targetPoint = GeoPoint(targetLat, targetLng)
@@ -156,7 +183,7 @@ class MapFragment : Fragment() {
         binding.missionPreviewText.text = "Ready for a new adventure?"
         binding.newFlightButton.text = "Generate Mission"
         binding.newFlightButton.setOnClickListener {
-            findNavController().navigate(R.id.missionsFragment)
+            findNavController().navigate(R.id.action_map_to_missions)
         }
     }
 
@@ -194,7 +221,6 @@ class MapFragment : Fragment() {
                 if (profile != null) {
                     repo.updateProfile(profile.copy(last_lat = lat, last_lng = lng))
                 }
-                viewModel.loadFriends()
             } catch (e: Exception) {
                 Log.e("MapFragment", "Failed to update location", e)
             }
@@ -203,6 +229,7 @@ class MapFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        if (_binding == null) return
         binding.mapView.onResume()
         checkActiveMission()
         viewModel.loadFriends()

@@ -11,6 +11,12 @@ object SupabaseClient {
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY
     ) {
         install(Postgrest)
-        install(Auth)
+        install(Auth) {
+            scheme = "wanderly"
+            host = "login"
+            // This enables automatic session persistence to disk
+            alwaysAutoRefresh = true
+            autoLoadFromStorage = true
+        }
     }
 }
