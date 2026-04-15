@@ -15,7 +15,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
-import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -32,10 +32,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 class HiveRealtimeService : Service() {
 
@@ -101,11 +97,21 @@ class HiveRealtimeService : Service() {
                 }.launchIn(this)
 
                 while (isActive) {
-                    delay(30000)
+                    NotificationCheckCoordinator.runTimedStreakCheck(
+                        context = applicationContext,
+                        repository = repository,
+                        source = "service_timer"
+                    )
+                    NotificationCheckCoordinator.runSocialFallbackCheck(
+                        context = applicationContext,
+                        repository = repository,
+                        source = "service_timer"
+                    )
                     if (SupabaseClient.client.realtime.status.value != Realtime.Status.CONNECTED) {
                         Log.w("HiveRealtime", "Not connected, attempting reconnection...")
                         SupabaseClient.client.realtime.connect()
                     }
+                    delay(20_000)
                 }
             } catch (e: Exception) {
                 Log.e("HiveRealtime", "Critical error in service", e)
@@ -130,19 +136,12 @@ class HiveRealtimeService : Service() {
             val currentProfile = repository.getCurrentProfile() ?: return@onEach
 
             Log.d("HiveRealtime", "Realtime update from: ${updatedProfile.username}")
-
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            val today = sdf.format(Date())
-
-            if (updatedProfile.last_mission_date == today) {
-                WanderlyNotificationManager.sendRivalActivity(applicationContext, updatedProfile.username ?: "A rival")
-            }
-
-            if ((updatedProfile.honey ?: 0) > (currentProfile.honey ?: 0)) {
-                WanderlyNotificationManager.sendOvertakenAlert(applicationContext, updatedProfile.username ?: "Someone")
-            }
+            NotificationCheckCoordinator.handleRealtimeProfileUpdate(
+                context = applicationContext,
+                repository = repository,
+                currentProfile = currentProfile,
+                updatedProfile = updatedProfile
+            )
         }.launchIn(serviceScope)
 
         channel.subscribe()

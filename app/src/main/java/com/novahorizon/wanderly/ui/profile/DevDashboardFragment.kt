@@ -15,6 +15,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
+import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.workers.SocialWorker
@@ -65,10 +66,22 @@ class DevDashboardFragment : Fragment() {
             WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
             announceTrigger("Daily streak reminder forced for $streak days")
         }
+        binding.btnResetDailyCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.DAILY_REMINDER,
+                "Daily reminder"
+            )
+        }
 
         binding.btnNotifyEvening.setOnClickListener {
             WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
             announceTrigger("Evening rescue alert forced")
+        }
+        binding.btnResetEveningCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.EVENING_ALERT,
+                "Evening alert"
+            )
         }
 
         binding.btnNotifyMilestone.setOnClickListener {
@@ -76,10 +89,22 @@ class DevDashboardFragment : Fragment() {
             WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
             announceTrigger("Milestone alert forced for $streak days")
         }
+        binding.btnResetMilestoneCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.MILESTONE,
+                "Milestone celebration"
+            )
+        }
 
         binding.btnNotifyLost.setOnClickListener {
             WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
             announceTrigger("Streak lost alert forced")
+        }
+        binding.btnResetLostCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.STREAK_LOST,
+                "Streak lost"
+            )
         }
 
         binding.btnNotifyRival.setOnClickListener {
@@ -87,11 +112,11 @@ class DevDashboardFragment : Fragment() {
             WanderlyNotificationManager.sendRivalActivity(requireContext(), name, force = true)
             announceTrigger("Rival activity forced for $name")
         }
-
-        binding.btnNotifyRivalGroup.setOnClickListener {
-            val count = groupedRivalCount()
-            WanderlyNotificationManager.sendAggregatedRivalActivity(requireContext(), count, force = true)
-            announceTrigger("Grouped rival alert forced for $count rivals")
+        binding.btnResetRivalCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.RIVAL_ACTIVITY,
+                "Rival activity"
+            )
         }
 
         binding.btnNotifyOvertaken.setOnClickListener {
@@ -99,16 +124,29 @@ class DevDashboardFragment : Fragment() {
             WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name, force = true)
             announceTrigger("Overtaken alert forced for $name")
         }
+        binding.btnResetOvertakenCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.OVERTAKEN,
+                "Overtaken"
+            )
+        }
 
         binding.btnNotifyFight.setOnClickListener {
             val name = rivalName(default = "KingBee")
             WanderlyNotificationManager.sendFightForFirst(requireContext(), name, force = true)
             announceTrigger("Fight-for-first alert forced for $name")
         }
+        binding.btnResetFightCooldown.setOnClickListener {
+            resetNotificationType(
+                WanderlyNotificationManager.NotificationType.FIGHT_FOR_FIRST,
+                "Fight for first"
+            )
+        }
 
         binding.btnClearNotifCooldowns.setOnClickListener {
             WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
-            announceTrigger("Notification cooldown cache cleared")
+            NotificationCheckCoordinator.clearCheckState(requireContext())
+            announceTrigger("Notification cooldowns and check state cleared")
         }
 
         binding.btnRawLogs.setOnClickListener {
@@ -231,12 +269,17 @@ class DevDashboardFragment : Fragment() {
         showSnackbar(message, isError = false)
     }
 
-    private fun rivalName(default: String): String {
-        return binding.editFriendName.text.toString().trim().ifBlank { default }
+    private fun resetNotificationType(
+        type: WanderlyNotificationManager.NotificationType,
+        label: String
+    ) {
+        WanderlyNotificationManager.clearNotificationCooldown(requireContext(), type)
+        NotificationCheckCoordinator.clearCheckStateForType(requireContext(), type)
+        announceTrigger("$label cooldown/state reset")
     }
 
-    private fun groupedRivalCount(): Int {
-        return binding.editRivalCount.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 3
+    private fun rivalName(default: String): String {
+        return binding.editFriendName.text.toString().trim().ifBlank { default }
     }
 
     private fun updateReality() {

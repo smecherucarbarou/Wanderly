@@ -14,19 +14,39 @@ import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 
 object WanderlyNotificationManager {
+    enum class NotificationType {
+        DAILY_REMINDER,
+        EVENING_ALERT,
+        MILESTONE,
+        STREAK_LOST,
+        RIVAL_ACTIVITY,
+        AGGREGATED_RIVAL_ACTIVITY,
+        OVERTAKEN,
+        FIGHT_FOR_FIRST
+    }
+
     private const val CHANNEL_ID = "wanderly_alerts_v3"
     private const val CHANNEL_NAME = "Wanderly Hive Alerts"
     private const val LOG_TAG = "WanderlyNotif"
     private const val PREFS_NAME = "notif_dedup"
-    private const val COOLDOWN_MS = 30 * 60 * 1000L
+    private const val DEFAULT_COOLDOWN_MS = 30 * 60 * 1000L
+    private const val DAILY_REMINDER_COOLDOWN_MS = 2 * 60 * 60 * 1000L
+    private const val EVENING_ALERT_COOLDOWN_MS = 90 * 60 * 1000L
+    private const val MILESTONE_COOLDOWN_MS = 12 * 60 * 60 * 1000L
+    private const val STREAK_LOST_COOLDOWN_MS = 12 * 60 * 60 * 1000L
+    private const val RIVAL_ACTIVITY_COOLDOWN_MS = 20 * 60 * 1000L
+    private const val AGGREGATED_RIVAL_COOLDOWN_MS = 25 * 60 * 1000L
+    private const val OVERTAKEN_COOLDOWN_MS = 45 * 60 * 1000L
+    private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
 
     private fun isNotificationCooldownActive(context: Context, key: String): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastSent = prefs.getLong(key, 0L)
         val now = System.currentTimeMillis()
+        val cooldownMs = cooldownForKey(key)
 
-        if (now - lastSent < COOLDOWN_MS) {
-            Log.d(LOG_TAG, "Cooldown active for $key. Skipping notification.")
+        if (now - lastSent < cooldownMs) {
+            Log.d(LOG_TAG, "Cooldown active for $key (${cooldownMs / 1000}s). Skipping notification.")
             return true
         }
 
@@ -36,6 +56,19 @@ object WanderlyNotificationManager {
 
     fun clearNotificationCooldowns(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
+        Log.d(LOG_TAG, "Notification cooldown cache cleared.")
+    }
+
+    fun clearNotificationCooldown(context: Context, type: NotificationType) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        for (key in prefs.all.keys) {
+            if (matchesType(key, type)) {
+                editor.remove(key)
+            }
+        }
+        editor.apply()
+        Log.d(LOG_TAG, "Notification cooldown cleared for $type.")
     }
 
     fun createNotificationChannel(context: Context) {
@@ -65,12 +98,15 @@ object WanderlyNotificationManager {
         dedupKey: String? = null,
         bypassCooldown: Boolean = false
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !NotificationManagerCompat.from(context).areNotificationsEnabled()
-        ) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             Log.w(LOG_TAG, "Notifications are disabled. Cannot show alert.")
             return
         }
+
+        Log.d(
+            LOG_TAG,
+            "Attempting notification id=$notificationId key=${dedupKey ?: "none"} title=$title"
+        )
 
         if (dedupKey != null && !bypassCooldown && isNotificationCooldownActive(context, dedupKey)) {
             return
@@ -194,5 +230,28 @@ object WanderlyNotificationManager {
             "fight_for_first",
             force
         )
+    }
+
+    private fun cooldownForKey(key: String): Long = when {
+        key == "daily_reminder" -> DAILY_REMINDER_COOLDOWN_MS
+        key == "evening_alert" -> EVENING_ALERT_COOLDOWN_MS
+        key.startsWith("milestone_") -> MILESTONE_COOLDOWN_MS
+        key == "streak_lost" -> STREAK_LOST_COOLDOWN_MS
+        key.startsWith("rival_") -> RIVAL_ACTIVITY_COOLDOWN_MS
+        key == "aggregated_rivals" -> AGGREGATED_RIVAL_COOLDOWN_MS
+        key == "overtaken" -> OVERTAKEN_COOLDOWN_MS
+        key == "fight_for_first" -> FIGHT_FOR_FIRST_COOLDOWN_MS
+        else -> DEFAULT_COOLDOWN_MS
+    }
+
+    private fun matchesType(key: String, type: NotificationType): Boolean = when (type) {
+        NotificationType.DAILY_REMINDER -> key == "daily_reminder"
+        NotificationType.EVENING_ALERT -> key == "evening_alert"
+        NotificationType.MILESTONE -> key.startsWith("milestone_")
+        NotificationType.STREAK_LOST -> key == "streak_lost"
+        NotificationType.RIVAL_ACTIVITY -> key.startsWith("rival_")
+        NotificationType.AGGREGATED_RIVAL_ACTIVITY -> key == "aggregated_rivals"
+        NotificationType.OVERTAKEN -> key == "overtaken"
+        NotificationType.FIGHT_FOR_FIRST -> key == "fight_for_first"
     }
 }
