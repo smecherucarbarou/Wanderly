@@ -41,6 +41,9 @@
     <string name="social_tab_leaderboard">Leaderboard</string>
     <string name="social_tab_friends">Friends</string>
     <string name="social_friend_code_hint">Enter 6-character friend code</string>
+    <string name="social_friend_code_label">Friend code</string>
+    <string name="social_add_friend_title">Add a Friend</string>
+    <string name="social_add_friend_subtitle">Paste the 6-character code from their profile.</string>
     <string name="social_add_friend">Add</string>
     <string name="social_remove_friend_title">Remove Friend</string>
     <string name="social_remove_friend_message">Are you sure you want to remove %1$s from your hive?</string>
@@ -59,5 +62,6 @@
     <string name="profile_next_rank_in_honey">Next Rank in %1$d Honey</string>
     <string name="profile_rank_up_ready">Rank up ready!</string>
     <string name="profile_max_rank">Maximum rank achieved!</string>
+    <string name="profile_admin_dashboard">Open Admin Dashboard</string>
     <string name="admin_access_denied">Admin access only.</string>
 </resources>

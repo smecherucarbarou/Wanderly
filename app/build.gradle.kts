@@ -72,9 +72,6 @@ dependencies {
     // Location
     implementation(libs.play.services.location)
     
-    // Gemini API
-    implementation(libs.generativeai)
-    
     // Supabase
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)

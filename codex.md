@@ -5,7 +5,7 @@ Wanderly is a native Android app written in Kotlin that blends location discover
 
 1. `SplashActivity` decides whether the user goes to auth or the main app.
 2. `AuthActivity` hosts login/signup and handles Supabase deep-link auth callbacks.
-3. `MainActivity` hosts the primary navigation shell and conditionally enables a dev-only bottom nav when the signed-in profile has `admin_role = true`.
+3. `MainActivity` hosts the primary navigation shell, keeps the normal bottom nav for all users, and admin-only tools are exposed from the profile screen when the signed-in profile has `admin_role = true`.
 4. Feature fragments handle maps, gems, missions, social features, profile management, and a dev dashboard.
 
 The active app code lives under `app/src/main/`. Treat that as the source of truth. Top-level files like `context.md`, `notification_paths.txt`, `data/WanderlyRepository.kt`, and `Test.kt` are helper/reference artifacts, not the main runtime path.
@@ -60,7 +60,7 @@ There is no DI framework yet; repository/client instances are created directly f
 
 ### Main shell
 - `MainActivity` hosts the main nav graph and bottom navigation.
-- The bottom menu swaps to `bottom_nav_menu_dev.xml` when the signed-in profile has `admin_role = true`.
+- The bottom menu stays on the standard five-tab layout so `Hidden Gems` remains available.
 - It waits for the auth state to resolve before configuring the bottom nav or starting `HiveRealtimeService`, and requests notification permission on Android 13+.
 
 ### Map
@@ -90,6 +90,7 @@ There is no DI framework yet; repository/client instances are created directly f
 
 ### Dev tools
 - `ui/profile/DevDashboardFragment.kt` is reachable from the profile nav graph and is intended for internal testing.
+- Admin users get to it from an admin-only button on the profile screen instead of a special bottom-nav replacement.
 - The dev dashboard now self-checks `profiles.admin_role` and navigates non-admin users away even if the destination is reached directly.
 - It can mutate honey/streak values, trigger notification types, force workers, inspect raw profile JSON, reset dates, and run an AI notification test flow.
 
@@ -114,7 +115,7 @@ Because the repository owns both remote and local state, most feature work ends 
 ### Gemini
 - `api/GeminiClient.kt` calls the Gemini REST API directly with `google_search` enabled.
 - It expects raw JSON back and does minimal response shaping.
-- The code also keeps a `GenerativeModel` instance for features like the dev dashboard.
+- Image verification and dev-dashboard AI testing also go through the same direct REST client, which avoids the Ktor runtime conflict introduced by the Google Android SDK dependency.
 
 ### Google Places
 - `api/PlacesGeocoder.kt` is the trust boundary for venue verification.

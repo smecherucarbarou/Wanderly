@@ -64,7 +64,7 @@ Files:
 - `app/src/main/java/com/novahorizon/wanderly/ui/profile/DevDashboardFragment.kt`
 
 Status:
-- Fixed on the Android client. Dev/admin access now reads `profiles.admin_role` instead of a hardcoded email, and the dashboard fragment also rejects non-admin users if they somehow reach the destination directly.
+- Fixed on the Android client. Dev/admin access now reads `profiles.admin_role` instead of a hardcoded email, the standard bottom nav keeps `Hidden Gems`, and the dashboard fragment rejects non-admin users if they somehow reach the destination directly.
 
 Why it matters:
 - Developer access is tied to a hardcoded email address.

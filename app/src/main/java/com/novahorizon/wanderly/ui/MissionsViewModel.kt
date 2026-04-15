@@ -15,7 +15,6 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
-import com.google.ai.client.generativeai.type.content
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -152,14 +151,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     Respond: "YES: [Confirmation]" or "NO: [Reason]".
                 """.trimIndent()
                 
-                val response = GeminiClient.model.generateContent(
-                    content {
-                        image(bitmap)
-                        text(prompt)
-                    }
-                )
-
-                val resultText = response.text?.trim()?.uppercase() ?: ""
+                val resultText = GeminiClient.analyzeImage(bitmap, prompt).trim().uppercase()
                 if (resultText.contains("YES")) {
                     _missionState.postValue(MissionState.VerificationResult(true, "Location verified successfully."))
                 } else {

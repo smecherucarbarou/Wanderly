@@ -162,8 +162,7 @@ class DevDashboardFragment : Fragment() {
                     Constraint: Max 120 characters.
                 """.trimIndent()
 
-                val generatorResponse = GeminiClient.model.generateContent(generatorPrompt)
-                val generatedText = generatorResponse.text ?: "Error: No text generated"
+                val generatedText = GeminiClient.generateText(generatorPrompt)
                 logToUi("Generator Output: $generatedText")
 
                 // Step 3: Call the Auditor AI (The QA Step)
@@ -185,8 +184,7 @@ class DevDashboardFragment : Fragment() {
                     CORRECTED_VERSION: [The text, improved if needed, otherwise the same]
                 """.trimIndent()
 
-                val auditorResponse = GeminiClient.model.generateContent(auditorPrompt)
-                val auditorResult = auditorResponse.text ?: "Error: No audit result"
+                val auditorResult = GeminiClient.generateText(auditorPrompt)
                 logToUi("Auditor Result:\n$auditorResult")
 
                 // Step 4: Parse and Display

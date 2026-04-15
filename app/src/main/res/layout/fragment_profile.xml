@@ -349,10 +349,24 @@
             tools:spanCount="3" />
 
         <Button
+            android:id="@+id/admin_dashboard_button"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="16dp"
+            android:backgroundTint="@color/primary"
+            android:text="@string/profile_admin_dashboard"
+            android:textAllCaps="false"
+            android:textColor="@color/card_background"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/badges_recycler"
+            tools:visibility="visible" />
+
+        <Button
             android:id="@+id/logout_button"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="40dp"
+            android:layout_marginTop="16dp"
             android:layout_marginBottom="24dp"
             android:backgroundTint="@color/error"
             android:text="@string/logout"
@@ -360,7 +374,7 @@
             android:textColor="@color/card_background"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/badges_recycler" />
+            app:layout_constraintTop_toBottomOf="@id/admin_dashboard_button" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.core.widget.NestedScrollView>

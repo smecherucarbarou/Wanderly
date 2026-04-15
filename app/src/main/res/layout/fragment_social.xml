@@ -54,31 +54,79 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_card_honeycomb"
-        android:orientation="horizontal"
-        android:padding="8dp"
+        android:elevation="4dp"
+        android:orientation="vertical"
+        android:padding="12dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <EditText
-            android:id="@+id/friend_username_input"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/bg_input_field"
-            android:hint="@string/social_friend_code_hint"
-            android:maxLength="6"
-            android:padding="12dp"
-            android:textAllCaps="true"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_secondary" />
-
-        <Button
-            android:id="@+id/add_friend_button"
+        <TextView
+            android:id="@+id/add_friend_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:backgroundTint="@color/primary"
-            android:text="@string/social_add_friend" />
+            android:text="@string/social_add_friend_title"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/add_friend_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/social_add_friend_subtitle"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/social_friend_code_label"
+                app:boxBackgroundColor="@color/card_background"
+                app:boxCornerRadiusBottomEnd="18dp"
+                app:boxCornerRadiusBottomStart="18dp"
+                app:boxCornerRadiusTopEnd="18dp"
+                app:boxCornerRadiusTopStart="18dp"
+                app:boxStrokeColor="@color/primary"
+                app:boxStrokeWidthFocused="2dp"
+                app:hintTextColor="@color/text_secondary">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/friend_username_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapCharacters"
+                    android:letterSpacing="0.08"
+                    android:maxLength="6"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp"
+                    android:singleLine="true"
+                    android:textAllCaps="true"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/add_friend_button"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:layout_marginStart="10dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="92dp"
+                android:text="@string/social_add_friend"
+                android:textAllCaps="false"
+                app:backgroundTint="@color/primary"
+                app:cornerRadius="18dp" />
+        </LinearLayout>
     </LinearLayout>
 
     <ProgressBar

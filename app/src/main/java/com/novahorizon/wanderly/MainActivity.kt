@@ -9,6 +9,8 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
@@ -34,6 +36,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applyWindowInsets()
 
         WanderlyNotificationManager.createNotificationChannel(this)
         requestNotificationPermission()
@@ -43,11 +46,6 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-            val profile = if (session != null) repository.getCurrentProfile() else null
-            if (profile?.admin_role == true) {
-                binding.bottomNavigation.menu.clear()
-                binding.bottomNavigation.inflateMenu(R.menu.bottom_nav_menu_dev)
-            }
             binding.bottomNavigation.setupWithNavController(navController)
             startHiveService(session != null)
         }
@@ -64,6 +62,25 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startService(intent)
             }
+        }
+    }
+
+    private fun applyWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.navHostFragment.setPadding(
+                binding.navHostFragment.paddingLeft,
+                systemBars.top,
+                binding.navHostFragment.paddingRight,
+                0
+            )
+            binding.bottomNavigation.setPadding(
+                binding.bottomNavigation.paddingLeft,
+                binding.bottomNavigation.paddingTop,
+                binding.bottomNavigation.paddingRight,
+                systemBars.bottom
+            )
+            insets
         }
     }
 

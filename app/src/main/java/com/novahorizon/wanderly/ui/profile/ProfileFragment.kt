@@ -20,6 +20,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.novahorizon.wanderly.AuthActivity
@@ -100,6 +101,9 @@ class ProfileFragment : Fragment() {
             pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
         binding.editUsernameButton.setOnClickListener { showEditUsernameDialog() }
+        binding.adminDashboardButton.setOnClickListener {
+            findNavController().navigate(R.id.action_profile_to_devDashboard)
+        }
         binding.logoutButton.setOnClickListener {
             lifecycleScope.launch {
                 try {
@@ -214,6 +218,8 @@ class ProfileFragment : Fragment() {
             binding.friendCodeDisplay.visibility = View.GONE
             binding.friendCodeDisplay.setOnClickListener(null)
         }
+
+        binding.adminDashboardButton.visibility = if (profile.admin_role) View.VISIBLE else View.GONE
 
         val currentHoney = profile.honey ?: 0
         val currentStreak = profile.streak_count ?: 0

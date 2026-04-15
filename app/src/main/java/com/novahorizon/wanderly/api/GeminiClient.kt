@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.api
 
+import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
-import com.google.ai.client.generativeai.GenerativeModel
 import com.novahorizon.wanderly.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -11,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
 object GeminiClient {
@@ -22,30 +24,69 @@ object GeminiClient {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    val model = GenerativeModel(
-        modelName = "gemini-3-flash-preview",
-        apiKey = BuildConfig.GEMINI_API_KEY
-    )
-
     suspend fun generateWithSearch(prompt: String): String {
-        val finalUrl = "$API_URL?key=${BuildConfig.GEMINI_API_KEY}"
-        logDebug { "Starting Gemini request with promptLength=${prompt.length}" }
-        
+        val body = buildTextBody(
+            prompt = prompt,
+            useSearch = true,
+            systemInstruction = "You are a hyper-local scout. You MUST return ONLY raw JSON arrays. Do NOT include markdown blocks (```json), commentary, or any text before or after the JSON array."
+        )
+        return executeRequest(body, logLabel = "search")
+    }
+
+    suspend fun generateText(prompt: String): String {
+        val body = buildTextBody(prompt = prompt, useSearch = false)
+        return executeRequest(body, logLabel = "text")
+    }
+
+    suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String {
+        val imageBytes = ByteArrayOutputStream().use { outputStream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+            outputStream.toByteArray()
+        }
+        val encodedImage = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
         val body = JSONObject().apply {
+            put("contents", JSONArray().put(JSONObject().apply {
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply { put("text", prompt) })
+                    put(JSONObject().apply {
+                        put("inline_data", JSONObject().apply {
+                            put("mime_type", "image/jpeg")
+                            put("data", encodedImage)
+                        })
+                    })
+                })
+            }))
+        }
+        return executeRequest(body, logLabel = "vision")
+    }
+
+    private fun buildTextBody(prompt: String, useSearch: Boolean, systemInstruction: String? = null): JSONObject {
+        return JSONObject().apply {
             put("contents", JSONArray().put(JSONObject().apply {
                 put("parts", JSONArray().put(JSONObject().apply {
                     put("text", prompt)
                 }))
             }))
-            put("tools", JSONArray().put(JSONObject().apply {
-                put("google_search", JSONObject())
-            }))
-            put("system_instruction", JSONObject().apply {
-                put("parts", JSONObject().apply {
-                    put("text", "You are a hyper-local scout. You MUST return ONLY raw JSON arrays. Do NOT include markdown blocks (```json), commentary, or any text before or after the JSON array.")
+
+            if (useSearch) {
+                put("tools", JSONArray().put(JSONObject().apply {
+                    put("google_search", JSONObject())
+                }))
+            }
+
+            if (!systemInstruction.isNullOrBlank()) {
+                put("system_instruction", JSONObject().apply {
+                    put("parts", JSONArray().put(JSONObject().apply {
+                        put("text", systemInstruction)
+                    }))
                 })
-            })
+            }
         }
+    }
+
+    private suspend fun executeRequest(body: JSONObject, logLabel: String): String {
+        val finalUrl = "$API_URL?key=${BuildConfig.GEMINI_API_KEY}"
+        logDebug { "Starting Gemini $logLabel request with bodyLength=${body.toString().length}" }
 
         val request = Request.Builder()
             .url(finalUrl)
@@ -57,23 +98,38 @@ object GeminiClient {
                 client.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Gemini request failed with code=${response.code}")
-                        logDebug { "Gemini error bodyLength=${responseBody.length}" }
+                        Log.e(TAG, "Gemini $logLabel request failed with code=${response.code}")
+                        logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
                         throw Exception("API call failed: ${response.code}")
                     }
-                    logDebug { "Gemini request succeeded with bodyLength=${responseBody.length}" }
-                    val json = JSONObject(responseBody)
-                    json.getJSONArray("candidates")
-                        .getJSONObject(0)
-                        .getJSONObject("content")
-                        .getJSONArray("parts")
-                        .getJSONObject(0)
-                        .getString("text")
+                    logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
+                    extractText(responseBody)
                 }
             } catch (e: Exception) {
                 logException(e)
                 throw e
             }
+        }
+    }
+
+    private fun extractText(responseBody: String): String {
+        val json = JSONObject(responseBody)
+        val parts = json.getJSONArray("candidates")
+            .getJSONObject(0)
+            .getJSONObject("content")
+            .getJSONArray("parts")
+
+        val textBuilder = StringBuilder()
+        for (index in 0 until parts.length()) {
+            val part = parts.getJSONObject(index)
+            if (part.has("text")) {
+                if (textBuilder.isNotEmpty()) textBuilder.append('\n')
+                textBuilder.append(part.getString("text"))
+            }
+        }
+
+        return textBuilder.toString().ifBlank {
+            throw Exception("Empty Gemini response")
         }
     }
 
