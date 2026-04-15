@@ -34,6 +34,8 @@
     <string name="title_missions">Missions</string>
     <string name="title_profile">My Hive</string>
     <string name="title_gems">Hidden Gems</string>
+    <string name="gem_location_format">Location: %1$s</string>
+    <string name="gem_reason_format">Why it stands out: %1$s</string>
     <string name="badge_early_bee">Early Bee</string>
     <string name="badge_honey_hoarder">Honey Hoarder</string>
     <string name="badge_streak_master">Streak Master</string>

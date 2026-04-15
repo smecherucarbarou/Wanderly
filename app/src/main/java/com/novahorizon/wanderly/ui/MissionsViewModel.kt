@@ -34,6 +34,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
     val streakMessage: LiveData<String?> = _streakMessage
 
     private val json = Json { ignoreUnknownKeys = true }
+    private var missionGenerationInFlight = false
 
     sealed class MissionState {
         object Idle : MissionState()
@@ -60,8 +61,13 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
     }
 
     fun generateMission(lat: Double, lng: Double, city: String?) {
-        _missionState.postValue(MissionState.Generating)
-        
+        if (missionGenerationInFlight) {
+            Log.w("MissionsViewModel", "Ignoring duplicate mission generation request.")
+            return
+        }
+        missionGenerationInFlight = true
+        _missionState.value = MissionState.Generating
+
         viewModelScope.launch {
             try {
                 val currentProfile = repository.getCurrentProfile()
@@ -73,8 +79,10 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 val promptCity = city ?: "this specific local area"
 
                 val placesSection = if (nearbyPlaces.isNotEmpty()) {
-                    "List of real nearby locations in $promptCity:\n${nearbyPlaces.joinToString("\n") { "- $it" }}\nPick one from this list or use Google Search to find a better one."
-                } else "Use Google Search to find a real, popular landmark or tourist attraction specifically located within $promptCity."
+                    "Nearby real locations in $promptCity:\n${nearbyPlaces.joinToString("\n") { "- $it" }}\nPrefer one of these exact nearby names unless Google Search finds a better exact match in $promptCity."
+                } else {
+                    "Use Google Search to find a real landmark or tourist attraction specifically located within $promptCity."
+                }
 
                 val prompt = """
                     You are a professional mission generator for a travel app.
@@ -84,8 +92,11 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     TASK:
                     Generate ONE concrete, realistic travel mission. 
                     The mission must be a simple, physical task that can be verified with a photo.
-                    CRITICAL: The location MUST be strictly inside $promptCity. DO NOT suggest locations in other cities.
-                    Use your integrated Google Search capability to ensure the place is real and exists in $promptCity.
+                    CRITICAL:
+                    - The location MUST be strictly inside $promptCity. DO NOT suggest locations in other cities.
+                    - Use the EXACT current Google Maps place name. No translations, nicknames, or alternate names.
+                    - The place must be real and searchable right now.
+                    - Exclude hotels, clinics, pharmacies, schools, government buildings, banks, offices, and generic apartment blocks.
                     
                     STYLE GUIDE:
                     - "Go to [Location] and take a photo of the main entrance."
@@ -132,6 +143,8 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
             } catch (e: Exception) {
                 _missionState.postValue(MissionState.Error("Failed to generate objective: ${e.message}"))
+            } finally {
+                missionGenerationInFlight = false
             }
         }
     }

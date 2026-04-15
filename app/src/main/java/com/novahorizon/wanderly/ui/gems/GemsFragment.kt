@@ -30,7 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.util.*
+import java.util.Locale
 
 class GemsFragment : Fragment() {
 
@@ -39,15 +39,19 @@ class GemsFragment : Fragment() {
     private lateinit var loadingText: TextView
     private lateinit var refreshBtn: ImageButton
     private lateinit var repository: WanderlyRepository
-    
+
     private val gemsAdapter = GemsAdapter { gem ->
         openInMaps(gem)
     }
-    
+
     private val json = Json { ignoreUnknownKeys = true }
     private val seenGemsHistory = mutableSetOf<String>()
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
         android.util.Log.d("GemsFragment", "onCreateView called")
         val view = inflater.inflate(R.layout.fragment_gems, container, false)
         gemsRecycler = view.findViewById(R.id.gems_recycler)
@@ -55,7 +59,7 @@ class GemsFragment : Fragment() {
         loadingText = view.findViewById(R.id.gems_loading_text)
         refreshBtn = view.findViewById(R.id.refresh_gems_btn)
         repository = WanderlyRepository(requireContext())
-        
+
         gemsRecycler.layoutManager = LinearLayoutManager(requireContext())
         gemsRecycler.adapter = gemsAdapter
         return view
@@ -63,11 +67,11 @@ class GemsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         refreshBtn.setOnClickListener {
             checkLocationAndLoadGems(isRefresh = true)
         }
-        
+
         checkLocationAndLoadGems()
     }
 
@@ -96,19 +100,23 @@ class GemsFragment : Fragment() {
                                 geocoder.getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
                             }
                         }
-                        
-                        android.util.Log.d("GemsFragment", "Geocoder details: locality=${address?.locality}, subLocality=${address?.subLocality}, subAdmin=${address?.subAdminArea}, admin=${address?.adminArea}, feature=${address?.featureName}")
-                        
-                        if (address?.subAdminArea?.contains("Deva", true) == true || 
-                            address?.featureName?.contains("Deva", true) == true) {
+
+                        android.util.Log.d(
+                            "GemsFragment",
+                            "Geocoder details: locality=${address?.locality}, subLocality=${address?.subLocality}, subAdmin=${address?.subAdminArea}, admin=${address?.adminArea}, feature=${address?.featureName}"
+                        )
+
+                        if (address?.subAdminArea?.contains("Deva", true) == true ||
+                            address?.featureName?.contains("Deva", true) == true
+                        ) {
                             "Deva"
                         } else {
                             address?.locality ?: address?.subAdminArea?.replace("Municipiul ", "") ?: "this area"
                         }
-                    } catch (e: Exception) { 
+                    } catch (_: Exception) {
                         "this area"
                     }
-                    
+
                     if (isAdded && view != null) loadGemsWithGemini(location.latitude, location.longitude, searchCity)
                 }
             } else {
@@ -129,81 +137,97 @@ class GemsFragment : Fragment() {
                     loadingText.text = "Buzzy is scouting $city..."
                 }
 
-                // Get some local hints from Overpass to help Gemini be more accurate
                 val localHints = try {
                     repository.fetchHiddenGems(lat, lng, 1000).take(5).joinToString(", ")
-                } catch (e: Exception) { "" }
+                } catch (_: Exception) {
+                    ""
+                }
 
                 val historyFilter = if (seenGemsHistory.isNotEmpty()) {
-                    "Do NOT suggest these places again: ${seenGemsHistory.toList().takeLast(10).joinToString(", ")}."
-                } else ""
+                    "Do not suggest these places again: ${seenGemsHistory.toList().takeLast(10).joinToString(", ")}."
+                } else {
+                    ""
+                }
+                val hintSection = if (localHints.isNotBlank()) {
+                    "Map hints near the user: $localHints. Prioritize places that fit these local clues."
+                } else {
+                    ""
+                }
 
                 val prompt = """
-                    You are an elite, picky, and world-class Lifestyle Scout for $city ($lat, $lng). 
-                    Your reputation depends on finding ONLY high-vibe, sleek, and trendy spots. 
-                    
-                    STRICT CATEGORY FILTER (ONLY THESE):
-                    - Specialty Coffee / Aesthetic Cafes
-                    - Upscale Lounge Bars / Craft Cocktail Spots
-                    - Fine Dining or "Hole-in-the-wall" authentic local food (no fast food chains)
-                    - Hidden Viewpoints / Secret Rooftops
-                    - Concept Stores or Independent Art Galleries
+                    You are an elite hyper-local scout for $city near coordinates ($lat, $lng).
+                    Find 8 real hidden gems that are genuinely in or immediately around $city.
 
-                    ABSOLUTELY FORBIDDEN (IMMEDIATE FAILURE IF INCLUDED):
-                    - NO Government or Public Offices (Social Assistance/Asistenta Sociala, City Hall, Post Office).
-                    - NO Medical/Health: No dentists, clinics, doctors, or pharmacies.
-                    - NO Lodging: No hotels, pensions (pensiuni), or villas.
-                    - NO Banks, Real Estate, or Corporate Offices.
-                    - NO schools or religious administrative offices.
+                    HARD RULES:
+                    - Use the EXACT Google Maps / business display name. No translations, nicknames, abbreviations, or rewritten names.
+                    - If you are not confident the place exists on Google Maps in $city, omit it.
+                    - Prefer current, local, aesthetic, or culturally interesting places.
+                    - Avoid anything that is clearly outside $city.
+                    $historyFilter
+                    $hintSection
 
-                    CONTEXT FOR 2026: 
-                    Ensure the place is currently trendy and exists on Google Maps. If a place has "Social" in the name, double-check that it is a BAR/LOUNGE, not a government department.
-                    
-                    FORMAT: Return ONLY a raw JSON array of objects with:
-                    "name": (Exact commercial name),
-                    "description": (One sleek, alluring sentence),
-                    "location": (The specific area),
-                    "reason": (The "wow" factor),
-                    "category": (Food, Drinks, Viewpoint, or Culture)
+                    ALLOWED CATEGORIES ONLY:
+                    - Food
+                    - Drinks
+                    - Viewpoint
+                    - Culture
+
+                    FORBIDDEN:
+                    - Government offices, public services, utilities, or corporate offices
+                    - Hotels, guesthouses, villas, hostels, or other lodging
+                    - Hospitals, clinics, dentists, pharmacies, banks, schools
+                    - Places outside $city
+
+                    Return ONLY a raw JSON array with objects using exactly:
+                    "name": exact Google Maps place name
+                    "description": one short stylish sentence
+                    "location": neighborhood or area
+                    "reason": why it stands out
+                    "category": Food, Drinks, Viewpoint, or Culture
                 """.trimIndent()
-                
-                val response = GeminiClient.generateWithSearch(prompt)
 
+                val response = GeminiClient.generateWithSearch(prompt)
                 val startIndex = response.indexOf("[")
                 val endIndex = response.lastIndexOf("]")
                 if (startIndex == -1 || endIndex == -1) {
-                    throw Exception("Invalid JSON Array from Gemini")
+                    throw Exception("Invalid JSON array from Gemini")
                 }
-                val cleanJson = response.substring(startIndex, endIndex + 1)
 
-                val gems = Json { ignoreUnknownKeys = true }.decodeFromString<List<Gem>>(cleanJson)
+                val cleanJson = response.substring(startIndex, endIndex + 1)
+                val gems = json.decodeFromString<List<Gem>>(cleanJson)
                 val verifiedGems = mutableListOf<Gem>()
 
                 for (gem in gems) {
-                    // Check if we've seen this exact gem name recently to avoid repetition
                     if (seenGemsHistory.contains(gem.name)) continue
-                    
-                    val resolved = PlacesGeocoder.resolveCoordinates(gem.name, city, lat, lng, 10.0)
+
+                    val resolved = PlacesGeocoder.resolveCoordinates(
+                        placeName = gem.name,
+                        targetCity = city,
+                        userLat = lat,
+                        userLng = lng,
+                        radiusKm = 10.0,
+                        categoryHint = gem.category,
+                        strictNameMatch = true
+                    )
+
                     if (resolved != null) {
                         val verifiedGem = gem.copy(
-                            name = resolved.name, // Use Google Maps verified name
+                            name = resolved.name,
                             lat = resolved.lat,
                             lng = resolved.lng,
                             location = resolved.formattedAddress ?: gem.location
                         )
                         verifiedGems.add(verifiedGem)
-                        seenGemsHistory.add(gem.name)
+                        seenGemsHistory.add(resolved.name)
                     }
                 }
 
-                // MAXIMUM FILTERING PROTOCOL: Deduplication and Anti-Fallback Logic
                 val filteredGems = mutableListOf<Gem>()
                 for (gem in verifiedGems) {
                     val isDuplicate = filteredGems.any { existing ->
-                        // Filter 1: Name exact match (Google Maps fallback name)
                         existing.name.equals(gem.name, ignoreCase = true) ||
-                        // Filter 2: Coordinate proximity (approx. 10 meters)
-                        (Math.abs(existing.lat - gem.lat) < 0.0001 && Math.abs(existing.lng - gem.lng) < 0.0001)
+                            (kotlin.math.abs(existing.lat - gem.lat) < 0.0001 &&
+                                kotlin.math.abs(existing.lng - gem.lng) < 0.0001)
                     }
                     if (!isDuplicate) {
                         filteredGems.add(gem)
@@ -212,14 +236,13 @@ class GemsFragment : Fragment() {
 
                 if (isAdded && view != null) {
                     if (filteredGems.isEmpty()) {
-                        android.util.Log.d("GemsFragment", "All results filtered out by quality check")
+                        android.util.Log.d("GemsFragment", "All results filtered out by quality validation")
                         showSnackbar("Buzzy couldn't find new verified gems here yet.", isError = true)
                     }
-                    (gemsRecycler.adapter as GemsAdapter).submitList(filteredGems)
+                    gemsAdapter.submitList(filteredGems)
                     loadingIndicator.visibility = View.GONE
                     loadingText.visibility = View.GONE
                 }
-
             } catch (e: Exception) {
                 android.util.Log.e("GemsFragment", "Error loading gems", e)
                 if (isAdded && view != null) {
@@ -238,7 +261,7 @@ class GemsFragment : Fragment() {
         val intent = Intent(Intent.ACTION_VIEW, uri).setPackage("com.google.android.apps.maps")
         try {
             startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
+        } catch (_: ActivityNotFoundException) {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$encodedQuery")))
         }
     }
@@ -246,22 +269,32 @@ class GemsFragment : Fragment() {
 
 class GemsAdapter(private val onGemClick: (Gem) -> Unit) : RecyclerView.Adapter<GemsAdapter.ViewHolder>() {
     private var gems = listOf<Gem>()
-    fun submitList(list: List<Gem>) { this.gems = list; notifyDataSetChanged() }
+
+    fun submitList(list: List<Gem>) {
+        gems = list
+        notifyDataSetChanged()
+    }
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val name: TextView = view.findViewById(R.id.gem_name)
         val location: TextView = view.findViewById(R.id.gem_location)
         val description: TextView = view.findViewById(R.id.gem_description)
         val reason: TextView = view.findViewById(R.id.gem_reason)
     }
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
-        ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_gem, parent, false))
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_gem, parent, false)
+        return ViewHolder(view)
+    }
+
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val gem = gems[position]
         holder.name.text = gem.name
-        holder.location.text = "📍 ${gem.location}"
+        holder.location.text = holder.itemView.context.getString(R.string.gem_location_format, gem.location)
         holder.description.text = gem.description
-        holder.reason.text = "✨ ${gem.reason}"
+        holder.reason.text = holder.itemView.context.getString(R.string.gem_reason_format, gem.reason)
         holder.itemView.setOnClickListener { onGemClick(gem) }
     }
-    override fun getItemCount() = gems.size
+
+    override fun getItemCount(): Int = gems.size
 }

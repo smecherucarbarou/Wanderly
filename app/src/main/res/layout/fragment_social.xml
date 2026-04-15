@@ -109,7 +109,6 @@
                     android:paddingTop="14dp"
                     android:paddingBottom="14dp"
                     android:singleLine="true"
-                    android:textAllCaps="true"
                     android:textColor="@color/text_primary"
                     android:textSize="16sp" />
             </com.google.android.material.textfield.TextInputLayout>

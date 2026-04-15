@@ -8,6 +8,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.DiffUtil
@@ -20,6 +21,7 @@ import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.showSnackbar
+import java.util.Locale
 
 class SocialFragment : Fragment() {
 
@@ -33,6 +35,7 @@ class SocialFragment : Fragment() {
     private lateinit var friendCodeInput: EditText
     private lateinit var addFriendButton: View
     private lateinit var loadingIndicator: View
+    private var formattingFriendCode = false
 
     private val socialAdapter = SocialAdapter { profile ->
         showRemoveFriendDialog(profile)
@@ -52,6 +55,17 @@ class SocialFragment : Fragment() {
         
         socialRecycler.layoutManager = LinearLayoutManager(requireContext())
         socialRecycler.adapter = socialAdapter
+        friendCodeInput.doAfterTextChanged { editable ->
+            if (formattingFriendCode) return@doAfterTextChanged
+            val current = editable?.toString().orEmpty()
+            val normalized = current.uppercase(Locale.US)
+            if (current != normalized) {
+                formattingFriendCode = true
+                friendCodeInput.setText(normalized)
+                friendCodeInput.setSelection(normalized.length)
+                formattingFriendCode = false
+            }
+        }
 
         return view
     }
@@ -79,7 +93,7 @@ class SocialFragment : Fragment() {
         })
 
         addFriendButton.setOnClickListener {
-            val friendCode = friendCodeInput.text.toString().trim()
+            val friendCode = friendCodeInput.text.toString().trim().uppercase(Locale.US)
             if (friendCode.isNotEmpty()) {
                 viewModel.addFriend(friendCode)
                 friendCodeInput.setText("")

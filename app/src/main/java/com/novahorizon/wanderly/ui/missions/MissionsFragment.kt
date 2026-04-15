@@ -43,6 +43,7 @@ class MissionsFragment : Fragment() {
     }
 
     private var tempImageUri: Uri? = null
+    private var locationLookupInFlight = false
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -109,9 +110,11 @@ class MissionsFragment : Fragment() {
                     binding.loadingIndicator.visibility = View.VISIBLE
                     binding.missionText.visibility = View.GONE
                     binding.newFlightButton.isEnabled = false
+                    binding.buzzyBubble.text = "Buzzy is scouting a real spot nearby..."
                 }
 
                 is MissionsViewModel.MissionState.MissionReceived -> {
+                    locationLookupInFlight = false
                     binding.missionText.text = state.text
                     binding.missionText.visibility = View.VISIBLE
                     binding.loadingIndicator.visibility = View.GONE
@@ -154,6 +157,7 @@ class MissionsFragment : Fragment() {
                 }
 
                 is MissionsViewModel.MissionState.Idle -> {
+                    locationLookupInFlight = false
                     binding.verifyButton.visibility = View.GONE
                     binding.completeButton.visibility = View.GONE
                     binding.learnMoreButton.visibility = View.GONE
@@ -163,10 +167,12 @@ class MissionsFragment : Fragment() {
                 }
 
                 is MissionsViewModel.MissionState.Error -> {
+                    locationLookupInFlight = false
                     binding.loadingIndicator.visibility = View.GONE
                     binding.newFlightButton.isEnabled = true
                     binding.learnMoreButton.isEnabled = true
                     binding.learnMoreButton.text = "Learn more about this place"
+                    binding.buzzyBubble.text = state.message
                     showSnackbar(state.message, isError = true)
                 }
 
@@ -176,10 +182,15 @@ class MissionsFragment : Fragment() {
     }
 
     private fun checkLocationAndGenerate() {
+        if (locationLookupInFlight) return
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             showSnackbar("Buzzy needs your location to find flowers!", isError = true)
             return
         }
+        locationLookupInFlight = true
+        binding.newFlightButton.isEnabled = false
+        binding.loadingIndicator.visibility = View.VISIBLE
+        binding.buzzyBubble.text = "Pinning your launch point..."
 
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
@@ -208,8 +219,19 @@ class MissionsFragment : Fragment() {
                     }
                 }
             } else {
+                locationLookupInFlight = false
+                binding.loadingIndicator.visibility = View.GONE
+                binding.newFlightButton.isEnabled = true
+                binding.buzzyBubble.text = "Could not get your launch point."
                 showSnackbar("Could not get precise location", isError = true)
             }
+        }.addOnFailureListener { error ->
+            Log.e("MissionsFragment", "Error getting precise location", error)
+            locationLookupInFlight = false
+            binding.loadingIndicator.visibility = View.GONE
+            binding.newFlightButton.isEnabled = true
+            binding.buzzyBubble.text = "Could not get your launch point."
+            showSnackbar("Could not get precise location", isError = true)
         }
     }
 

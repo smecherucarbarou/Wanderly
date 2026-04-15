@@ -1,23 +1,27 @@
 package com.novahorizon.wanderly.api
 
-import com.novahorizon.wanderly.BuildConfig
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.text.Normalizer
 
 object PlacesGeocoder {
 
     private val client = OkHttpClient()
+    private val exclusionTypes = setOf(
+        "local_government_office", "government_office", "social_service_organization",
+        "city_hall", "courthouse", "embassy", "fire_station", "police", "post_office",
+        "school", "university", "dentist", "doctor", "hospital", "pharmacy",
+        "bank", "atm", "lodging", "real_estate_agency", "car_repair", "car_wash",
+        "lawyer", "funeral_home", "accounting", "veterinary_care"
+    )
+    private val weakTokens = setOf("the", "and", "of", "in", "la", "le", "de", "co")
 
-    /**
-     * Resolves a place name to lat/lng and verified name using Google Places API (New).
-     * Returns a data class with verified details.
-     */
     data class VerifiedPlace(
         val lat: Double,
         val lng: Double,
@@ -28,8 +32,8 @@ object PlacesGeocoder {
         val description: String? = null
     )
 
-    private fun normalize(s: String): String {
-        val temp = Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD)
+    private fun normalize(value: String): String {
+        val temp = Normalizer.normalize(value.lowercase(), Normalizer.Form.NFD)
         return Regex("\\p{InCombiningDiacriticalMarks}+").replace(temp, "")
     }
 
@@ -38,125 +42,222 @@ object PlacesGeocoder {
         targetCity: String,
         userLat: Double,
         userLng: Double,
-        radiusKm: Double = 10.0
+        radiusKm: Double = 10.0,
+        categoryHint: String? = null,
+        strictNameMatch: Boolean = false
     ): VerifiedPlace? = withContext(Dispatchers.IO) {
         try {
             val url = "https://places.googleapis.com/v1/places:searchText"
             val normalizedCity = targetCity.trim()
             val textQuery = if (normalizedCity.isBlank()) placeName else "$placeName, $normalizedCity"
-            
-            val jsonBody = org.json.JSONObject().apply {
+
+            val jsonBody = JSONObject().apply {
                 put("textQuery", textQuery)
             }
 
-            val request = okhttp3.Request.Builder()
+            val request = Request.Builder()
                 .url(url)
                 .addHeader("X-Goog-Api-Key", com.novahorizon.wanderly.BuildConfig.MAPS_API_KEY)
-                .addHeader("X-Goog-FieldMask", "places.location,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.editorialSummary,places.types,places.primaryType,places.businessStatus,places.currentOpeningHours")
+                .addHeader(
+                    "X-Goog-FieldMask",
+                    "places.location,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.editorialSummary,places.types,places.primaryType,places.businessStatus,places.currentOpeningHours"
+                )
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
-            
-            // --- LOGURI ADAUGATE PENTRU DEBUGGING ---
-            android.util.Log.d("PlacesGeocoder", "--- Start căutare: '$placeName' în '$targetCity' ---")
-            android.util.Log.d("PlacesGeocoder", "Cod răspuns HTTP: ${response.code}")
-            
-            val json = org.json.JSONObject(responseBody)
-            
+
+            Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")
+            Log.d("PlacesGeocoder", "HTTP response code: ${response.code}")
+
+            val json = JSONObject(responseBody)
             if (!json.has("places")) {
-                android.util.Log.e("PlacesGeocoder", "Google Maps nu a gasit locatia sau a dat eroare pentru '$placeName'! Raspuns complet: $responseBody")
+                Log.e("PlacesGeocoder", "Google Places returned no candidates for '$placeName'")
                 return@withContext null
             }
 
             val placesArray = json.getJSONArray("places")
             if (placesArray.length() == 0) {
-                android.util.Log.w("PlacesGeocoder", "Lista 'places' este goală pentru query: '$placeName, $targetCity'")
-                return@withContext null
-            }
-            
-            val firstPlace = placesArray.getJSONObject(0)
-            val verifiedName = firstPlace.getJSONObject("displayName").getString("text")
-
-            // --- BULLSHIT FILTER (Anti-Irrelevance & Status Check) ---
-            val businessStatus = firstPlace.optString("businessStatus", "OPERATIONAL")
-            if (businessStatus == "CLOSED_PERMANENTLY" || businessStatus == "CLOSED_TEMPORARILY") {
-                android.util.Log.w("PlacesGeocoder", "REJECTED: '$verifiedName' a fost respinsă fiindcă businessStatus este: $businessStatus")
+                Log.w("PlacesGeocoder", "Places list is empty for '$textQuery'")
                 return@withContext null
             }
 
-            val typesArray = firstPlace.optJSONArray("types")
-            val primaryType = firstPlace.optString("primaryType", "")
-            val exclusionList = listOf(
-                "local_government_office", "government_office", "social_service_organization", 
-                "city_hall", "courthouse", "embassy", "fire_station", "police", "post_office", 
-                "school", "university", "dentist", "doctor", "hospital", "pharmacy", 
-                "bank", "atm", "lodging", "real_estate_agency", "car_repair", "car_wash", 
-                "lawyer", "funeral_home", "accounting", "veterinary_care"
-            )
-            
-            if (exclusionList.contains(primaryType)) {
-                android.util.Log.w("PlacesGeocoder", "REJECTED: '$verifiedName' is a public office or service ($primaryType), not a gem.")
-                return@withContext null
-            }
+            val expectedTypes = expectedTypesForCategory(categoryHint)
+            var bestCandidate: VerifiedPlace? = null
+            var bestScore = Double.NEGATIVE_INFINITY
 
-            if (typesArray != null) {
-                for (i in 0 until typesArray.length()) {
-                    val type = typesArray.getString(i)
-                    if (exclusionList.contains(type)) {
-                        android.util.Log.w("PlacesGeocoder", "REJECTED: '$verifiedName' is a public office or service ($type), not a gem.")
-                        return@withContext null
-                    }
+            for (index in 0 until placesArray.length()) {
+                val place = placesArray.getJSONObject(index)
+                val verifiedName = place.getJSONObject("displayName").getString("text")
+                val verifiedAddress = place.optString("formattedAddress", "")
+                val businessStatus = place.optString("businessStatus", "OPERATIONAL")
+                val placeTypes = buildTypeSet(place)
+
+                if (businessStatus == "CLOSED_PERMANENTLY" || businessStatus == "CLOSED_TEMPORARILY") {
+                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because status is $businessStatus")
+                    continue
+                }
+
+                val excludedType = placeTypes.firstOrNull(exclusionTypes::contains)
+                if (excludedType != null) {
+                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because it is a service/office ($excludedType)")
+                    continue
+                }
+
+                if (!isPlaceNameCompatible(placeName, verifiedName, verifiedAddress, strictNameMatch)) {
+                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because it does not closely match '$placeName'")
+                    continue
+                }
+
+                val strongNameMatch = scoreNameMatch(placeName, verifiedName, verifiedAddress) >= 0.95
+                if (expectedTypes.isNotEmpty() && placeTypes.none(expectedTypes::contains) && !strongNameMatch) {
+                    Log.w(
+                        "PlacesGeocoder",
+                        "Rejected '$verifiedName' because its types do not fit category '$categoryHint'"
+                    )
+                    continue
+                }
+
+                val location = place.getJSONObject("location")
+                val lat = location.getDouble("latitude")
+                val lng = location.getDouble("longitude")
+                if (!isWithinRadius(userLat, userLng, lat, lng, radiusKm)) {
+                    Log.d("PlacesGeocoder", "Rejected '$verifiedName' because it is outside the ${radiusKm}km radius")
+                    continue
+                }
+
+                val score = scoreNameMatch(placeName, verifiedName, verifiedAddress) +
+                    if (expectedTypes.isNotEmpty() && placeTypes.any(expectedTypes::contains)) 0.2 else 0.0 +
+                    (place.optDouble("rating", 0.0) / 50.0) +
+                    (place.optInt("userRatingCount", 0).coerceAtMost(500) / 5000.0)
+
+                if (score > bestScore) {
+                    bestScore = score
+                    bestCandidate = VerifiedPlace(
+                        lat = lat,
+                        lng = lng,
+                        name = verifiedName,
+                        formattedAddress = verifiedAddress,
+                        rating = place.optDouble("rating", 0.0),
+                        reviewCount = place.optInt("userRatingCount", 0),
+                        description = place.optJSONObject("editorialSummary")?.optString("text")
+                    )
                 }
             }
 
-            val verifiedAddress = firstPlace.optString("formattedAddress", "")
-            
-            val loc = firstPlace.getJSONObject("location")
-            val lat = loc.getDouble("latitude")
-            val lng = loc.getDouble("longitude")
-
-            android.util.Log.d("PlacesGeocoder", "Găsit: $verifiedName la coordonatele ($lat, $lng)")
-
-            if (!isWithinRadius(userLat, userLng, lat, lng, radiusKm)) {
-                android.util.Log.d("PlacesGeocoder", "Locatia $verifiedName a fost gasita, dar e la mai mult de $radiusKm km departare de tine ($userLat, $userLng). O ignor.")
-                return@withContext null
+            if (bestCandidate == null) {
+                Log.w("PlacesGeocoder", "No valid Places candidate matched '$placeName'")
+            } else {
+                Log.d("PlacesGeocoder", "Validated place '${bestCandidate.name}' for '$placeName'")
             }
 
-            val editorialSummary = firstPlace.optJSONObject("editorialSummary")?.optString("text")
-
-            android.util.Log.d("PlacesGeocoder", "Locatie validata cu succes: $verifiedName")
-            VerifiedPlace(
-                lat = lat,
-                lng = lng,
-                name = verifiedName,
-                formattedAddress = verifiedAddress,
-                rating = firstPlace.optDouble("rating", 0.0),
-                reviewCount = firstPlace.optInt("userRatingCount", 0),
-                description = editorialSummary
-            )
+            bestCandidate
         } catch (e: Exception) {
-            android.util.Log.e("PlacesGeocoder", "A crapat cand incercam sa parsam JSON-ul de la Google Maps pentru '$placeName'", e)
+            Log.e("PlacesGeocoder", "Failed to resolve '$placeName' with Google Places", e)
             null
         }
     }
 
+    internal fun isPlaceNameCompatible(
+        requestedName: String,
+        candidateName: String,
+        candidateAddress: String = "",
+        strict: Boolean
+    ): Boolean {
+        val score = scoreNameMatch(requestedName, candidateName, candidateAddress)
+        return if (strict) score >= 0.6 else score >= 0.4
+    }
+
+    internal fun scoreNameMatch(
+        requestedName: String,
+        candidateName: String,
+        candidateAddress: String = ""
+    ): Double {
+        val requested = normalize(requestedName)
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val candidate = normalize(candidateName)
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val address = normalize(candidateAddress)
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        if (requested.isBlank() || candidate.isBlank()) return 0.0
+        if (requested == candidate) return 1.0
+        if (candidate.contains(requested) || requested.contains(candidate)) return 0.95
+
+        val requestedTokens = meaningfulTokens(requested)
+        val candidateTokens = meaningfulTokens("$candidate $address")
+        if (requestedTokens.isEmpty() || candidateTokens.isEmpty()) return 0.0
+
+        val shared = requestedTokens.count { requestedToken ->
+            candidateTokens.any { candidateToken -> tokensLookRelated(requestedToken, candidateToken) }
+        }
+        if (shared == 0) return 0.0
+
+        return shared.toDouble() / requestedTokens.size.toDouble()
+    }
+
+    private fun buildTypeSet(place: JSONObject): Set<String> {
+        val result = mutableSetOf<String>()
+        val primaryType = place.optString("primaryType", "")
+        if (primaryType.isNotBlank()) {
+            result += primaryType
+        }
+        val typesArray = place.optJSONArray("types")
+        if (typesArray != null) {
+            for (index in 0 until typesArray.length()) {
+                result += typesArray.getString(index)
+            }
+        }
+        return result
+    }
+
+    private fun meaningfulTokens(value: String): List<String> {
+        return value
+            .split(" ")
+            .map { it.trim() }
+            .filter { it.length >= 2 && it !in weakTokens }
+    }
+
+    private fun tokensLookRelated(left: String, right: String): Boolean {
+        if (left == right) return true
+        if (left.length >= 4 && right.contains(left)) return true
+        if (right.length >= 4 && left.contains(right)) return true
+        val minLength = minOf(left.length, right.length)
+        return minLength >= 4 && left.take(minLength - 1) == right.take(minLength - 1)
+    }
+
+    private fun expectedTypesForCategory(categoryHint: String?): Set<String> {
+        return when (normalize(categoryHint.orEmpty())) {
+            "food" -> setOf("restaurant", "cafe", "coffee_shop", "bakery", "meal_takeaway", "bar")
+            "drinks" -> setOf("bar", "pub", "cafe", "coffee_shop", "night_club", "restaurant")
+            "viewpoint" -> setOf("tourist_attraction", "park", "historical_landmark", "observation_deck", "point_of_interest")
+            "culture" -> setOf("art_gallery", "museum", "cultural_landmark", "tourist_attraction", "historical_landmark", "library")
+            else -> emptySet()
+        }
+    }
+
     private fun isWithinRadius(
-        userLat: Double, userLng: Double,
-        gemLat: Double, gemLng: Double,
+        userLat: Double,
+        userLng: Double,
+        gemLat: Double,
+        gemLng: Double,
         maxDistanceKm: Double
     ): Boolean {
         val earthRadius = 6371.0
         val dLat = Math.toRadians(gemLat - userLat)
         val dLng = Math.toRadians(gemLng - userLng)
         val a = Math.sin(dLat / 2).let { it * it } +
-                Math.cos(Math.toRadians(userLat)) *
-                Math.cos(Math.toRadians(gemLat)) *
-                Math.sin(dLng / 2).let { it * it }
-        val distance = earthRadius * 2 * Math.atan2(
-            Math.sqrt(a), Math.sqrt(1 - a)
-        )
+            Math.cos(Math.toRadians(userLat)) *
+            Math.cos(Math.toRadians(gemLat)) *
+            Math.sin(dLng / 2).let { it * it }
+        val distance = earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return distance <= maxDistanceKm
     }
 }
