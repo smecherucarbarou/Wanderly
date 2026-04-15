@@ -13,12 +13,12 @@ kotlin {
 
 android {
     namespace = "com.novahorizon.wanderly"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.novahorizon.wanderly"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -76,9 +76,12 @@ dependencies {
     implementation(libs.generativeai)
     
     // Supabase
+    implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.gotrue)
     implementation(libs.supabase.realtime)
+    implementation(libs.supabase.android)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.android)
     
     // KotlinX Serialization
@@ -101,6 +104,12 @@ dependencies {
     
     // Google Places
     implementation(libs.google.places)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Testing
     testImplementation(libs.junit)

@@ -20,6 +20,14 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
      * Verifică dacă streak-ul a expirat.
      * Streak-ul expiră dacă ultima misiune nu a fost făcută nici azi, nici ieri.
      */
+    sealed class StreakStatus {
+        object Active : StreakStatus()
+        data class Crisis(val lostStreak: Int, val cost: Int) : StreakStatus()
+    }
+
+    private val _streakStatus = MutableLiveData<StreakStatus>()
+    val streakStatus: LiveData<StreakStatus> = _streakStatus
+
     fun checkDailyStreak() {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
@@ -33,19 +41,75 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
         viewModelScope.launch {
             try {
+                // Ensure we have a profile loaded
                 val profile = repository.getCurrentProfile() ?: return@launch
-                val lastBuzz = profile.last_buzz_date ?: ""
+                val lastMission = profile.last_mission_date ?: ""
+                val currentStreak = profile.streak_count ?: 0
                 
-                Log.d("WanderlyStreak", "Checking expiry. Today: $today, Yesterday: $yesterday, Last Mission: $lastBuzz")
+                Log.d("WanderlyStreak", "Checking expiry. Today: $today, Yesterday: $yesterday, Last Mission: $lastMission")
 
-                // Dacă ultima misiune e mai veche de ieri, streak-ul s-a pierdut (reset la 0)
-                if (lastBuzz != today && lastBuzz != yesterday && (profile.streak_count ?: 0) > 0) {
-                    val updatedProfile = profile.copy(streak_count = 0)
-                    repository.updateProfile(updatedProfile)
-                    Log.d("WanderlyStreak", "Streak expired. Reset to 0.")
+                if (lastMission != today && lastMission != yesterday && currentStreak > 0) {
+                    // STREAK CRISIS TRIGGERED
+                    val cost = currentStreak * 5 // 5 Honey per day of streak to restore
+                    _streakStatus.postValue(StreakStatus.Crisis(currentStreak, cost))
+                } else {
+                    _streakStatus.postValue(StreakStatus.Active)
                 }
             } catch (e: Exception) {
                 Log.e("WanderlyStreak", "Error checking streak expiry", e)
+            }
+        }
+    }
+
+    fun restoreStreak(cost: Int) {
+        viewModelScope.launch {
+            val profile = repository.getCurrentProfile() ?: return@launch
+            val currentHoney = profile.honey ?: 0
+            if (currentHoney >= cost) {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
+                    timeZone = TimeZone.getTimeZone("UTC") 
+                }
+                val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+                calendar.add(Calendar.DAY_OF_YEAR, -1) // Set to yesterday so they have today to continue
+                val yesterday = sdf.format(calendar.time)
+
+                val updated = profile.copy(
+                    honey = currentHoney - cost,
+                    last_mission_date = yesterday
+                )
+                if (repository.updateProfile(updated)) {
+                    _streakStatus.postValue(StreakStatus.Active)
+                    _streakMessage.postValue("Streak Restored! 🍯 Your reputation is safe.")
+                } else {
+                    _streakMessage.postValue("Failed to restore streak. Hive connection lost.")
+                }
+            } else {
+                _streakMessage.postValue("Not enough Honey! 🍯")
+            }
+        }
+    }
+
+    fun acceptStreakLoss() {
+        viewModelScope.launch {
+            val profile = repository.getCurrentProfile() ?: return@launch
+            
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
+                timeZone = TimeZone.getTimeZone("UTC") 
+            }
+            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            calendar.add(Calendar.DAY_OF_YEAR, -1) // Set to yesterday
+            val yesterday = sdf.format(calendar.time)
+
+            val updated = profile.copy(
+                streak_count = 0,
+                last_mission_date = yesterday // Set to yesterday so the crisis stops, and next mission starts streak at 1
+            )
+
+            if (repository.updateProfile(updated)) {
+                _streakStatus.postValue(StreakStatus.Active)
+                _streakMessage.postValue("Streak reset to 0. Time to rebuild! 🐝")
+            } else {
+                _streakMessage.postValue("Failed to reset streak. Check connection.")
             }
         }
     }

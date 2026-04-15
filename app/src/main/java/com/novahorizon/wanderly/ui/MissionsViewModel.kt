@@ -1,3 +1,4 @@
+/* FIXES APPLIED: BUG E — see inline comments */
 package com.novahorizon.wanderly.ui
 
 import android.graphics.Bitmap
@@ -12,6 +13,8 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
 import com.google.ai.client.generativeai.type.content
+import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -45,8 +48,12 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
     fun loadProfile() {
         viewModelScope.launch {
-            val result = repository.getCurrentProfile()
-            _profile.postValue(result)
+            repository.currentProfile.collectLatest {
+                _profile.postValue(it)
+            }
+        }
+        viewModelScope.launch {
+            repository.getCurrentProfile()
         }
     }
 
@@ -171,7 +178,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         }
     }
 
-    fun completeMission() {
+    fun completeMission(distanceKm: Double = 0.0, isGroup: Boolean = false, isNewLocation: Boolean = false, isWild: Boolean = false) {
         val current = _profile.value ?: return
         _missionState.postValue(MissionState.Completing)
         
@@ -186,7 +193,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
                 val yesterday = sdf.format(yesterdayCal.time)
                 
-                val lastMissionDate = current.last_buzz_date ?: ""
+                val lastMissionDate = current.last_mission_date ?: ""
                 var newStreak = current.streak_count ?: 0
                 var streakBonusHoney = 0
                 
@@ -197,26 +204,41 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     } else {
                         newStreak = 1
                     }
+                } else {
+                    // Already mission today. We still allow finishing, but don't double increment streak.
                 }
 
                 val newHoney = (current.honey ?: 0) + Constants.MISSION_HONEY_REWARD + streakBonusHoney
                 
                 val updatedProfile = current.copy(
                     honey = newHoney,
-                    last_buzz_date = today,
+                    last_mission_date = today,
                     streak_count = newStreak
                 )
                 
                 val success = repository.updateProfile(updatedProfile)
                 if (success) {
+                    // BUG E FIXED: Use UTC for consistent date recording
+                    val sdfLocal = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
+                        timeZone = TimeZone.getTimeZone("UTC") 
+                    }
+                    val todayUTC = sdfLocal.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).time)
+                    repository.updateLastVisitDate(todayUTC)
+
                     _profile.postValue(updatedProfile)
                     _missionState.postValue(MissionState.Idle)
                     
+                    val msg = StringBuilder()
                     if (streakBonusHoney > 0) {
-                         _streakMessage.postValue("Streak: $newStreak Days! 🔥 +$streakBonusHoney Honey Bonus!")
+                        msg.append("Streak: $newStreak Days! 🔥 +$streakBonusHoney Honey Bonus!\n")
+                        if (newStreak % 5 == 0) {
+                            WanderlyNotificationManager.sendMilestoneCelebration(repository.context, newStreak)
+                        }
                     } else if (lastMissionDate != today) {
-                         _streakMessage.postValue("Streak Started! 🐝 First buzz today!")
+                        msg.append("Streak Started! 🐝 First buzz today!\n")
                     }
+                    
+                    _streakMessage.postValue(msg.toString().trim())
                 } else {
                     _missionState.postValue(MissionState.Error("Failed to save progress to the hive. Check your connection!"))
                 }

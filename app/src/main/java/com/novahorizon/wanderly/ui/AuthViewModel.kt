@@ -6,8 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.WanderlyRepository
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.gotrue.providers.builtin.Email
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

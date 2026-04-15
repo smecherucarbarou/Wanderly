@@ -1,8 +1,8 @@
 package com.novahorizon.wanderly
 
 import com.novahorizon.wanderly.api.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.gotrue.providers.builtin.Email
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 
 suspend fun test() {
     val result = SupabaseClient.client.auth.signUpWith(Email) {

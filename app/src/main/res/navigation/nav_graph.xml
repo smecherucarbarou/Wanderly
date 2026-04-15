@@ -40,5 +40,15 @@
         android:id="@+id/profileFragment"
         android:name="com.novahorizon.wanderly.ui.profile.ProfileFragment"
         android:label="Profile"
-        tools:layout="@layout/fragment_profile" />
+        tools:layout="@layout/fragment_profile">
+        <action
+            android:id="@+id/action_profile_to_devDashboard"
+            app:destination="@id/devDashboardFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/devDashboardFragment"
+        android:name="com.novahorizon.wanderly.ui.profile.DevDashboardFragment"
+        android:label="God Mode"
+        tools:layout="@layout/fragment_dev_dashboard" />
 </navigation>

@@ -12,15 +12,20 @@
         <item name="android:windowLightStatusBar" tools:targetApi="23">true</item>
     </style>
 
-    <style name="Wanderly.AlertDialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+    <style name="Wanderly_AlertDialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorSurface">@color/card_background</item>
         <item name="android:background">@color/card_background</item>
-        <item name="shapeAppearanceLargeComponent">@style/Wanderly.ShapeAppearance.Large</item>
+        <item name="shapeAppearanceLargeComponent">@style/Wanderly_ShapeAppearance_Large</item>
     </style>
 
-    <style name="Wanderly.ShapeAppearance.Large" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+    <style name="Wanderly_ShapeAppearance_Large" parent="ShapeAppearance.MaterialComponents.LargeComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">24dp</item>
+    </style>
+
+    <style name="Wanderly_DialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/dialog_enter</item>
+        <item name="android:windowExitAnimation">@android:anim/fade_out</item>
     </style>
 </resources>

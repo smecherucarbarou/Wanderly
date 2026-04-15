@@ -163,7 +163,15 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : RecyclerView
 
         holder.username.text = profile.username ?: "Unknown"
         holder.honeyAmount.text = (profile.honey ?: 0).toString()
-        holder.rankName.text = getRankName(profile.hive_rank ?: 1)
+        
+        val currentHoney = profile.honey ?: 0
+        val rank = when {
+            currentHoney >= 600 -> 4
+            currentHoney >= 300 -> 3
+            currentHoney >= 100 -> 2
+            else -> 1
+        }
+        holder.rankName.text = getRankName(rank)
 
         if (canRemove) {
             holder.removeBtn.visibility = View.VISIBLE

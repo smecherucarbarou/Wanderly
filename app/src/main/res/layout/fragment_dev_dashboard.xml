@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/dev_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⚡ GOD MODE ⚡"
+        android:textColor="@color/primary"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/dev_title"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Stats Editor -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="16dp"
+                app:cardBackgroundColor="@color/card_background">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Modify Stats"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <EditText
+                        android:id="@+id/edit_honey"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Honey"
+                        android:inputType="number"
+                        android:textColor="@color/text_primary" />
+
+                    <EditText
+                        android:id="@+id/edit_streak"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Streak"
+                        android:inputType="number"
+                        android:textColor="@color/text_primary" />
+
+                    <EditText
+                        android:id="@+id/edit_flights"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Flights (updates honey/50)"
+                        android:inputType="number"
+                        android:textColor="@color/text_primary" />
+
+                    <Button
+                        android:id="@+id/btn_update_stats"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Update Reality (Honey &amp; Streak)"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Notification Triggers -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="16dp"
+                app:cardBackgroundColor="@color/card_background">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Trigger Notifications"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <EditText
+                        android:id="@+id/edit_friend_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Target Friend Name (for alerts)"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginTop="8dp" />
+
+                    <Button
+                        android:id="@+id/btn_notify_streak"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Daily Streak Reminder"
+                        android:textAllCaps="false"
+                        android:layout_marginTop="8dp" />
+
+                    <Button
+                        android:id="@+id/btn_notify_milestone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Milestone Celebration"
+                        android:textAllCaps="false" />
+
+                    <Button
+                        android:id="@+id/btn_notify_lost"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Streak Lost Alert"
+                        android:textAllCaps="false" />
+
+                    <Button
+                        android:id="@+id/btn_notify_rival"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Rival Activity Alert"
+                        android:textAllCaps="false" />
+
+                    <Button
+                        android:id="@+id/btn_notify_overtaken"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Overtaken Alert"
+                        android:textAllCaps="false" />
+
+                    <Button
+                        android:id="@+id/btn_notify_fight"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Fight for First"
+                        android:textAllCaps="false" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- AI Notification Testing -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="16dp"
+                app:cardBackgroundColor="@color/card_background">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AI Notification Pipeline Test"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <Button
+                        android:id="@+id/btn_test_ai_notif"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Trigger Fake Notification"
+                        android:layout_marginTop="8dp" />
+
+                    <Button
+                        android:id="@+id/btn_reset_visit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Reset Last Visit (Test Background)"
+                        android:backgroundTint="@color/error"
+                        android:layout_marginTop="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_run_workers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="FORCE RUN BACKGROUND WORKERS"
+                        android:backgroundTint="@color/primary"
+                        android:layout_marginTop="4dp" />
+
+                    <TextView
+                        android:id="@+id/tv_ai_logs"
+                        android:layout_width="match_parent"
+                        android:layout_height="300dp"
+                        android:layout_marginTop="8dp"
+                        android:background="#1A000000"
+                        android:padding="8dp"
+                        android:fontFamily="monospace"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_primary"
+                        android:scrollbars="vertical" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Raw Data -->
+            <Button
+                android:id="@+id/btn_raw_logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="READ RAW PAYLOADS"
+                android:backgroundTint="@color/error" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

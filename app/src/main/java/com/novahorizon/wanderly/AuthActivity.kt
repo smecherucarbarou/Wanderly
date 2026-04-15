@@ -8,7 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.databinding.ActivityAuthBinding
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

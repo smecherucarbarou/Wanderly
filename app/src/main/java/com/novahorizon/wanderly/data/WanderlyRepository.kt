@@ -5,21 +5,34 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-class WanderlyRepository(context: Context) {
+class WanderlyRepository(val context: Context) {
+
+    private val _currentProfile = MutableStateFlow<Profile?>(null)
+    val currentProfile: StateFlow<Profile?> = _currentProfile.asStateFlow()
 
     private val prefs: SharedPreferences = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
     
@@ -38,17 +51,35 @@ class WanderlyRepository(context: Context) {
 
     suspend fun getCurrentProfile(): Profile? = withContext(Dispatchers.IO) {
         try {
-            val session = SupabaseClient.client.auth.currentSessionOrNull() ?: return@withContext null
+            var session = SupabaseClient.client.auth.currentSessionOrNull()
+            
+            if (session == null) {
+                Log.d("WanderlyRepo", "Session null, waiting for Auth to initialize...")
+                withTimeoutOrNull(5000) {
+                    SupabaseClient.client.auth.sessionStatus.first { 
+                        it is SessionStatus.Authenticated || it is SessionStatus.NotAuthenticated 
+                    }
+                }
+                session = SupabaseClient.client.auth.currentSessionOrNull()
+            }
+
+            if (session == null) {
+                Log.w("WanderlyRepo", "Auth session not found after waiting.")
+                return@withContext null
+            }
+
             val userId = session.user!!.id
             
             var profile = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
                 .select { filter { eq("id", userId) } }
                 .decodeSingleOrNull<Profile>()
+            
+            val userEmail = session.user?.email
                 
             if (profile == null) {
                 val userMetadata = session.user?.userMetadata
                 val signupUsername = userMetadata?.get("username")?.toString()?.replace("\"", "")
-                val defaultName = signupUsername ?: session.user?.email?.substringBefore("@") ?: "Explorer"
+                val defaultName = signupUsername ?: userEmail?.substringBefore("@") ?: "Explorer"
                 
                 val newProfile = Profile(
                     id = userId, 
@@ -61,6 +92,9 @@ class WanderlyRepository(context: Context) {
                 SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].upsert(newProfile)
                 profile = newProfile
             }
+            Log.d("WanderlyRepo", "Profile loaded from Supabase: $profile")
+            
+            _currentProfile.value = profile
             profile
         } catch (e: Exception) {
             Log.e("WanderlyRepository", "Error getting profile: ${e.message}", e)
@@ -70,10 +104,18 @@ class WanderlyRepository(context: Context) {
 
     suspend fun updateProfile(profile: Profile): Boolean = withContext(Dispatchers.IO) {
         try {
-            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].upsert(profile)
+            Log.d("WanderlyRepo", "Attempting update for user ${profile.id}: $profile")
+
+            // FIX-UL E AICI: Folosim .update() cu filtru în loc de .upsert()
+            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update(profile) {
+                filter { eq("id", profile.id) }
+            }
+
+            _currentProfile.value = profile
+            Log.d("WanderlyRepo", "Update successful in repository")
             true
         } catch (e: Exception) {
-            Log.e("WanderlyRepository", "CRITICAL: Update Profile Failed!", e)
+            Log.e("WanderlyRepository", "CRITICAL: Update Profile Failed! Error: ${e.message}", e)
             false
         }
     }
@@ -251,11 +293,24 @@ class WanderlyRepository(context: Context) {
     fun cacheUsername(username: String) { prefs.edit().putString(Constants.KEY_USERNAME, username).apply() }
     fun getLastVisitDate(): String? = prefs.getString(Constants.KEY_LAST_VISIT, "")
     fun updateLastVisitDate(date: String) { prefs.edit().putString(Constants.KEY_LAST_VISIT, date).apply() }
+    
+    suspend fun resetMissionDateForTesting(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val profile = getCurrentProfile() ?: return@withContext false
+            val updated = profile.copy(last_mission_date = "2000-01-01")
+            updateProfile(updated)
+        } catch (e: Exception) {
+            false
+        }
+    }
     fun getMissionHistory(): String = prefs.getString(Constants.KEY_MISSION_HISTORY, "") ?: ""
     fun getMissionTarget(): String? = prefs.getString(Constants.KEY_MISSION_TARGET, null)
     fun getMissionCity(): String? = prefs.getString(Constants.KEY_MISSION_CITY, null)
 
     fun saveMissionData(text: String, target: String, history: String, city: String?) {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Calendar.getInstance().time)
+        updateLastVisitDate(today)
+
         prefs.edit()
             .putString(Constants.KEY_MISSION_TEXT, text)
             .putString(Constants.KEY_MISSION_TARGET, target)

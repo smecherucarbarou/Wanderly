@@ -154,6 +154,22 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent" />
 
+            <TextView
+                android:id="@+id/explorerClassText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="ADVENTURER"
+                android:textColor="@color/primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                tools:visibility="visible"
+                app:layout_constraintTop_toBottomOf="@id/rank_badge"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Stats Section -->

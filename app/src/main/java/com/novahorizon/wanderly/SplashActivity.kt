@@ -12,7 +12,7 @@ import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.databinding.ActivitySplashBinding
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.auth
 
 class SplashActivity : AppCompatActivity() {
 

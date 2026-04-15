@@ -217,8 +217,16 @@ class MapFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val repo = WanderlyRepository(requireContext())
-                val profile = repo.getCurrentProfile()
-                if (profile != null) {
+                val profile = repo.getCurrentProfile() ?: return@launch
+                
+                // Only update if location changed significantly (more than 50 meters approx)
+                val lastLat = profile.last_lat ?: 0.0
+                val lastLng = profile.last_lng ?: 0.0
+                
+                val results = FloatArray(1)
+                Location.distanceBetween(lastLat, lastLng, lat, lng, results)
+                
+                if (results[0] > 50.0 || profile.last_lat == null) {
                     repo.updateProfile(profile.copy(last_lat = lat, last_lng = lng))
                 }
             } catch (e: Exception) {

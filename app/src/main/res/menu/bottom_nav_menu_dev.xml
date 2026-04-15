@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/mapFragment"
+        android:icon="@android:drawable/ic_dialog_map"
+        android:title="@string/title_map" />
+    <item
+        android:id="@+id/missionsFragment"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="@string/title_missions" />
+    <item
+        android:id="@+id/socialFragment"
+        android:icon="@android:drawable/ic_menu_share"
+        android:title="Hive" />
+    <item
+        android:id="@+id/profileFragment"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="@string/title_profile" />
+    <item
+        android:id="@+id/devDashboardFragment"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:title="God Mode" />
+</menu>

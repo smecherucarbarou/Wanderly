@@ -14,13 +14,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.navigation.fragment.findNavController
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
+import com.novahorizon.wanderly.databinding.DialogClassSelectionBinding
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.novahorizon.wanderly.AuthActivity
@@ -33,7 +37,7 @@ import com.novahorizon.wanderly.databinding.FragmentProfileBinding
 import com.novahorizon.wanderly.databinding.DialogEditUsernameBinding
 import com.novahorizon.wanderly.showSnackbar
 import com.yalantis.ucrop.UCrop
-import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +51,7 @@ class ProfileFragment : Fragment() {
 
     private var currentProfile: Profile? = null
     private lateinit var repository: WanderlyRepository
+    private var isClassDialogShowing = false
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
@@ -80,7 +85,18 @@ class ProfileFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        loadProfile()
+        
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                repository.currentProfile.collect { profile ->
+                    profile?.let {
+                        currentProfile = it
+                        updateUI(it)
+                    }
+                }
+            }
+        }
+
         binding.avatarContainer.setOnClickListener {
             pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
@@ -99,6 +115,11 @@ class ProfileFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        loadProfile()
     }
 
     private fun uploadAvatarToSupabase(uri: Uri) {
@@ -160,40 +181,33 @@ class ProfileFragment : Fragment() {
     private fun checkAndUnlockBadges(profile: Profile) {
         val currentHoney = profile.honey ?: 0
         val currentStreak = profile.streak_count ?: 0
-        val currentBadges = profile.badges?.toMutableList() ?: mutableListOf()
-        var updated = false
+        val currentBadges = profile.badges?.toSet() ?: emptySet()
+        val newBadges = currentBadges.toMutableSet()
 
-        if (!currentBadges.contains("Early Bee")) {
-            currentBadges.add("Early Bee")
-            updated = true
+        if (!newBadges.contains("Early Bee")) {
+            newBadges.add("Early Bee")
         }
-        if (currentHoney >= 100 && !currentBadges.contains("Scout Bee")) {
-            currentBadges.add("Scout Bee")
-            updated = true
+        if (currentHoney >= 100 && !newBadges.contains("Scout Bee")) {
+            newBadges.add("Scout Bee")
         }
-        if (currentHoney >= 300 && !currentBadges.contains("Expert Bee")) {
-            currentBadges.add("Expert Bee")
-            updated = true
+        if (currentHoney >= 300 && !newBadges.contains("Expert Bee")) {
+            newBadges.add("Expert Bee")
         }
-        if (currentHoney >= 600 && !currentBadges.contains("Queen Explorer")) {
-            currentBadges.add("Queen Explorer")
-            updated = true
+        if (currentHoney >= 600 && !newBadges.contains("Queen Explorer")) {
+            newBadges.add("Queen Explorer")
         }
-        if (currentHoney >= 1000 && !currentBadges.contains("Honey Hoarder")) {
-            currentBadges.add("Honey Hoarder")
-            updated = true
+        if (currentHoney >= 1000 && !newBadges.contains("Honey Hoarder")) {
+            newBadges.add("Honey Hoarder")
         }
-        if (currentStreak >= 7 && !currentBadges.contains("Streak Master")) {
-            currentBadges.add("Streak Master")
-            updated = true
+        if (currentStreak >= 7 && !newBadges.contains("Streak Master")) {
+            newBadges.add("Streak Master")
         }
 
-        if (updated) {
-            val updatedProfile = profile.copy(badges = currentBadges)
+        if (newBadges.size > currentBadges.size) {
+            val updatedProfile = profile.copy(badges = newBadges.toList())
             lifecycleScope.launch {
                 repository.updateProfile(updatedProfile)
-                currentProfile = updatedProfile
-                updateUI(updatedProfile)
+                // updateUI will be called via the repository flow collection
             }
         } else {
             currentProfile = profile
@@ -204,6 +218,13 @@ class ProfileFragment : Fragment() {
     private fun updateUI(profile: Profile) {
         binding.username.text = profile.username ?: "Explorer"
         
+        if (!profile.explorer_class.isNullOrEmpty()) {
+            binding.explorerClassText.text = profile.explorer_class
+            binding.explorerClassText.visibility = View.VISIBLE
+        } else {
+            binding.explorerClassText.visibility = View.GONE
+        }
+
         if (!profile.friend_code.isNullOrEmpty()) {
             binding.friendCodeDisplay.text = "Friend Code: ${profile.friend_code}"
             binding.friendCodeDisplay.visibility = View.VISIBLE
@@ -213,6 +234,12 @@ class ProfileFragment : Fragment() {
 
         val currentHoney = profile.honey ?: 0
         val currentStreak = profile.streak_count ?: 0
+        val flights = currentHoney / 50
+
+        // Class selection trigger: 10 flights (500 honey)
+        if (flights >= 10 && profile.explorer_class.isNullOrEmpty() && !isClassDialogShowing) {
+            showClassSelectionDialog(profile)
+        }
         
         val currentRank = when {
             currentHoney >= 600 -> 4
@@ -224,7 +251,7 @@ class ProfileFragment : Fragment() {
         binding.honeyTotal.text = currentHoney.toString()
         binding.streakCount.text = currentStreak.toString()
         binding.rankBadge.text = getRankName(currentRank)
-        binding.missionsCompletedCount.text = (currentHoney / 50).toString()
+        binding.missionsCompletedCount.text = flights.toString()
 
         if (currentStreak >= 3) {
             binding.streakAura.visibility = View.VISIBLE
@@ -323,6 +350,46 @@ class ProfileFragment : Fragment() {
         else -> 1000
     }
 
+    private fun showClassSelectionDialog(profile: Profile) {
+        isClassDialogShowing = true
+        val dialogBinding = DialogClassSelectionBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
+            .setView(dialogBinding.root)
+            .setCancelable(false)
+            .setOnDismissListener { isClassDialogShowing = false }
+            .create()
+
+        dialog.window?.setWindowAnimations(R.style.Wanderly_DialogAnimation)
+
+        dialogBinding.classExplorer.setOnClickListener { confirmClassSelection(profile, "EXPLORER", dialog) }
+        dialogBinding.classSocial.setOnClickListener { confirmClassSelection(profile, "SOCIAL BEE", dialog) }
+        dialogBinding.classAdventurer.setOnClickListener { confirmClassSelection(profile, "ADVENTURER", dialog) }
+
+        dialog.show()
+    }
+
+    private fun confirmClassSelection(profile: Profile, className: String, parentDialog: AlertDialog) {
+        AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
+            .setTitle("ARE YOU SURE?")
+            .setMessage("The path of the $className is permanent.")
+            .setPositiveButton("I AM READY") { _, _ ->
+                lifecycleScope.launch {
+                    val updated = profile.copy(explorer_class = className)
+                    val success = repository.updateProfile(updated)
+                    if (success) {
+                        currentProfile = updated
+                        updateUI(updated)
+                        parentDialog.dismiss()
+                        showSnackbar("Class Locked: $className ⚔️", isError = false)
+                    } else {
+                        showSnackbar("Failed to lock class. Check your Hive connection.", isError = true)
+                    }
+                }
+            }
+            .setNegativeButton("WAIT", null)
+            .show()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
@@ -361,11 +428,11 @@ class BadgesAdapter(private val badges: List<String>) : RecyclerView.Adapter<Bad
             }
             "Honey Hoarder" -> {
                 holder.iconImage.setImageResource(R.drawable.ic_honeycomb)
-                holder.background.setBackgroundResource(R.drawable.bg_badge_expert) // Reuse expert colors
+                holder.background.setBackgroundResource(R.drawable.bg_badge_expert)
             }
             "Streak Master" -> {
                 holder.iconImage.setImageResource(R.drawable.ic_streak_fire_25)
-                holder.background.setBackgroundResource(R.drawable.bg_badge_queen) // Reuse queen colors
+                holder.background.setBackgroundResource(R.drawable.bg_badge_queen)
             }
             else -> {
                 holder.iconImage.setImageResource(R.drawable.ic_honeycomb)
@@ -373,5 +440,5 @@ class BadgesAdapter(private val badges: List<String>) : RecyclerView.Adapter<Bad
             }
         }
     }
-    override fun getItemCount() = badges.size
+    override fun getItemCount(): Int = badges.size
 }
