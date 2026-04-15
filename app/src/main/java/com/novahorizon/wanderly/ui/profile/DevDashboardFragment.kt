@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.navigation.fragment.findNavController
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -34,12 +35,26 @@ class DevDashboardFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentDevDashboardBinding.inflate(inflater, container, false)
         repository = WanderlyRepository(requireContext())
+        binding.root.visibility = View.INVISIBLE
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            val isAdmin = repository.getCurrentProfile()?.admin_role == true
+            if (!isAdmin) {
+                showSnackbar(getString(R.string.admin_access_denied), isError = true)
+                findNavController().navigateUp()
+                return@launch
+            }
+            binding.root.visibility = View.VISIBLE
+            setupAdminTools()
+        }
+    }
+
+    private fun setupAdminTools() {
         binding.btnUpdateStats.setOnClickListener {
             updateReality()
         }

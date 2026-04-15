@@ -42,9 +42,11 @@ object PlacesGeocoder {
     ): VerifiedPlace? = withContext(Dispatchers.IO) {
         try {
             val url = "https://places.googleapis.com/v1/places:searchText"
+            val normalizedCity = targetCity.trim()
+            val textQuery = if (normalizedCity.isBlank()) placeName else "$placeName, $normalizedCity"
             
             val jsonBody = org.json.JSONObject().apply {
-                put("textQuery", "$placeName, $targetCity")
+                put("textQuery", textQuery)
             }
 
             val request = okhttp3.Request.Builder()

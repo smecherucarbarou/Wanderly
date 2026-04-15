@@ -4,15 +4,15 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AppCompatActivity
-import com.novahorizon.wanderly.api.SupabaseClient
+import androidx.lifecycle.lifecycleScope
+import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.databinding.ActivitySplashBinding
-import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class SplashActivity : AppCompatActivity() {
 
@@ -25,13 +25,13 @@ class SplashActivity : AppCompatActivity() {
 
         startAnimations()
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        lifecycleScope.launch {
+            delay(3000)
             checkAuthAndNavigate()
-        }, 3000)
+        }
     }
 
     private fun startAnimations() {
-        // 1. Buzzy Mascot Animation (Flying in and hovering)
         val buzzyIn = ObjectAnimator.ofFloat(binding.buzzyMascot, View.TRANSLATION_Y, -500f, 0f)
         buzzyIn.duration = 1200
         buzzyIn.interpolator = OvershootInterpolator()
@@ -41,26 +41,26 @@ class SplashActivity : AppCompatActivity() {
         buzzyHover.repeatCount = ObjectAnimator.INFINITE
         buzzyHover.interpolator = AccelerateDecelerateInterpolator()
 
-        // 2. Logo Scale & Rotate
         val logoScaleX = ObjectAnimator.ofFloat(binding.logo, View.SCALE_X, 0f, 1f)
         val logoScaleY = ObjectAnimator.ofFloat(binding.logo, View.SCALE_Y, 0f, 1f)
         val logoRotate = ObjectAnimator.ofFloat(binding.logo, View.ROTATION, -45f, 0f)
-        
-        val logoSet = AnimatorSet()
-        logoSet.playTogether(logoScaleX, logoScaleY, logoRotate)
-        logoSet.duration = 1000
-        logoSet.startDelay = 400
 
-        // 3. Text Fading
-        val appNameFade = ObjectAnimator.ofFloat(binding.appNameText, View.ALPHA, 0f, 1f)
-        appNameFade.duration = 800
-        appNameFade.startDelay = 1000
+        val logoSet = AnimatorSet().apply {
+            playTogether(logoScaleX, logoScaleY, logoRotate)
+            duration = 1000
+            startDelay = 400
+        }
 
-        val taglineFade = ObjectAnimator.ofFloat(binding.tagline, View.ALPHA, 0f, 1f)
-        taglineFade.duration = 800
-        taglineFade.startDelay = 1300
+        val appNameFade = ObjectAnimator.ofFloat(binding.appNameText, View.ALPHA, 0f, 1f).apply {
+            duration = 800
+            startDelay = 1000
+        }
 
-        // Start everything
+        val taglineFade = ObjectAnimator.ofFloat(binding.tagline, View.ALPHA, 0f, 1f).apply {
+            duration = 800
+            startDelay = 1300
+        }
+
         buzzyIn.start()
         buzzyHover.startDelay = 1200
         buzzyHover.start()
@@ -69,8 +69,8 @@ class SplashActivity : AppCompatActivity() {
         taglineFade.start()
     }
 
-    private fun checkAuthAndNavigate() {
-        val session = SupabaseClient.client.auth.currentSessionOrNull()
+    private suspend fun checkAuthAndNavigate() {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
         if (session != null) {
             startActivity(Intent(this, MainActivity::class.java))
         } else {

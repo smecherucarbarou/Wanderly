@@ -108,9 +108,6 @@ dependencies {
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
-    // WorkManager
-    implementation(libs.androidx.work.runtime.ktx)
-
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

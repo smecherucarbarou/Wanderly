@@ -5,11 +5,12 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.data.WanderlyRepository
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
@@ -17,8 +18,8 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
     val streakMessage: LiveData<String?> = _streakMessage
 
     /**
-     * Verifică dacă streak-ul a expirat.
-     * Streak-ul expiră dacă ultima misiune nu a fost făcută nici azi, nici ieri.
+     * Checks whether the streak has expired.
+     * A streak expires when the last mission was completed on neither today nor yesterday.
      */
     sealed class StreakStatus {
         object Active : StreakStatus()
@@ -29,28 +30,27 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
     val streakStatus: LiveData<StreakStatus> = _streakStatus
 
     fun checkDailyStreak() {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        sdf.timeZone = TimeZone.getTimeZone("UTC")
-        
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+
         val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         val today = sdf.format(now.time)
-        
+
         val yesterdayCal = now.clone() as Calendar
         yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
         val yesterday = sdf.format(yesterdayCal.time)
 
         viewModelScope.launch {
             try {
-                // Ensure we have a profile loaded
                 val profile = repository.getCurrentProfile() ?: return@launch
                 val lastMission = profile.last_mission_date ?: ""
                 val currentStreak = profile.streak_count ?: 0
-                
+
                 Log.d("WanderlyStreak", "Checking expiry. Today: $today, Yesterday: $yesterday, Last Mission: $lastMission")
 
                 if (lastMission != today && lastMission != yesterday && currentStreak > 0) {
-                    // STREAK CRISIS TRIGGERED
-                    val cost = currentStreak * 5 // 5 Honey per day of streak to restore
+                    val cost = currentStreak * 5
                     _streakStatus.postValue(StreakStatus.Crisis(currentStreak, cost))
                 } else {
                     _streakStatus.postValue(StreakStatus.Active)
@@ -66,11 +66,11 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
             val profile = repository.getCurrentProfile() ?: return@launch
             val currentHoney = profile.honey ?: 0
             if (currentHoney >= cost) {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
-                    timeZone = TimeZone.getTimeZone("UTC") 
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
                 }
                 val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                calendar.add(Calendar.DAY_OF_YEAR, -1) // Set to yesterday so they have today to continue
+                calendar.add(Calendar.DAY_OF_YEAR, -1)
                 val yesterday = sdf.format(calendar.time)
 
                 val updated = profile.copy(
@@ -79,12 +79,12 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
                 )
                 if (repository.updateProfile(updated)) {
                     _streakStatus.postValue(StreakStatus.Active)
-                    _streakMessage.postValue("Streak Restored! 🍯 Your reputation is safe.")
+                    _streakMessage.postValue("Streak restored! Your reputation is safe.")
                 } else {
                     _streakMessage.postValue("Failed to restore streak. Hive connection lost.")
                 }
             } else {
-                _streakMessage.postValue("Not enough Honey! 🍯")
+                _streakMessage.postValue("Not enough Honey.")
             }
         }
     }
@@ -92,28 +92,28 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
     fun acceptStreakLoss() {
         viewModelScope.launch {
             val profile = repository.getCurrentProfile() ?: return@launch
-            
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
-                timeZone = TimeZone.getTimeZone("UTC") 
+
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
             }
             val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-            calendar.add(Calendar.DAY_OF_YEAR, -1) // Set to yesterday
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
             val yesterday = sdf.format(calendar.time)
 
             val updated = profile.copy(
                 streak_count = 0,
-                last_mission_date = yesterday // Set to yesterday so the crisis stops, and next mission starts streak at 1
+                last_mission_date = yesterday
             )
 
             if (repository.updateProfile(updated)) {
                 _streakStatus.postValue(StreakStatus.Active)
-                _streakMessage.postValue("Streak reset to 0. Time to rebuild! 🐝")
+                _streakMessage.postValue("Streak reset to 0. Time to rebuild!")
             } else {
                 _streakMessage.postValue("Failed to reset streak. Check connection.")
             }
         }
     }
-    
+
     fun clearStreakMessage() {
         _streakMessage.value = null
     }

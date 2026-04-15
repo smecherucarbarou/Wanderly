@@ -1,0 +1,63 @@
+package com.novahorizon.wanderly.ui
+
+import android.util.Base64
+import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+
+object AvatarLoader {
+    fun loadAvatar(
+        imageView: ImageView,
+        initialView: TextView,
+        avatarSource: String?,
+        displayName: String
+    ) {
+        if (avatarSource.isNullOrBlank()) {
+            showInitial(initialView, imageView, displayName)
+            return
+        }
+
+        val trimmedSource = avatarSource.trim()
+        val requestBuilder = when {
+            trimmedSource.startsWith("http://", ignoreCase = true) ||
+                trimmedSource.startsWith("https://", ignoreCase = true) ->
+                Glide.with(imageView).load(trimmedSource)
+
+            else -> {
+                val imageBytes = decodeLegacyAvatar(trimmedSource)
+                if (imageBytes == null) {
+                    showInitial(initialView, imageView, displayName)
+                    return
+                }
+                Glide.with(imageView).load(imageBytes)
+            }
+        }
+
+        initialView.visibility = View.GONE
+        imageView.visibility = View.VISIBLE
+        requestBuilder
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+            .circleCrop()
+            .into(imageView)
+    }
+
+    private fun showInitial(initialView: TextView, imageView: ImageView, displayName: String) {
+        imageView.visibility = View.GONE
+        initialView.visibility = View.VISIBLE
+        initialView.text = displayName.firstOrNull()?.uppercase() ?: "E"
+    }
+
+    private fun decodeLegacyAvatar(avatarSource: String): ByteArray? {
+        return try {
+            if (avatarSource.startsWith("data:image", ignoreCase = true)) {
+                Base64.decode(avatarSource.substringAfter("base64,"), Base64.DEFAULT)
+            } else {
+                Base64.decode(avatarSource, Base64.DEFAULT)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+}

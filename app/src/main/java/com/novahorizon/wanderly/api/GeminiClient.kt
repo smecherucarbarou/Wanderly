@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.api
 
+import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.novahorizon.wanderly.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
@@ -13,6 +14,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 object GeminiClient {
+    private const val TAG = "GeminiClient"
     private const val API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -27,8 +29,7 @@ object GeminiClient {
 
     suspend fun generateWithSearch(prompt: String): String {
         val finalUrl = "$API_URL?key=${BuildConfig.GEMINI_API_KEY}"
-        android.util.Log.d("GeminiClient", "Full URL: $finalUrl")
-        android.util.Log.d("GeminiClient", "Prompt: ${prompt.take(200)}...")
+        logDebug { "Starting Gemini request with promptLength=${prompt.length}" }
         
         val body = JSONObject().apply {
             put("contents", JSONArray().put(JSONObject().apply {
@@ -56,11 +57,11 @@ object GeminiClient {
                 client.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string() ?: ""
                     if (!response.isSuccessful) {
-                        android.util.Log.e("GeminiClient", "FAILURE! Code: ${response.code}")
-                        android.util.Log.e("GeminiClient", "Error Body: $responseBody")
-                        throw Exception("API call failed: ${response.code} - $responseBody")
+                        Log.e(TAG, "Gemini request failed with code=${response.code}")
+                        logDebug { "Gemini error bodyLength=${responseBody.length}" }
+                        throw Exception("API call failed: ${response.code}")
                     }
-                    android.util.Log.d("GeminiClient", "SUCCESS! Response: ${responseBody.take(100)}...")
+                    logDebug { "Gemini request succeeded with bodyLength=${responseBody.length}" }
                     val json = JSONObject(responseBody)
                     json.getJSONArray("candidates")
                         .getJSONObject(0)
@@ -70,9 +71,23 @@ object GeminiClient {
                         .getString("text")
                 }
             } catch (e: Exception) {
-                android.util.Log.e("GeminiClient", "Exception during call", e)
+                logException(e)
                 throw e
             }
+        }
+    }
+
+    private inline fun logDebug(message: () -> String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, message())
+        }
+    }
+
+    private fun logException(e: Exception) {
+        if (BuildConfig.DEBUG) {
+            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})", e)
+        } else {
+            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})")
         }
     }
 }

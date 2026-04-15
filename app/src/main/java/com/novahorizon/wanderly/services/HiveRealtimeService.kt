@@ -1,4 +1,3 @@
-/* FIXES APPLIED: BUG B, BUG C — see inline comments */
 package com.novahorizon.wanderly.services
 
 import android.app.Notification
@@ -42,8 +41,8 @@ class HiveRealtimeService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: WanderlyRepository
-    private var realtimeChannel: RealtimeChannel? = null // BUG 5 FIXED: Class-level field
-    private var isSubscribed = false // BUG B FIXED: Track subscription status to prevent duplication
+    private var realtimeChannel: RealtimeChannel? = null
+    private var isSubscribed = false
 
     override fun onCreate() {
         super.onCreate()
@@ -66,7 +65,7 @@ class HiveRealtimeService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Wanderly is Active")
             .setContentText("Watching the hive for rival activity...")
-            .setSmallIcon(R.drawable.ic_notification) // BUG 12 FIXED: Use app icon
+            .setSmallIcon(R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
@@ -86,26 +85,21 @@ class HiveRealtimeService : Service() {
                     return@launch
                 }
 
-                // BUG 4 FIXED: Connect before subscribing
                 SupabaseClient.client.realtime.connect()
 
-                // BUG 6 FIXED: Re-subscribe on reconnect
-                // BUG B FIXED: Use isSubscribed flag to prevent multiple parallel listeners
                 SupabaseClient.client.realtime.status.onEach { status ->
                     Log.d("HiveRealtime", "Connection Status: $status")
                     if (status == Realtime.Status.CONNECTED) {
                         if (!isSubscribed) {
                             Log.d("HiveRealtime", "Connected! Subscribing to channel...")
-                            setupSubscription(profile)
+                            setupSubscription(profile.id)
                             isSubscribed = true
                         }
                     } else {
-                        // Reset flag on any non-connected status so we can re-subscribe when CONNECTED returns
                         isSubscribed = false
                     }
                 }.launchIn(this)
 
-                // Keep-alive / Reconnect loop
                 while (isActive) {
                     delay(30000)
                     if (SupabaseClient.client.realtime.status.value != Realtime.Status.CONNECTED) {
@@ -119,10 +113,9 @@ class HiveRealtimeService : Service() {
         }
     }
 
-    private suspend fun setupSubscription(profile: Profile) {
-        // Clean up old channel if it exists
+    private suspend fun setupSubscription(currentUserId: String) {
         realtimeChannel?.unsubscribe()
-        
+
         val channel = SupabaseClient.client.realtime.channel("hive_updates")
         realtimeChannel = channel
 
@@ -132,7 +125,9 @@ class HiveRealtimeService : Service() {
             table = Constants.TABLE_PROFILES
         }.onEach { change ->
             val updatedProfile = change.decodeRecord<Profile>()
-            if (updatedProfile.id == profile.id) return@onEach
+            if (updatedProfile.id == currentUserId) return@onEach
+
+            val currentProfile = repository.getCurrentProfile() ?: return@onEach
 
             Log.d("HiveRealtime", "Realtime update from: ${updatedProfile.username}")
 
@@ -141,14 +136,11 @@ class HiveRealtimeService : Service() {
             }
             val today = sdf.format(Date())
 
-            // Logic 1: Rival Activity
             if (updatedProfile.last_mission_date == today) {
-                // BUG 8 FIXED: shared cooldown is handled in WanderlyNotificationManager
                 WanderlyNotificationManager.sendRivalActivity(applicationContext, updatedProfile.username ?: "A rival")
             }
 
-            // Logic 2: Overtaken
-            if ((updatedProfile.honey ?: 0) > (profile.honey ?: 0)) {
+            if ((updatedProfile.honey ?: 0) > (currentProfile.honey ?: 0)) {
                 WanderlyNotificationManager.sendOvertakenAlert(applicationContext, updatedProfile.username ?: "Someone")
             }
         }.launchIn(serviceScope)
@@ -163,7 +155,6 @@ class HiveRealtimeService : Service() {
     override fun onDestroy() {
         serviceScope.launch {
             try {
-                // BUG 5 FIXED: Explicitly unsubscribe
                 realtimeChannel?.unsubscribe()
                 Log.d("HiveRealtime", "Unsubscribed from channel.")
             } catch (e: Exception) {

@@ -8,6 +8,7 @@ data class Profile(
     val username: String? = null,
     val honey: Int? = 0,
     val hive_rank: Int? = 1,
+    val admin_role: Boolean = false,
     val badges: List<String>? = emptyList(),
     val cities_visited: List<String>? = emptyList(),
     val avatar_url: String? = null,

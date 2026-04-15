@@ -9,8 +9,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.GeminiClient
+import com.novahorizon.wanderly.api.PlacesGeocoder
+import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
 import com.google.ai.client.generativeai.type.content
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
@@ -63,13 +66,8 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         viewModelScope.launch {
             try {
                 val currentProfile = repository.getCurrentProfile()
-                val rank = currentProfile?.hive_rank ?: 1
-                val radiusMeters = when (rank) {
-                    1 -> 800
-                    2 -> 1500
-                    3 -> 3000
-                    else -> 6000
-                }
+                val rank = currentProfile?.derivedHiveRank() ?: 1
+                val radiusMeters = HiveRank.missionRadiusMeters(rank)
 
                 val nearbyPlaces = repository.fetchNearbyPlaces(lat, lng, radiusMeters)
                 val history = repository.getMissionHistory()
@@ -108,10 +106,30 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 val finalJson = responseText.substring(jsonStartIndex, jsonEndIndex + 1)
                 
                 val missionResponse = json.decodeFromString<GeminiMissionResponse>(finalJson)
-                val newHistory = (missionResponse.targetName + "|" + history).take(500)
-                
-                repository.saveMissionData(missionResponse.missionText, missionResponse.targetName, newHistory, city)
-                _missionState.postValue(MissionState.MissionReceived(missionResponse.missionText))
+                val resolvedTarget = PlacesGeocoder.resolveCoordinates(
+                    placeName = missionResponse.targetName,
+                    targetCity = city.orEmpty(),
+                    userLat = lat,
+                    userLng = lng,
+                    radiusKm = radiusMeters / 1000.0
+                ) ?: throw Exception("Could not verify the mission destination. Please try again.")
+
+                val verifiedTargetName = resolvedTarget.name
+                val verifiedMissionText = missionResponse.missionText.replace(
+                    missionResponse.targetName,
+                    verifiedTargetName
+                )
+                val newHistory = (verifiedTargetName + "|" + history).take(500)
+
+                repository.saveMissionData(
+                    text = verifiedMissionText,
+                    target = verifiedTargetName,
+                    history = newHistory,
+                    city = city,
+                    targetLat = resolvedTarget.lat,
+                    targetLng = resolvedTarget.lng
+                )
+                _missionState.postValue(MissionState.MissionReceived(verifiedMissionText))
 
             } catch (e: Exception) {
                 _missionState.postValue(MissionState.Error("Failed to generate objective: ${e.message}"))
@@ -224,6 +242,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     }
                     val todayUTC = sdfLocal.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).time)
                     repository.updateLastVisitDate(todayUTC)
+                    repository.clearMissionData()
 
                     _profile.postValue(updatedProfile)
                     _missionState.postValue(MissionState.Idle)

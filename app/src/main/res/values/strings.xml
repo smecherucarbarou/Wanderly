@@ -8,7 +8,7 @@
     <string name="new_bee">New bee? Sign up</string>
     <string name="already_bee">Already a bee? Login</string>
     <string name="generate_mission">New Flight</string>
-    <string name="complete_mission">Pollinated! ✓</string>
+    <string name="complete_mission">Pollinated!</string>
     <string name="profile_tab">My Hive</string>
     <string name="honey_label">Honey</string>
     <string name="rank_label">Rank</string>
@@ -16,10 +16,10 @@
     <string name="rank_2">Scout Bee</string>
     <string name="rank_3">Expert Bee</string>
     <string name="rank_4">Queen of Exploration</string>
-    <string name="buzz_map">I detect an interesting flower nearby! 🌸</string>
-    <string name="buzz_before_mission">Ready to pollinate? 🐝</string>
-    <string name="buzz_after_mission">Congratulations! The jar is filling up! 🍯</string>
-    <string name="buzz_login">The hive missed you! 🏠</string>
+    <string name="buzz_map">I detect an interesting flower nearby!</string>
+    <string name="buzz_before_mission">Ready to pollinate?</string>
+    <string name="buzz_after_mission">Congratulations! The jar is filling up!</string>
+    <string name="buzz_login">The hive missed you!</string>
     <string name="email_verified_error">Please verify your email first</string>
     <string name="email_sent">Verification email sent! Check your inbox.</string>
     <string name="error_network">Network error. Check your connection</string>
@@ -34,8 +34,30 @@
     <string name="title_missions">Missions</string>
     <string name="title_profile">My Hive</string>
     <string name="title_gems">Hidden Gems</string>
-
     <string name="badge_early_bee">Early Bee</string>
     <string name="badge_honey_hoarder">Honey Hoarder</string>
     <string name="badge_streak_master">Streak Master</string>
+    <string name="social_title">The Hive Network</string>
+    <string name="social_tab_leaderboard">Leaderboard</string>
+    <string name="social_tab_friends">Friends</string>
+    <string name="social_friend_code_hint">Enter 6-character friend code</string>
+    <string name="social_add_friend">Add</string>
+    <string name="social_remove_friend_title">Remove Friend</string>
+    <string name="social_remove_friend_message">Are you sure you want to remove %1$s from your hive?</string>
+    <string name="social_remove_friend_confirm">Remove</string>
+    <string name="social_remove_friend_cancel">Cancel</string>
+    <string name="profile_default_name">Explorer</string>
+    <string name="unknown_explorer">Unknown</string>
+    <string name="friend_code_display">Friend Code: %1$s</string>
+    <string name="friend_code_copied">Friend code copied</string>
+    <string name="profile_stat_honey">Honey</string>
+    <string name="profile_stat_streak">Streak</string>
+    <string name="profile_stat_flights">Flights</string>
+    <string name="profile_hive_progress">Hive Progress</string>
+    <string name="profile_badges_title">My Honeycombs (Badges)</string>
+    <string name="profile_badges_empty">No honeycombs collected yet!</string>
+    <string name="profile_next_rank_in_honey">Next Rank in %1$d Honey</string>
+    <string name="profile_rank_up_ready">Rank up ready!</string>
+    <string name="profile_max_rank">Maximum rank achieved!</string>
+    <string name="admin_access_denied">Admin access only.</string>
 </resources>

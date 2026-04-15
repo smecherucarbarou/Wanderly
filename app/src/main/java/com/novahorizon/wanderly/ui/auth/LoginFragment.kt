@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
+import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -71,8 +72,8 @@ class LoginFragment : Fragment() {
                 is AuthViewModel.AuthState.Success -> {
                     // Save Remember Me preference
                     val isRememberMeChecked = binding.rememberMeCheckbox.isChecked
-                    val prefs = requireContext().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
-                    prefs.edit().putBoolean("remember_me", isRememberMeChecked).apply()
+                    val prefs = requireContext().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean(Constants.KEY_REMEMBER_ME, isRememberMeChecked).apply()
 
                     startActivity(Intent(requireContext(), MainActivity::class.java))
                     requireActivity().finish()

@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
@@ -156,28 +157,22 @@ class MapFragment : Fragment() {
     }
 
     private fun checkActiveMission() {
-        val prefs = requireActivity().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
-        val targetLatStr = prefs.getString("mission_target_lat", null)
-        val targetLngStr = prefs.getString("mission_target_lng", null)
-        val missionText = prefs.getString("mission_text", null)
+        val repository = WanderlyRepository(requireContext())
+        val targetCoordinates = repository.getMissionTargetCoordinates()
+        val missionText = repository.getMissionText()
 
-        if (targetLatStr != null && targetLngStr != null) {
-            val targetLat = targetLatStr.toDoubleOrNull()
-            val targetLng = targetLngStr.toDoubleOrNull()
-            
-            if (targetLat != null && targetLng != null) {
-                binding.missionPreviewText.text = missionText ?: "Destination set!"
-                binding.newFlightButton.text = "Go to Missions"
-                
-                binding.newFlightButton.setOnClickListener {
-                    findNavController().navigate(R.id.action_map_to_missions)
-                }
+        if (targetCoordinates != null) {
+            binding.missionPreviewText.text = missionText ?: "Destination set!"
+            binding.newFlightButton.text = "Go to Missions"
 
-                val targetPoint = GeoPoint(targetLat, targetLng)
-                binding.mapView.controller.animateTo(targetPoint)
-                binding.mapView.invalidate()
-                return
+            binding.newFlightButton.setOnClickListener {
+                findNavController().navigate(R.id.action_map_to_missions)
             }
+
+            val targetPoint = GeoPoint(targetCoordinates.first, targetCoordinates.second)
+            binding.mapView.controller.animateTo(targetPoint)
+            binding.mapView.invalidate()
+            return
         }
         
         binding.missionPreviewText.text = "Ready for a new adventure?"
@@ -204,7 +199,7 @@ class MapFragment : Fragment() {
                 if (location != null) {
                     val geoPoint = GeoPoint(location.latitude, location.longitude)
                     val prefs = requireActivity().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
-                    if (prefs.getString("mission_target_lat", null) == null) {
+                    if (prefs.getString(Constants.KEY_MISSION_TARGET_LAT, null) == null) {
                         binding.mapView.controller.setCenter(geoPoint)
                     }
                     updateUserLocation(location.latitude, location.longitude)

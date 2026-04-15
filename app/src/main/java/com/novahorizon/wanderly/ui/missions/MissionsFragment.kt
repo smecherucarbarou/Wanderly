@@ -19,8 +19,10 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.ui.MissionsViewModel
@@ -61,12 +63,12 @@ class MissionsFragment : Fragment() {
                         android.graphics.BitmapFactory.decodeStream(input)
                     }
                     viewModel.verifyPhoto(bitmap)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     showSnackbar("Failed to process photo", isError = true)
                 }
             }
         } else {
-            showSnackbar("Buzzy didn't see a photo! Try again? 📸", isError = true)
+            showSnackbar("Buzzy did not see a photo. Try again?", isError = true)
         }
     }
 
@@ -80,7 +82,7 @@ class MissionsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
+
         setupObservers()
         viewModel.loadProfile()
 
@@ -108,6 +110,7 @@ class MissionsFragment : Fragment() {
                     binding.missionText.visibility = View.GONE
                     binding.newFlightButton.isEnabled = false
                 }
+
                 is MissionsViewModel.MissionState.MissionReceived -> {
                     binding.missionText.text = state.text
                     binding.missionText.visibility = View.VISIBLE
@@ -118,33 +121,38 @@ class MissionsFragment : Fragment() {
                     binding.verifyButton.text = "Verify Location"
                     binding.completeButton.visibility = View.GONE
                     binding.learnMoreButton.visibility = View.GONE
-                    binding.buzzyBubble.text = "New mission! Use your bee-senses to find it! 📍"
+                    binding.buzzyBubble.text = "New mission! Use your bee-senses to find it!"
                 }
+
                 is MissionsViewModel.MissionState.Verifying -> {
                     binding.verifyButton.isEnabled = false
                     binding.verifyButton.text = "Buzzy is looking..."
-                    binding.buzzyBubble.text = "Let me check my map and your photo... 🕵️"
+                    binding.buzzyBubble.text = "Let me check the map and your photo..."
                 }
+
                 is MissionsViewModel.MissionState.VerificationResult -> {
                     if (state.success) {
                         binding.verifyButton.visibility = View.GONE
                         binding.completeButton.visibility = View.VISIBLE
                         binding.learnMoreButton.visibility = View.VISIBLE
-                        binding.buzzyBubble.text = "Buzzing success! ✓"
+                        binding.buzzyBubble.text = "Buzzing success!"
                     } else {
                         binding.verifyButton.isEnabled = true
                         binding.verifyButton.text = "Take Photo to Verify"
                         binding.buzzyBubble.text = state.message
                     }
                 }
+
                 is MissionsViewModel.MissionState.FetchingDetails -> {
                     binding.learnMoreButton.isEnabled = false
                     binding.learnMoreButton.text = "Buzzy is thinking..."
                 }
+
                 is MissionsViewModel.MissionState.DetailsReceived -> {
                     binding.learnMoreButton.visibility = View.GONE
                     binding.buzzyBubble.text = state.info
                 }
+
                 is MissionsViewModel.MissionState.Idle -> {
                     binding.verifyButton.visibility = View.GONE
                     binding.completeButton.visibility = View.GONE
@@ -153,14 +161,16 @@ class MissionsFragment : Fragment() {
                     binding.newFlightButton.isEnabled = true
                     binding.buzzyBubble.text = "Good job! Ready for another?"
                 }
+
                 is MissionsViewModel.MissionState.Error -> {
                     binding.loadingIndicator.visibility = View.GONE
                     binding.newFlightButton.isEnabled = true
                     binding.learnMoreButton.isEnabled = true
-                    binding.learnMoreButton.text = "Află mai multe despre acest loc 🕵️"
+                    binding.learnMoreButton.text = "Learn more about this place"
                     showSnackbar(state.message, isError = true)
                 }
-                else -> {}
+
+                else -> Unit
             }
         }
     }
@@ -185,7 +195,9 @@ class MissionsFragment : Fragment() {
                             }
                         } else {
                             @Suppress("DEPRECATION")
-                            val addresses = withContext(Dispatchers.IO) { geocoder.getFromLocation(location.latitude, location.longitude, 1) }
+                            val addresses = withContext(Dispatchers.IO) {
+                                geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                            }
                             val cityName = addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea
                             Log.d("MissionsFragment", "City from geocoder: $cityName")
                             viewModel.generateMission(location.latitude, location.longitude, cityName)
@@ -217,43 +229,34 @@ class MissionsFragment : Fragment() {
             }
             tempImageUri = FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.fileprovider", tempFile)
             takePhotoLauncher.launch(tempImageUri)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             showSnackbar("Could not start camera interface", isError = true)
         }
     }
 
     private fun updateUI(profile: Profile) {
-        binding.honeyCount.text = "🍯 ${profile.honey ?: 0} Honey"
-        binding.rankName.text = getRankName(profile.hive_rank ?: 1)
-        
-        val maxHoney = getMaxHoneyForRank(profile.hive_rank ?: 1)
-        val minHoney = getMinHoneyForRank(profile.hive_rank ?: 1)
+        val honey = profile.honey ?: 0
+        val derivedRank = profile.derivedHiveRank()
+
+        binding.honeyCount.text = "$honey Honey"
+        binding.rankName.text = getRankName(derivedRank)
+
+        val maxHoney = HiveRank.maxHoneyForRank(derivedRank)
+        val minHoney = HiveRank.minHoneyForRank(derivedRank)
         val progress = if (maxHoney > minHoney) {
-            (((profile.honey ?: 0) - minHoney).toFloat() / (maxHoney - minHoney) * 100).toInt()
-        } else 100
-        
+            (((honey - minHoney).toFloat() / (maxHoney - minHoney)) * 100).toInt()
+        } else {
+            100
+        }
+
         binding.honeyProgress.progress = progress
     }
 
-    private fun getRankName(rank: Int) = when(rank) {
+    private fun getRankName(rank: Int) = when (rank) {
         1 -> getString(R.string.rank_1)
         2 -> getString(R.string.rank_2)
         3 -> getString(R.string.rank_3)
         else -> getString(R.string.rank_4)
-    }
-
-    private fun getMinHoneyForRank(rank: Int) = when(rank) {
-        1 -> 0
-        2 -> 100
-        3 -> 300
-        else -> 600
-    }
-
-    private fun getMaxHoneyForRank(rank: Int) = when(rank) {
-        1 -> 99
-        2 -> 299
-        3 -> 599
-        else -> 600
     }
 
     override fun onDestroyView() {

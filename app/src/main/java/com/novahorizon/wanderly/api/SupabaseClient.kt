@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.api
 
 import android.content.Context
+import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.BuildConfig
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -25,8 +26,8 @@ object SupabaseClient {
             httpEngine = OkHttp.create()
             install(Postgrest)
             install(Auth) {
-                scheme = "wanderly"
-                host = "login"
+                scheme = Constants.AUTH_CALLBACK_SCHEME
+                host = Constants.AUTH_CALLBACK_HOST
                 alwaysAutoRefresh = true
                 autoLoadFromStorage = true
             }
