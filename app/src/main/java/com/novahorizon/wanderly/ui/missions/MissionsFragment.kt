@@ -202,7 +202,9 @@ class MissionsFragment : Fragment() {
                             geocoder.getFromLocation(location.latitude, location.longitude, 1) { addresses ->
                                 val cityName = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.adminArea
                                 Log.d("MissionsFragment", "City from geocoder: $cityName")
-                                viewModel.generateMission(location.latitude, location.longitude, cityName)
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    viewModel.generateMission(location.latitude, location.longitude, cityName)
+                                }
                             }
                         } else {
                             @Suppress("DEPRECATION")

@@ -68,8 +68,8 @@ There is no DI framework yet; repository/client instances are created directly f
 - Mission generation now caches a verified mission target name plus coordinates in shared preferences, and the map pivots into a mission-preview state when that cache exists.
 
 ### Hidden gems
-- `ui/gems/GemsFragment.kt` gets a precise location, reverse geocodes a city, fetches nearby Overpass hints, asks Gemini for a JSON list of curated venues, and then verifies each candidate through Google Places.
-- Results are deduplicated by name and coordinates before being shown.
+- `ui/gems/GemsFragment.kt` gets a precise location, reverse geocodes a city, fetches real nearby Overpass candidates with coordinates, and asks Gemini to curate from that numbered local list instead of inventing venue names from scratch.
+- The screen now uses the exact local candidate name and coordinates for map launches, which avoids translation/alias mismatches between Gemini and Google Places.
 - This feature is intentionally opinionated: it filters hard toward "high-vibe" venues and avoids civic/medical/lodging/irrelevant places.
 
 ### Missions
@@ -120,7 +120,7 @@ Because the repository owns both remote and local state, most feature work ends 
 ### Google Places
 - `api/PlacesGeocoder.kt` is the trust boundary for venue verification.
 - It rejects closed places, public-service locations, and places too far from the user.
-- This filter is essential to the hidden-gems feature quality.
+- This filter is still important for mission/location verification, but hidden gems now lean primarily on local Overpass candidates plus Gemini curation to avoid alias mismatches.
 
 ### Maps and location
 - osmdroid is used for rendering and user/friend markers.

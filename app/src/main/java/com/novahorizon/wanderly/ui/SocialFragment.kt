@@ -188,6 +188,7 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
             holder.removeBtn.setOnClickListener { onRemoveClick(profile) }
         } else {
             holder.removeBtn.visibility = View.GONE
+            holder.removeBtn.setOnClickListener(null)
         }
 
         AvatarLoader.loadAvatar(

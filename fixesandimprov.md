@@ -383,6 +383,9 @@ Files:
 - `api/GeminiClient.kt`
 - `api/PlacesGeocoder.kt`
 
+Status:
+- Improved. Hidden Gems now curates from a numbered list of real nearby Overpass candidates with coordinates instead of asking Gemini to invent place names, which removes the worst hallucination/translation mismatch path.
+
 What to change:
 - Add better fallback behavior if Gemini returns malformed JSON.
 - Cache recent verified results by area.

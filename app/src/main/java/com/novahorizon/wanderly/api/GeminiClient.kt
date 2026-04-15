@@ -33,6 +33,15 @@ object GeminiClient {
         return executeRequest(body, logLabel = "search")
     }
 
+    suspend fun generateWithSearchText(prompt: String, systemInstruction: String? = null): String {
+        val body = buildTextBody(
+            prompt = prompt,
+            useSearch = true,
+            systemInstruction = systemInstruction
+        )
+        return executeRequest(body, logLabel = "search-text")
+    }
+
     suspend fun generateText(prompt: String): String {
         val body = buildTextBody(prompt = prompt, useSearch = false)
         return executeRequest(body, logLabel = "text")

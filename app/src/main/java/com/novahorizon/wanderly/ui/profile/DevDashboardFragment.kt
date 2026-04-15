@@ -1,36 +1,37 @@
 package com.novahorizon.wanderly.ui.profile
 
 import android.os.Bundle
+import android.text.method.ScrollingMovementMethod
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.navigation.fragment.findNavController
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.showSnackbar
-import kotlinx.coroutines.launch
-import android.text.method.ScrollingMovementMethod
-import com.novahorizon.wanderly.api.GeminiClient
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
-import androidx.appcompat.app.AlertDialog
-import com.novahorizon.wanderly.R
-
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.novahorizon.wanderly.workers.SocialWorker
 import com.novahorizon.wanderly.workers.StreakWorker
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.json.JSONObject
 
 class DevDashboardFragment : Fragment() {
 
     private var _binding: FragmentDevDashboardBinding? = null
     private val binding get() = _binding!!
     private lateinit var repository: WanderlyRepository
+    private val prettyJson = Json { prettyPrint = true }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentDevDashboardBinding.inflate(inflater, container, false)
@@ -55,72 +56,86 @@ class DevDashboardFragment : Fragment() {
     }
 
     private fun setupAdminTools() {
-        binding.btnUpdateStats.setOnClickListener {
-            updateReality()
-        }
+        binding.tvAiLogs.movementMethod = ScrollingMovementMethod()
+
+        binding.btnUpdateStats.setOnClickListener { updateReality() }
 
         binding.btnNotifyStreak.setOnClickListener {
-            WanderlyNotificationManager.sendDailyReminder(requireContext(), 7)
-            showSnackbar("Streak notification triggered", isError = false)
+            val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 7
+            WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
+            announceTrigger("Daily streak reminder forced for $streak days")
+        }
+
+        binding.btnNotifyEvening.setOnClickListener {
+            WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
+            announceTrigger("Evening rescue alert forced")
         }
 
         binding.btnNotifyMilestone.setOnClickListener {
-            WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), 10)
-            showSnackbar("Milestone notification triggered", isError = false)
+            val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10
+            WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
+            announceTrigger("Milestone alert forced for $streak days")
         }
 
         binding.btnNotifyLost.setOnClickListener {
-            WanderlyNotificationManager.sendStreakLost(requireContext())
-            showSnackbar("Streak Lost notification triggered", isError = false)
+            WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
+            announceTrigger("Streak lost alert forced")
         }
 
         binding.btnNotifyRival.setOnClickListener {
-            val name = binding.editFriendName.text.toString().ifEmpty { "BuzzyBee" }
-            WanderlyNotificationManager.sendRivalActivity(requireContext(), name)
-            showSnackbar("Rival notification triggered for $name", isError = false)
+            val name = rivalName(default = "BuzzyBee")
+            WanderlyNotificationManager.sendRivalActivity(requireContext(), name, force = true)
+            announceTrigger("Rival activity forced for $name")
+        }
+
+        binding.btnNotifyRivalGroup.setOnClickListener {
+            val count = groupedRivalCount()
+            WanderlyNotificationManager.sendAggregatedRivalActivity(requireContext(), count, force = true)
+            announceTrigger("Grouped rival alert forced for $count rivals")
         }
 
         binding.btnNotifyOvertaken.setOnClickListener {
-            val name = binding.editFriendName.text.toString().ifEmpty { "QueenExplorer" }
-            WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name)
-            showSnackbar("Overtaken notification triggered for $name", isError = false)
+            val name = rivalName(default = "QueenExplorer")
+            WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name, force = true)
+            announceTrigger("Overtaken alert forced for $name")
         }
 
         binding.btnNotifyFight.setOnClickListener {
-            val name = binding.editFriendName.text.toString().ifEmpty { "KingBee" }
-            WanderlyNotificationManager.sendFightForFirst(requireContext(), name)
-            showSnackbar("Fight notification triggered for $name", isError = false)
+            val name = rivalName(default = "KingBee")
+            WanderlyNotificationManager.sendFightForFirst(requireContext(), name, force = true)
+            announceTrigger("Fight-for-first alert forced for $name")
+        }
+
+        binding.btnClearNotifCooldowns.setOnClickListener {
+            WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
+            announceTrigger("Notification cooldown cache cleared")
         }
 
         binding.btnRawLogs.setOnClickListener {
-            lifecycleScope.launch {
+            viewLifecycleOwner.lifecycleScope.launch {
                 val profile = repository.getCurrentProfile()
                 if (profile != null) {
-                    val json = Json { prettyPrint = true }.encodeToString(profile)
                     AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-                        .setTitle("RAW HIVE PAYLOAD")
-                        .setMessage(json)
+                        .setTitle("Live Profile JSON")
+                        .setMessage(prettyJson.encodeToString(profile))
                         .setPositiveButton("OK", null)
                         .show()
                 } else {
-                    showSnackbar("Failed to fetch payload", isError = true)
+                    showSnackbar("Failed to fetch live profile", isError = true)
                 }
             }
         }
 
-        binding.tvAiLogs.movementMethod = ScrollingMovementMethod()
-        binding.btnTestAiNotif.setOnClickListener {
-            runAiNotificationTest()
-        }
-        
+        binding.btnTestAiNotif.setOnClickListener { runAiNotificationTest() }
+
         binding.btnResetVisit.setOnClickListener {
             viewLifecycleOwner.lifecycleScope.launch {
                 repository.updateLastVisitDate("2000-01-01")
                 val success = repository.resetMissionDateForTesting()
                 if (success) {
-                    showSnackbar("LOCAL & REMOTE dates reset to 2000! Reset your app now.", isError = false)
+                    showSnackbar("Local and remote visit dates reset. Restart the app if needed.", isError = false)
                 } else {
-                    showSnackbar("Local reset OK, but Supabase failed. Check connection.", isError = true)
+                    showSnackbar("Local reset worked, but the remote reset failed.", isError = true)
                 }
             }
         }
@@ -128,104 +143,143 @@ class DevDashboardFragment : Fragment() {
         binding.btnRunWorkers.setOnClickListener {
             val socialRequest = OneTimeWorkRequestBuilder<SocialWorker>().build()
             val streakRequest = OneTimeWorkRequestBuilder<StreakWorker>().build()
-            
+
             WorkManager.getInstance(requireContext()).enqueue(socialRequest)
             WorkManager.getInstance(requireContext()).enqueue(streakRequest)
-            
-            showSnackbar("Workers forced to run NOW. Check Logcat for 'SocialWorker' or 'StreakWorker'", isError = false)
+
+            announceTrigger("SocialWorker and StreakWorker were queued immediately")
         }
     }
 
     private fun runAiNotificationTest() {
-        binding.tvAiLogs.text = "--- NEW TEST (LIVE DATA) --- \n\n"
-        lifecycleScope.launch {
+        binding.btnTestAiNotif.isEnabled = false
+        binding.tvAiLogs.text = "AI notification preview started.\n\n"
+
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
-                logToUi("Fetching live profile data...")
-                val profile = repository.getCurrentProfile()
-
-                // Step 1: Build Real Payload from database
-                val realPayload = buildJsonObject {
+                val profile = repository.getCurrentProfile() ?: throw Exception("No live profile available.")
+                val payload = buildJsonObject {
                     put("trigger", "Daily Reminder")
-                    put("current_streak", profile?.streak_count ?: 0)
-                    put("user_name", profile?.username ?: "Explorer")
-                    put("honey_balance", profile?.honey ?: 0)
-                    put("hive_rank", profile?.hive_rank ?: 1)
+                    put("current_streak", profile.streak_count ?: 0)
+                    put("user_name", profile.username ?: "Explorer")
+                    put("honey_balance", profile.honey ?: 0)
+                    put("hive_rank", profile.hive_rank ?: 1)
                 }
-                logToUi("Payload Sent (Live Data): $realPayload")
 
-                // Step 2: Call the Generator AI
-                logToUi("Step 1: Calling Generator AI...")
-                val generatorPrompt = """
-                    You are the Wanderly App AI. Write a short, engaging push notification for a user.
-                    Context: $realPayload
-                    Style: Playful, bee-themed, encouraging.
-                    Constraint: Max 120 characters.
+                logToUi("Using live profile for ${profile.username ?: "Explorer"}")
+                logToUi("Streak: ${profile.streak_count ?: 0} | Honey: ${profile.honey ?: 0} | Rank: ${profile.hive_rank ?: 1}")
+
+                val prompt = """
+                    Write one polished mobile push notification for Wanderly.
+                    Context: $payload
+
+                    Rules:
+                    - Bee-themed, playful, but not cringe.
+                    - Sound like a real production push notification.
+                    - Title max 32 characters.
+                    - Message max 110 characters.
+                    - No hashtags, no emojis, no quotation marks.
+
+                    Return ONLY raw JSON:
+                    {"title":"Short title","message":"Short message"}
                 """.trimIndent()
 
-                val generatedText = GeminiClient.generateText(generatorPrompt)
-                logToUi("Generator Output: $generatedText")
+                val rawResponse = GeminiClient.generateText(prompt)
+                val jsonStart = rawResponse.indexOf("{")
+                val jsonEnd = rawResponse.lastIndexOf("}")
+                if (jsonStart == -1 || jsonEnd == -1) throw Exception("AI did not return valid JSON.")
 
-                // Step 3: Call the Auditor AI (The QA Step)
-                logToUi("Step 2: Calling Auditor AI (QA)...")
-                val auditorPrompt = """
-                    You are the Wanderly QA Auditor. Evaluate the following notification text against the provided payload.
-                    
-                    PAYLOAD: $realPayload
-                    TEXT TO AUDIT: "$generatedText"
-                    
-                    CRITERIA:
-                    1. Accuracy: Does it reflect the streak/honey correctly?
-                    2. Tone: Is it bee-themed and encouraging?
-                    3. Length: Is it under 120 chars?
-                    
-                    Return your response in this EXACT format:
-                    STATUS: [PASS or FAIL]
-                    REASON: [Short explanation]
-                    CORRECTED_VERSION: [The text, improved if needed, otherwise the same]
-                """.trimIndent()
+                val parsed = JSONObject(rawResponse.substring(jsonStart, jsonEnd + 1))
+                val title = parsed.optString("title").trim().ifBlank { "Hive update" }.take(32)
+                val message = parsed.optString("message").trim().ifBlank {
+                    "Your streak is waiting. One quick mission keeps the hive alive."
+                }.take(110)
 
-                val auditorResult = GeminiClient.generateText(auditorPrompt)
-                logToUi("Auditor Result:\n$auditorResult")
+                WanderlyNotificationManager.showNotification(
+                    context = requireContext(),
+                    title = title,
+                    message = message,
+                    notificationId = 3999,
+                    dedupKey = "dev_ai_preview",
+                    bypassCooldown = true
+                )
 
-                // Step 4: Parse and Display
-                val finalApproved = auditorResult.substringAfter("CORRECTED_VERSION:").trim()
-                logToUi("Final Approved Text: $finalApproved")
-                logToUi("--- TEST COMPLETE ---")
-
+                logToUi("Final title: $title")
+                logToUi("Final message: $message")
+                logToUi("Sent as a real local notification with cooldown bypass.")
+                showSnackbar("AI reminder generated and sent", isError = false)
             } catch (e: Exception) {
-                logToUi("CRITICAL ERROR: ${e.message}")
+                logToUi("AI preview failed: ${e.message}")
+                showSnackbar("AI preview failed: ${e.message}", isError = true)
+            } finally {
+                binding.btnTestAiNotif.isEnabled = true
             }
         }
     }
 
     private fun logToUi(message: String) {
         binding.tvAiLogs.append("$message\n\n")
-        // Automatic scroll to bottom
-        val scrollAmount = binding.tvAiLogs.layout?.let { 
-            it.getLineTop(binding.tvAiLogs.lineCount) - binding.tvAiLogs.height 
-        } ?: 0
-        if (scrollAmount > 0) {
-            binding.tvAiLogs.scrollTo(0, scrollAmount)
+        binding.tvAiLogs.post {
+            val layout = binding.tvAiLogs.layout ?: return@post
+            val scrollAmount = layout.getLineTop(binding.tvAiLogs.lineCount) - binding.tvAiLogs.height
+            binding.tvAiLogs.scrollTo(0, scrollAmount.coerceAtLeast(0))
         }
     }
 
+    private fun announceTrigger(message: String) {
+        logToUi(message)
+        showSnackbar(message, isError = false)
+    }
+
+    private fun rivalName(default: String): String {
+        return binding.editFriendName.text.toString().trim().ifBlank { default }
+    }
+
+    private fun groupedRivalCount(): Int {
+        return binding.editRivalCount.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 3
+    }
+
     private fun updateReality() {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             val profile = repository.getCurrentProfile() ?: return@launch
-            
-            val editHoney = binding.editHoney.text.toString().toIntOrNull()
-            val editFlights = binding.editFlights.text.toString().toIntOrNull()
-            
+
+            val honeyInput = binding.editHoney.text.toString().trim()
+            val flightsInput = binding.editFlights.text.toString().trim()
+            val streakInput = binding.editStreak.text.toString().trim()
+
+            val editHoney = honeyInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
+            val editFlights = flightsInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
+            val parsedStreak = streakInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
+
+            if (honeyInput.isNotEmpty() && editHoney == null) {
+                showSnackbar("Honey must be a valid number.", isError = true)
+                return@launch
+            }
+
+            if (flightsInput.isNotEmpty() && editFlights == null) {
+                showSnackbar("Flights must be a valid number.", isError = true)
+                return@launch
+            }
+
+            if (streakInput.isNotEmpty() && parsedStreak == null) {
+                showSnackbar("Streak must be a valid number.", isError = true)
+                return@launch
+            }
+
             val newHoney = editHoney ?: if (editFlights != null) editFlights * 50 else profile.honey
-            val newStreak = binding.editStreak.text.toString().toIntOrNull() ?: profile.streak_count
+            val newStreak = parsedStreak?.coerceAtLeast(0) ?: (profile.streak_count ?: 0)
 
             val updated = profile.copy(
                 honey = newHoney,
                 streak_count = newStreak
             )
-            
+
             if (repository.updateProfile(updated)) {
-                showSnackbar("Reality Altered! Honey: $newHoney, Streak: $newStreak", isError = false)
+                val refreshed = repository.getCurrentProfile() ?: updated
+                showSnackbar(
+                    "Reality altered. Honey: ${refreshed.honey ?: 0}, Streak: ${refreshed.streak_count ?: 0}",
+                    isError = false
+                )
             } else {
                 showSnackbar("Failed to alter reality.", isError = true)
             }

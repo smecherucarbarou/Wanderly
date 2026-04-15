@@ -33,6 +33,9 @@ class WanderlyRepository(val context: Context) {
     suspend fun fetchHiddenGems(lat: Double, lng: Double, radius: Int): List<String> =
         discoveryRepository.fetchHiddenGems(lat, lng, radius)
 
+    suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> =
+        discoveryRepository.fetchHiddenGemCandidates(lat, lng, radius, city)
+
     fun getCachedUsername(): String? = preferencesStore.getCachedUsername()
 
     fun cacheUsername(username: String) = preferencesStore.cacheUsername(username)

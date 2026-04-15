@@ -71,9 +71,7 @@ class ProfileRepository(
 
             profile = normalizeProfile(profile)
             if (loadedProfile != null && loadedProfile.hive_rank != profile.hive_rank) {
-                SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update(profile) {
-                    filter { eq("id", userId) }
-                }
+                persistProfile(profile)
             }
 
             _currentProfile.value = profile
@@ -87,9 +85,7 @@ class ProfileRepository(
     suspend fun updateProfile(profile: Profile): Boolean = withContext(Dispatchers.IO) {
         try {
             val normalizedProfile = normalizeProfile(profile)
-            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update(normalizedProfile) {
-                filter { eq("id", normalizedProfile.id) }
-            }
+            persistProfile(normalizedProfile)
             _currentProfile.value = normalizedProfile
             true
         } catch (e: Exception) {
@@ -147,6 +143,27 @@ class ProfileRepository(
     }
 
     private fun normalizeProfile(profile: Profile): Profile = profile.withDerivedHiveRank()
+
+    private suspend fun persistProfile(profile: Profile) {
+        // Use an explicit PATCH payload so values like streak_count = 0 are not skipped.
+        SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
+            Profile::username setTo profile.username
+            Profile::honey setTo profile.honey
+            Profile::hive_rank setTo profile.hive_rank
+            Profile::admin_role setTo profile.admin_role
+            Profile::badges setTo profile.badges
+            Profile::cities_visited setTo profile.cities_visited
+            Profile::avatar_url setTo profile.avatar_url
+            Profile::last_mission_date setTo profile.last_mission_date
+            Profile::last_lat setTo profile.last_lat
+            Profile::last_lng setTo profile.last_lng
+            Profile::friend_code setTo profile.friend_code
+            Profile::streak_count setTo profile.streak_count
+            Profile::explorer_class setTo profile.explorer_class
+        }) {
+            filter { eq("id", profile.id) }
+        }
+    }
 
     private fun buildAvatarBytes(uri: Uri): ByteArray? {
         val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->

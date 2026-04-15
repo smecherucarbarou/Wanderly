@@ -18,6 +18,7 @@ import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.*
@@ -66,7 +67,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
             return
         }
         missionGenerationInFlight = true
-        _missionState.value = MissionState.Generating
+        _missionState.postValue(MissionState.Generating)
 
         viewModelScope.launch {
             try {
@@ -74,40 +75,47 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 val rank = currentProfile?.derivedHiveRank() ?: 1
                 val radiusMeters = HiveRank.missionRadiusMeters(rank)
 
-                val nearbyPlaces = repository.fetchNearbyPlaces(lat, lng, radiusMeters)
+                val nearbyPlaces = withTimeoutOrNull(1_500L) {
+                    repository.fetchNearbyPlaces(lat, lng, radiusMeters)
+                }.orEmpty()
                 val history = repository.getMissionHistory()
                 val promptCity = city ?: "this specific local area"
+                val recentExclusions = history.ifBlank { "none" }
 
-                val placesSection = if (nearbyPlaces.isNotEmpty()) {
-                    "Nearby real locations in $promptCity:\n${nearbyPlaces.joinToString("\n") { "- $it" }}\nPrefer one of these exact nearby names unless Google Search finds a better exact match in $promptCity."
+                val responseText = if (nearbyPlaces.isNotEmpty()) {
+                    val candidateList = nearbyPlaces.take(5).joinToString("\n") { "- $it" }
+                    val prompt = """
+                        User location: $promptCity
+                        Choose ONE exact place name from this list and turn it into a simple photo mission:
+                        $candidateList
+
+                        Rules:
+                        - Keep the place inside $promptCity.
+                        - Use the exact place name from the list.
+                        - Make it easy to verify with one photo.
+                        - Exclude hotels, clinics, pharmacies, schools, banks, offices, and apartment blocks.
+                        - Avoid anything already used: $recentExclusions
+
+                        Return ONLY raw JSON:
+                        {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
+                    """.trimIndent()
+                    GeminiClient.generateText(prompt)
                 } else {
-                    "Use Google Search to find a real landmark or tourist attraction specifically located within $promptCity."
+                    val prompt = """
+                        User location: $promptCity
+                        Find ONE real public place strictly inside $promptCity and turn it into a simple photo mission.
+
+                        Rules:
+                        - Use the exact current Google Maps place name.
+                        - It must be searchable right now.
+                        - Exclude hotels, clinics, pharmacies, schools, government buildings, banks, offices, and apartment blocks.
+                        - Avoid anything already used: $recentExclusions
+
+                        Return ONLY raw JSON:
+                        {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
+                    """.trimIndent()
+                    GeminiClient.generateWithSearch(prompt)
                 }
-
-                val prompt = """
-                    You are a professional mission generator for a travel app.
-                    Context: User is currently in $promptCity.
-                    $placesSection
-                    
-                    TASK:
-                    Generate ONE concrete, realistic travel mission. 
-                    The mission must be a simple, physical task that can be verified with a photo.
-                    CRITICAL:
-                    - The location MUST be strictly inside $promptCity. DO NOT suggest locations in other cities.
-                    - Use the EXACT current Google Maps place name. No translations, nicknames, or alternate names.
-                    - The place must be real and searchable right now.
-                    - Exclude hotels, clinics, pharmacies, schools, government buildings, banks, offices, and generic apartment blocks.
-                    
-                    STYLE GUIDE:
-                    - "Go to [Location] and take a photo of the main entrance."
-                    - "Locate [Location] and take a photo of the sign or plaque."
-                    
-                    EXCLUSIONS: $history
-                    
-                    Return ONLY raw JSON: {"missionText": "Concrete instruction here", "targetName": "Exact Location Name"}
-                """.trimIndent()
-
-                val responseText = GeminiClient.generateWithSearch(prompt)
                 
                 val jsonStartIndex = responseText.indexOf("{")
                 val jsonEndIndex = responseText.lastIndexOf("}")
@@ -193,7 +201,10 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     Include one unique fun fact discovered via search.
                 """.trimIndent()
                 
-                val info = GeminiClient.generateWithSearch(prompt)
+                val info = GeminiClient.generateWithSearchText(
+                    prompt,
+                    systemInstruction = "You are a precise local travel guide. Return normal plain text only. Do not return JSON, markdown, bullet lists, or code fences."
+                )
                 _missionState.postValue(MissionState.DetailsReceived(info))
             } catch (e: Exception) {
                 _missionState.postValue(MissionState.Error("Could not fetch details: ${e.message}"))
