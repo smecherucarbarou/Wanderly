@@ -1,7 +1,7 @@
 package com.novahorizon.wanderly.data
 
 import android.util.Log
-import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.api.PlacesProxyClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -145,8 +145,6 @@ class DiscoveryRepository {
         radiusMeters: Int,
         city: String
     ): List<DiscoveredPlace> = withContext(Dispatchers.IO) {
-        if (BuildConfig.MAPS_API_KEY.isBlank()) return@withContext emptyList()
-
         val queries = listOf(
             "specialty coffee in $city",
             "cafe in $city",
@@ -171,57 +169,47 @@ class DiscoveryRepository {
                 val body = JSONObject().apply {
                     put("textQuery", query)
                 }
-                val request = Request.Builder()
-                    .url("https://places.googleapis.com/v1/places:searchText")
-                    .addHeader("X-Goog-Api-Key", BuildConfig.MAPS_API_KEY)
-                    .addHeader(
-                        "X-Goog-FieldMask",
-                        "places.displayName,places.location,places.formattedAddress,places.types,places.primaryType,places.businessStatus,places.rating,places.userRatingCount"
-                    )
-                    .post(body.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
+                val responseJson = PlacesProxyClient.searchText(
+                    body = body,
+                    fieldMask = "places.displayName,places.location,places.formattedAddress,places.types,places.primaryType,places.businessStatus,places.rating,places.userRatingCount"
+                )
 
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: return@use
-                    if (!response.isSuccessful) return@use
+                val places = responseJson.optJSONArray("places") ?: continue
+                for (index in 0 until places.length()) {
+                    val place = places.getJSONObject(index)
+                    val businessStatus = place.optString("businessStatus", "OPERATIONAL")
+                    if (businessStatus == "CLOSED_PERMANENTLY" || businessStatus == "CLOSED_TEMPORARILY") continue
 
-                    val places = JSONObject(responseBody).optJSONArray("places") ?: return@use
-                    for (index in 0 until places.length()) {
-                        val place = places.getJSONObject(index)
-                        val businessStatus = place.optString("businessStatus", "OPERATIONAL")
-                        if (businessStatus == "CLOSED_PERMANENTLY" || businessStatus == "CLOSED_TEMPORARILY") continue
-
-                        val typeSet = mutableSetOf<String>()
-                        val primaryType = place.optString("primaryType", "")
-                        if (primaryType.isNotBlank()) typeSet += primaryType
-                        val typesArray = place.optJSONArray("types")
-                        if (typesArray != null) {
-                            for (typeIndex in 0 until typesArray.length()) {
-                                typeSet += typesArray.getString(typeIndex)
-                            }
+                    val typeSet = mutableSetOf<String>()
+                    val primaryType = place.optString("primaryType", "")
+                    if (primaryType.isNotBlank()) typeSet += primaryType
+                    val typesArray = place.optJSONArray("types")
+                    if (typesArray != null) {
+                        for (typeIndex in 0 until typesArray.length()) {
+                            typeSet += typesArray.getString(typeIndex)
                         }
-                        if (typeSet.any(excludedPlaceTypes::contains)) continue
-
-                        val location = place.optJSONObject("location") ?: continue
-                        val lat = location.optDouble("latitude", Double.NaN)
-                        val lng = location.optDouble("longitude", Double.NaN)
-                        if (lat.isNaN() || lng.isNaN()) continue
-                        if (distanceKm(userLat, userLng, lat, lng) > radiusMeters / 1000.0) continue
-
-                        val name = place.optJSONObject("displayName")?.optString("text").orEmpty().trim()
-                        if (name.isBlank()) continue
-
-                        candidates += DiscoveredPlace(
-                            name = name,
-                            lat = lat,
-                            lng = lng,
-                            category = mapCategoryFromTypes(typeSet),
-                            areaLabel = place.optString("formattedAddress", "").substringBefore(",").trim().ifBlank { null },
-                            source = "google",
-                            rating = place.optDouble("rating").takeIf { !it.isNaN() && it > 0.0 },
-                            reviewCount = place.optInt("userRatingCount").takeIf { it > 0 }
-                        )
                     }
+                    if (typeSet.any(excludedPlaceTypes::contains)) continue
+
+                    val location = place.optJSONObject("location") ?: continue
+                    val lat = location.optDouble("latitude", Double.NaN)
+                    val lng = location.optDouble("longitude", Double.NaN)
+                    if (lat.isNaN() || lng.isNaN()) continue
+                    if (distanceKm(userLat, userLng, lat, lng) > radiusMeters / 1000.0) continue
+
+                    val name = place.optJSONObject("displayName")?.optString("text").orEmpty().trim()
+                    if (name.isBlank()) continue
+
+                    candidates += DiscoveredPlace(
+                        name = name,
+                        lat = lat,
+                        lng = lng,
+                        category = mapCategoryFromTypes(typeSet),
+                        areaLabel = place.optString("formattedAddress", "").substringBefore(",").trim().ifBlank { null },
+                        source = "google",
+                        rating = place.optDouble("rating").takeIf { !it.isNaN() && it > 0.0 },
+                        reviewCount = place.optInt("userRatingCount").takeIf { it > 0 }
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("DiscoveryRepository", "Google Places fallback error: ${e.message}")

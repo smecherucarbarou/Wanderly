@@ -3,16 +3,10 @@ package com.novahorizon.wanderly.api
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.text.Normalizer
 
 object PlacesGeocoder {
-
-    private val client = OkHttpClient()
     private val exclusionTypes = setOf(
         "local_government_office", "government_office", "social_service_organization",
         "city_hall", "courthouse", "embassy", "fire_station", "police", "post_office",
@@ -47,7 +41,6 @@ object PlacesGeocoder {
         strictNameMatch: Boolean = false
     ): VerifiedPlace? = withContext(Dispatchers.IO) {
         try {
-            val url = "https://places.googleapis.com/v1/places:searchText"
             val normalizedCity = targetCity.trim()
             val textQuery = if (normalizedCity.isBlank()) placeName else "$placeName, $normalizedCity"
 
@@ -55,29 +48,18 @@ object PlacesGeocoder {
                 put("textQuery", textQuery)
             }
 
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("X-Goog-Api-Key", com.novahorizon.wanderly.BuildConfig.MAPS_API_KEY)
-                .addHeader(
-                    "X-Goog-FieldMask",
-                    "places.location,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.editorialSummary,places.types,places.primaryType,places.businessStatus,places.currentOpeningHours"
-                )
-                .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
+            val responseJson = PlacesProxyClient.searchText(
+                body = jsonBody,
+                fieldMask = "places.location,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.editorialSummary,places.types,places.primaryType,places.businessStatus,places.currentOpeningHours"
+            )
 
             Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")
-            Log.d("PlacesGeocoder", "HTTP response code: ${response.code}")
-
-            val json = JSONObject(responseBody)
-            if (!json.has("places")) {
+            if (!responseJson.has("places")) {
                 Log.e("PlacesGeocoder", "Google Places returned no candidates for '$placeName'")
                 return@withContext null
             }
 
-            val placesArray = json.getJSONArray("places")
+            val placesArray = responseJson.getJSONArray("places")
             if (placesArray.length() == 0) {
                 Log.w("PlacesGeocoder", "Places list is empty for '$textQuery'")
                 return@withContext null

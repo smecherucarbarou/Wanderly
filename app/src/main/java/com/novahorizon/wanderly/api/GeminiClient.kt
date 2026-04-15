@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
+import io.github.jan.supabase.auth.auth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,7 +18,7 @@ import java.util.concurrent.TimeUnit
 
 object GeminiClient {
     private const val TAG = "GeminiClient"
-    private const val API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
+    private const val API_URL = "/functions/v1/gemini-proxy"
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -94,22 +95,53 @@ object GeminiClient {
     }
 
     private suspend fun executeRequest(body: JSONObject, logLabel: String): String {
-        val finalUrl = "$API_URL?key=${BuildConfig.GEMINI_API_KEY}"
+        val auth = SupabaseClient.client.auth
+        var accessToken = auth.currentAccessTokenOrNull()
+            ?: throw Exception("Authentication required for Gemini proxy")
+
+        val finalUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}$API_URL"
         logDebug { "Starting Gemini $logLabel request with bodyLength=${body.toString().length}" }
 
-        val request = Request.Builder()
-            .url(finalUrl)
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        val buildRequest = { token: String ->
+            Request.Builder()
+                .url(finalUrl)
+                .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                .addHeader("Authorization", "Bearer $token")
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+        }
 
         return withContext(Dispatchers.IO) {
             try {
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: ""
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Gemini $logLabel request failed with code=${response.code}")
+                var request = buildRequest(accessToken)
+                var response = client.newCall(request).execute()
+
+                // If 401, try to refresh the session once
+                if (response.code == 401) {
+                    response.close()
+                    Log.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
+                    try {
+                        auth.refreshCurrentSession()
+                        val newToken = auth.currentAccessTokenOrNull()
+                        if (newToken != null && newToken != accessToken) {
+                            accessToken = newToken
+                            request = buildRequest(accessToken)
+                            response = client.newCall(request).execute()
+                        } else {
+                            throw Exception("Failed to refresh token or token unchanged")
+                        }
+                    } catch (refreshError: Exception) {
+                        Log.e(TAG, "Failed to refresh session: ${refreshError.message}")
+                        throw Exception("Proxy call failed: 401 (Refresh failed)")
+                    }
+                }
+
+                response.use { resp ->
+                    val responseBody = resp.body?.string() ?: ""
+                    if (!resp.isSuccessful) {
+                        Log.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
                         logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
-                        throw Exception("API call failed: ${response.code}")
+                        throw Exception("Proxy call failed: ${resp.code}")
                     }
                     logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
                     extractText(responseBody)

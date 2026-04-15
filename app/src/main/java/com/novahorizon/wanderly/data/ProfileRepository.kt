@@ -104,12 +104,26 @@ class ProfileRepository(
     }
 
     suspend fun uploadAvatar(uri: Uri, profileId: String): String? = withContext(Dispatchers.IO) {
+        val auth = SupabaseClient.client.auth
+        val accessToken = auth.currentAccessTokenOrNull() ?: run {
+            Log.e("ProfileRepository", "No access token available for avatar upload")
+            return@withContext null
+        }
+        
+        Log.d("ProfileRepository", "Uploading avatar for profile: $profileId")
+        
         try {
-            val accessToken = SupabaseClient.client.auth.currentAccessTokenOrNull() ?: return@withContext null
-            val avatarBytes = buildAvatarBytes(uri) ?: return@withContext null
+            val avatarBytes = buildAvatarBytes(uri) ?: run {
+                Log.e("ProfileRepository", "Could not read image bytes from: $uri")
+                return@withContext null
+            }
+            
             val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
-            val objectPath = "profiles/$profileId/avatar.jpg"
-            val uploadUrl = "$baseUrl/storage/v1/object/${Constants.STORAGE_BUCKET_AVATARS}/$objectPath"
+            val bucket = Constants.STORAGE_BUCKET_AVATARS
+            val filePath = "profiles/$profileId/avatar.jpg"
+            val uploadUrl = "$baseUrl/storage/v1/object/$bucket/$filePath"
+            
+            Log.d("ProfileRepository", "Target upload URL: $uploadUrl")
 
             val request = Request.Builder()
                 .url(uploadUrl)
@@ -120,20 +134,22 @@ class ProfileRepository(
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    val errorBody = response.body?.string().orEmpty()
-                    Log.e("ProfileRepository", "Avatar upload failed with code=${response.code}")
-                    if (errorBody.isNotBlank()) {
-                        Log.d("ProfileRepository", "Avatar upload error bodyLength=${errorBody.length}")
-                    }
+                    Log.e("ProfileRepository", "Avatar upload failed. Code: ${response.code}, Response: $responseBody")
+                    // If we get 401/403 here, we could retry, but user says 401 is fixed.
+                    // 400 usually means bucket issue or path issue.
                     return@withContext null
                 }
+                Log.d("ProfileRepository", "Avatar upload successful for $profileId")
             }
 
             val version = System.currentTimeMillis()
-            "$baseUrl/storage/v1/object/public/${Constants.STORAGE_BUCKET_AVATARS}/$objectPath?v=$version"
+            val finalUrl = "$baseUrl/storage/v1/object/public/$bucket/$filePath?v=$version"
+            Log.d("ProfileRepository", "Generated avatar URL: $finalUrl")
+            finalUrl
         } catch (e: Exception) {
-            Log.e("ProfileRepository", "Avatar upload failed", e)
+            Log.e("ProfileRepository", "Exception during avatar upload", e)
             null
         }
     }
