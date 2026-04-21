@@ -328,6 +328,14 @@
                         android:textAllCaps="false" />
 
                     <Button
+                        android:id="@+id/btn_replay_onboarding"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/dev_dashboard_replay_onboarding"
+                        android:textAllCaps="false" />
+
+                    <Button
                         android:id="@+id/btn_run_workers"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

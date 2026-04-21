@@ -30,6 +30,9 @@ class SocialFragment : Fragment() {
     private val viewModel: SocialViewModel by viewModels {
         WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
+    private val repository by lazy(LazyThreadSafetyMode.NONE) {
+        WanderlyGraph.repository(requireContext())
+    }
     
     private lateinit var socialTabs: TabLayout
     private lateinit var socialRecycler: RecyclerView
@@ -112,8 +115,13 @@ class SocialFragment : Fragment() {
             }
         }
 
-        // Load default tab
-        viewModel.loadLeaderboard()
+        val pendingInviteCode = repository.peekPendingInviteCode()
+        if (pendingInviteCode.isNullOrBlank()) {
+            viewModel.loadLeaderboard()
+        } else {
+            socialTabs.getTabAt(1)?.select()
+            applyPendingInviteCode()
+        }
     }
 
     private fun setupObservers() {
@@ -174,6 +182,13 @@ class SocialFragment : Fragment() {
             socialRecycler.visibility = View.VISIBLE
             emptyStateText.visibility = View.GONE
         }
+    }
+
+    private fun applyPendingInviteCode() {
+        val pendingCode = repository.consumePendingInviteCode() ?: return
+        friendCodeInput.setText(pendingCode)
+        friendCodeInput.setSelection(pendingCode.length)
+        viewModel.addFriend(pendingCode)
     }
 }
 

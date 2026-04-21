@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.GeminiClient
@@ -177,6 +178,15 @@ class DevDashboardFragment : Fragment() {
                     showSnackbar(getString(R.string.dev_dashboard_reset_visit_partial_failure), isError = true)
                 }
             }
+        }
+        binding.btnReplayOnboarding.setOnClickListener {
+            repository.setOnboardingSeen(false)
+            startActivity(
+                android.content.Intent(requireContext(), MainActivity::class.java).apply {
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+            )
+            requireActivity().finish()
         }
 
         binding.btnRunWorkers.setOnClickListener {

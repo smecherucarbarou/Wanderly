@@ -22,12 +22,15 @@ import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.main.MainViewModel
+import com.novahorizon.wanderly.ui.MainNavigationDestinations
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val repository by lazy { WanderlyGraph.repository(this) }
+    private var shouldRoutePendingInvite = false
+    private var bottomNavigationReady = false
     private val viewModel: MainViewModel by viewModels {
         WanderlyViewModelFactory(repository)
     }
@@ -44,19 +47,36 @@ class MainActivity : AppCompatActivity() {
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
         val navGraph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
-            if (!repository.isOnboardingSeen()) {
-                setStartDestination(R.id.onboardingFragment)
-            }
+            setStartDestination(
+                MainNavigationDestinations.initialStartDestination(
+                    onboardingSeen = repository.isOnboardingSeen(),
+                    mapDestinationId = R.id.mapFragment,
+                    onboardingDestinationId = R.id.onboardingFragment
+                )
+            )
         }
+        shouldRoutePendingInvite = !repository.peekPendingInviteCode().isNullOrBlank()
         navController.setGraph(navGraph, null)
         navController.addOnDestinationChangedListener { _, destination, _ ->
             binding.bottomNavigation.visibility =
-                if (destination.id == R.id.onboardingFragment) android.view.View.GONE else android.view.View.VISIBLE
+                if (
+                    MainNavigationDestinations.shouldShowBottomNavigation(
+                        currentDestinationId = destination.id,
+                        onboardingDestinationId = R.id.onboardingFragment
+                    )
+                ) {
+                    android.view.View.VISIBLE
+                } else {
+                    android.view.View.GONE
+                }
+            routePendingInviteIfNeeded(destination.id)
         }
 
         lifecycleScope.launch {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
             binding.bottomNavigation.setupWithNavController(navController)
+            bottomNavigationReady = true
+            routePendingInviteIfNeeded(navController.currentDestination?.id)
             startHiveService(session != null)
         }
 
@@ -132,6 +152,18 @@ class MainActivity : AppCompatActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
             }
+        }
+    }
+
+    private fun routePendingInviteIfNeeded(destinationId: Int?) {
+        if (!shouldRoutePendingInvite || !bottomNavigationReady) return
+        if (destinationId == null || destinationId == R.id.onboardingFragment) return
+
+        shouldRoutePendingInvite = false
+        if (destinationId == R.id.socialFragment) return
+
+        binding.bottomNavigation.post {
+            binding.bottomNavigation.selectedItemId = R.id.socialFragment
         }
     }
 

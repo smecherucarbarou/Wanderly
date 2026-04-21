@@ -198,13 +198,24 @@ class MapFragment : Fragment() {
             }
 
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                if (location != null) {
-                    val geoPoint = GeoPoint(location.latitude, location.longitude)
-                    if (centerOnLocation || !WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
-                        binding.mapView.controller.setCenter(geoPoint)
-                    }
-                    updateUserLocation(location.latitude, location.longitude)
+                val currentBinding = _binding
+                if (!MapLocationCallbackGuard.shouldHandleLocationUpdate(
+                        hasLocation = location != null,
+                        isFragmentAdded = isAdded,
+                        hasBinding = currentBinding != null
+                    )
+                ) {
+                    return@addOnSuccessListener
                 }
+
+                location ?: return@addOnSuccessListener
+                currentBinding ?: return@addOnSuccessListener
+
+                val geoPoint = GeoPoint(location.latitude, location.longitude)
+                if (centerOnLocation || !WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
+                    currentBinding.mapView.controller.setCenter(geoPoint)
+                }
+                updateUserLocation(location.latitude, location.longitude)
             }
         }
     }

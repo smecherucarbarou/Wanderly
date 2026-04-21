@@ -7,16 +7,32 @@
     android:padding="24dp">
 
     <TextView
+        android:id="@+id/onboarding_eyebrow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_onboarding_tag"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:text="@string/onboarding_eyebrow"
+        android:textAllCaps="true"
+        android:textColor="@color/pollen_white"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
         android:id="@+id/onboarding_heading"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
         android:text="@string/onboarding_heading"
         android:textColor="@color/text_primary"
-        android:textSize="28sp"
+        android:textSize="32sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/onboarding_eyebrow" />
 
     <TextView
         android:id="@+id/onboarding_subheading"
@@ -25,7 +41,7 @@
         android:layout_marginTop="8dp"
         android:text="@string/onboarding_subheading"
         android:textColor="@color/text_secondary"
-        android:textSize="16sp"
+        android:textSize="17sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/onboarding_heading" />
@@ -34,8 +50,7 @@
         android:id="@+id/onboarding_pager"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="24dp"
-        android:clipToPadding="false"
+        android:layout_marginTop="20dp"
         android:paddingBottom="16dp"
         app:layout_constraintBottom_toTopOf="@id/onboarding_indicator"
         app:layout_constraintEnd_toEndOf="parent"
@@ -46,8 +61,10 @@
         android:id="@+id/onboarding_indicator"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="20dp"
         android:background="@android:color/transparent"
+        app:layout_constraintBottom_toTopOf="@id/skip_button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/onboarding_pager"
@@ -58,33 +75,45 @@
         app:tabSelectedTextColor="@color/primary"
         app:tabTextColor="@color/text_secondary" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/skip_button"
         android:layout_width="0dp"
         android:layout_height="56dp"
-        android:layout_marginTop="24dp"
         android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
         android:backgroundTint="@color/card_background"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
         android:text="@string/onboarding_skip_button"
         android:textAllCaps="false"
         android:textColor="@color/text_primary"
+        app:cornerRadius="18dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:strokeColor="@color/primary"
+        app:strokeWidth="2dp"
         app:layout_constraintEnd_toStartOf="@id/next_button"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_indicator" />
+        app:layout_constraintTop_toBottomOf="@id/onboarding_indicator"
+        app:layout_constraintVertical_bias="1" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/next_button"
         android:layout_width="0dp"
         android:layout_height="56dp"
-        android:layout_marginTop="24dp"
         android:layout_marginStart="8dp"
+        android:layout_marginBottom="8dp"
         android:background="@drawable/bg_button_gradient"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
         android:text="@string/onboarding_next_button"
         android:textAllCaps="false"
         android:textColor="@color/text_primary"
         android:textStyle="bold"
+        app:cornerRadius="18dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/skip_button"
-        app:layout_constraintTop_toBottomOf="@id/onboarding_indicator" />
+        app:layout_constraintTop_toBottomOf="@id/onboarding_indicator"
+        app:layout_constraintVertical_bias="1" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

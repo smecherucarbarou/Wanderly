@@ -23,6 +23,24 @@ class PreferencesStore(context: Context) {
         dataStoreManager.putMainBoolean(Constants.KEY_ONBOARDING_SEEN, seen)
     }
 
+    fun getPendingInviteCode(): String? = blockingRead {
+        dataStoreManager.getMainString(Constants.KEY_PENDING_INVITE_CODE, null)
+    }
+
+    fun setPendingInviteCode(code: String) = blockingWrite {
+        dataStoreManager.putMainString(Constants.KEY_PENDING_INVITE_CODE, code)
+    }
+
+    fun clearPendingInviteCode() = blockingWrite {
+        dataStoreManager.removeMainKeys(listOf(Constants.KEY_PENDING_INVITE_CODE))
+    }
+
+    fun consumePendingInviteCode(): String? {
+        val code = getPendingInviteCode() ?: return null
+        clearPendingInviteCode()
+        return code
+    }
+
     fun clearAll() = blockingWrite {
         dataStoreManager.clearMainStore()
     }

@@ -10,9 +10,9 @@ import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.auth.AuthRouting
-import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.invites.InviteDeepLink
 import com.novahorizon.wanderly.databinding.ActivitySplashBinding
 import kotlinx.coroutines.launch
 
@@ -25,6 +25,7 @@ class SplashActivity : AppCompatActivity() {
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        cachePendingInviteIfPresent()
         startAnimations()
 
         lifecycleScope.launch {
@@ -74,9 +75,23 @@ class SplashActivity : AppCompatActivity() {
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
         val rememberMe = PreferencesStore(this).isRememberMeEnabled()
         if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {
-            SessionNavigator.openMain(this)
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+            )
         } else {
-            SessionNavigator.openAuth(this)
+            startActivity(
+                Intent(this, AuthActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                }
+            )
         }
+        finish()
+    }
+
+    private fun cachePendingInviteIfPresent() {
+        val inviteCode = InviteDeepLink.extractFriendCode(intent?.data) ?: return
+        WanderlyGraph.repository(this).cachePendingInviteCode(inviteCode)
     }
 }

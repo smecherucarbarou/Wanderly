@@ -9,11 +9,13 @@ import androidx.fragment.app.Fragment
 import android.os.Bundle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayoutMediator
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentOnboardingBinding
 import com.novahorizon.wanderly.databinding.ItemOnboardingPageBinding
+import com.novahorizon.wanderly.ui.MainNavigationDestinations
 
 class OnboardingFragment : Fragment() {
 
@@ -23,18 +25,24 @@ class OnboardingFragment : Fragment() {
     private val pages = listOf(
         OnboardingPage(
             illustrationRes = R.drawable.ic_buzzy,
+            labelRes = R.string.onboarding_slide_one_label,
             titleRes = R.string.onboarding_slide_one_title,
-            subtitleRes = R.string.onboarding_slide_one_subtitle
+            subtitleRes = R.string.onboarding_slide_one_subtitle,
+            supportRes = R.string.onboarding_slide_one_support
         ),
         OnboardingPage(
             illustrationRes = R.drawable.ic_streak_fire,
+            labelRes = R.string.onboarding_slide_two_label,
             titleRes = R.string.onboarding_slide_two_title,
-            subtitleRes = R.string.onboarding_slide_two_subtitle
+            subtitleRes = R.string.onboarding_slide_two_subtitle,
+            supportRes = R.string.onboarding_slide_two_support
         ),
         OnboardingPage(
             illustrationRes = R.drawable.ic_honeycomb,
+            labelRes = R.string.onboarding_slide_three_label,
             titleRes = R.string.onboarding_slide_three_title,
-            subtitleRes = R.string.onboarding_slide_three_subtitle
+            subtitleRes = R.string.onboarding_slide_three_subtitle,
+            supportRes = R.string.onboarding_slide_three_support
         )
     )
 
@@ -51,6 +59,18 @@ class OnboardingFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.onboardingPager.adapter = OnboardingPageAdapter(pages)
+        binding.onboardingPager.offscreenPageLimit = ViewPager2.OFFSCREEN_PAGE_LIMIT_DEFAULT
+        binding.onboardingPager.clipToPadding = true
+        binding.onboardingPager.clipChildren = true
+        binding.onboardingPager.setPageTransformer(null)
+
+        (binding.onboardingPager.getChildAt(0) as? RecyclerView)?.apply {
+            clipToPadding = true
+            clipChildren = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            itemAnimator = null
+            setPadding(0, 0, 0, 0)
+        }
         TabLayoutMediator(binding.onboardingIndicator, binding.onboardingPager) { _, _ -> }.attach()
 
         binding.skipButton.setOnClickListener { completeOnboarding() }
@@ -84,7 +104,11 @@ class OnboardingFragment : Fragment() {
 
     private fun completeOnboarding() {
         WanderlyGraph.repository(requireContext()).setOnboardingSeen(true)
-        findNavController().navigate(R.id.action_onboarding_to_map)
+        val navController = findNavController()
+        navController.graph.setStartDestination(
+            MainNavigationDestinations.destinationAfterOnboarding(R.id.mapFragment)
+        )
+        navController.navigate(R.id.action_onboarding_to_map)
     }
 
     override fun onDestroyView() {
@@ -94,9 +118,11 @@ class OnboardingFragment : Fragment() {
 }
 
 private data class OnboardingPage(
-    @DrawableRes val illustrationRes: Int,
-    @StringRes val titleRes: Int,
-    @StringRes val subtitleRes: Int
+    @param:DrawableRes val illustrationRes: Int,
+    @param:StringRes val labelRes: Int,
+    @param:StringRes val titleRes: Int,
+    @param:StringRes val subtitleRes: Int,
+    @param:StringRes val supportRes: Int
 )
 
 private class OnboardingPageAdapter(
@@ -110,7 +136,7 @@ private class OnboardingPageAdapter(
     }
 
     override fun onBindViewHolder(holder: OnboardingPageViewHolder, position: Int) {
-        holder.bind(pages[position])
+        holder.bind(pages[position], position, itemCount)
     }
 
     override fun getItemCount(): Int = pages.size
@@ -119,10 +145,14 @@ private class OnboardingPageAdapter(
         private val binding: ItemOnboardingPageBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(page: OnboardingPage) {
+        fun bind(page: OnboardingPage, position: Int, totalPages: Int) {
             binding.onboardingIllustration.setImageResource(page.illustrationRes)
+            binding.onboardingLabel.setText(page.labelRes)
+            binding.onboardingCounter.text =
+                binding.root.context.getString(R.string.onboarding_counter_format, position + 1, totalPages)
             binding.onboardingTitle.setText(page.titleRes)
             binding.onboardingSubtitle.setText(page.subtitleRes)
+            binding.onboardingSupport.setText(page.supportRes)
         }
     }
 }

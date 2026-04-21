@@ -96,6 +96,14 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                         )
                     )
                     setImageViewResource(R.id.widget_icon, R.drawable.ic_streak_fire)
+                    setTextColor(
+                        R.id.widget_streak_count,
+                        context.getColor(if (inDanger) R.color.accent else R.color.pollen_white)
+                    )
+                    setTextColor(
+                        R.id.widget_subtitle,
+                        context.getColor(if (inDanger) R.color.accent else R.color.pollen_white)
+                    )
                     setInt(
                         R.id.widget_container,
                         "setBackgroundResource",

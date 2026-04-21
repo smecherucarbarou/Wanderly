@@ -21,7 +21,10 @@ object Constants {
     const val AUTH_CALLBACK_HOST = "auth"
     const val AUTH_CALLBACK_LEGACY_HOST = "login"
     const val AUTH_CALLBACK_PATH = "/callback"
-    
+    const val INVITE_CALLBACK_SCHEME = "wanderly"
+    const val INVITE_CALLBACK_HOST = "invite"
+    const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
+
     const val TABLE_PROFILES = "profiles"
     const val STORAGE_BUCKET_AVATARS = "avatars"
     

@@ -84,6 +84,12 @@ open class WanderlyRepository(context: Context) {
 
     fun setOnboardingSeen(seen: Boolean) = preferencesStore.setOnboardingSeen(seen)
 
+    fun peekPendingInviteCode(): String? = preferencesStore.getPendingInviteCode()
+
+    fun cachePendingInviteCode(code: String) = preferencesStore.setPendingInviteCode(code)
+
+    fun consumePendingInviteCode(): String? = preferencesStore.consumePendingInviteCode()
+
     fun clearRememberMe() = preferencesStore.setRememberMeEnabled(false)
 
     fun clearLocalState() = preferencesStore.clearAll()
