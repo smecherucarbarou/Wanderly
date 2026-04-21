@@ -15,24 +15,25 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.novahorizon.wanderly.AuthActivity
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
-import com.novahorizon.wanderly.databinding.DialogClassSelectionBinding
-import com.novahorizon.wanderly.databinding.DialogEditUsernameBinding
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
+import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.ui.AvatarLoader
 import com.yalantis.ucrop.UCrop
@@ -48,6 +49,7 @@ class ProfileFragment : Fragment() {
     private var currentProfile: Profile? = null
     private lateinit var repository: WanderlyRepository
     private var isClassDialogShowing = false
+    private val badgesAdapter = BadgesAdapter()
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
@@ -79,7 +81,7 @@ class ProfileFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentProfileBinding.inflate(inflater, container, false)
-        repository = WanderlyRepository(requireContext())
+        repository = WanderlyGraph.repository(requireContext())
         return binding.root
     }
 
@@ -100,21 +102,24 @@ class ProfileFragment : Fragment() {
         binding.avatarContainer.setOnClickListener {
             pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
+        binding.badgesRecycler.layoutManager = GridLayoutManager(requireContext(), 3)
+        binding.badgesRecycler.adapter = badgesAdapter
+        binding.badgesRecycler.isNestedScrollingEnabled = false
         binding.editUsernameButton.setOnClickListener { showEditUsernameDialog() }
         binding.adminDashboardButton.setOnClickListener {
             findNavController().navigate(R.id.action_profile_to_devDashboard)
         }
         binding.logoutButton.setOnClickListener {
-            lifecycleScope.launch {
+            viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    requireContext().stopService(Intent(requireContext(), HiveRealtimeService::class.java))
                     SupabaseClient.client.auth.signOut()
                     val prefs = requireActivity().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                     prefs.edit().putBoolean(Constants.KEY_REMEMBER_ME, false).apply()
                     prefs.edit().clear().apply()
-                    startActivity(Intent(requireContext(), AuthActivity::class.java))
-                    requireActivity().finish()
+                    SessionNavigator.openAuth(requireActivity())
                 } catch (_: Exception) {
-                    showSnackbar("Logout failed", isError = true)
+                    showSnackbar(getString(R.string.profile_logout_failed), isError = true)
                 }
             }
         }
@@ -126,7 +131,7 @@ class ProfileFragment : Fragment() {
     }
 
     private fun uploadAvatarToSupabase(uri: Uri) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val profile = currentProfile ?: return@launch
                 val avatarUrl = repository.uploadAvatar(uri, profile.id)
@@ -137,16 +142,16 @@ class ProfileFragment : Fragment() {
 
                 currentProfile = updatedProfile
                 updateAvatarDisplay(avatarUrl, updatedProfile.username ?: "")
-                showSnackbar("Avatar updated!", isError = false)
+                showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
             } catch (e: Exception) {
                 Log.e("ProfileFragment", "Avatar upload failed", e)
-                showSnackbar("Failed to upload avatar", isError = true)
+                showSnackbar(getString(R.string.profile_avatar_upload_failed), isError = true)
             }
         }
     }
 
     private fun updateUsername(newUsername: String) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val profile = currentProfile ?: return@launch
                 val updatedProfile = profile.copy(username = newUsername)
@@ -154,15 +159,15 @@ class ProfileFragment : Fragment() {
 
                 currentProfile = updatedProfile
                 binding.username.text = newUsername
-                showSnackbar("Username updated!", isError = false)
+                showSnackbar(getString(R.string.profile_username_updated), isError = false)
             } catch (_: Exception) {
-                showSnackbar("Failed to update username", isError = true)
+                showSnackbar(getString(R.string.profile_username_update_failed), isError = true)
             }
         }
     }
 
     private fun loadProfile() {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = repository.getCurrentProfile()
                 if (result != null) {
@@ -177,21 +182,12 @@ class ProfileFragment : Fragment() {
     }
 
     private fun checkAndUnlockBadges(profile: Profile) {
-        val currentHoney = profile.honey ?: 0
-        val currentStreak = profile.streak_count ?: 0
+        val updatedProfile = ProfileBadgeEvaluator.updatedProfileWithUnlockedBadges(profile)
         val currentBadges = profile.badges?.toSet() ?: emptySet()
-        val newBadges = currentBadges.toMutableSet()
-
-        if ("Early Bee" !in newBadges) newBadges.add("Early Bee")
-        if (currentHoney >= 100 && "Scout Bee" !in newBadges) newBadges.add("Scout Bee")
-        if (currentHoney >= 300 && "Expert Bee" !in newBadges) newBadges.add("Expert Bee")
-        if (currentHoney >= 600 && "Queen Explorer" !in newBadges) newBadges.add("Queen Explorer")
-        if (currentHoney >= 1000 && "Honey Hoarder" !in newBadges) newBadges.add("Honey Hoarder")
-        if (currentStreak >= 7 && "Streak Master" !in newBadges) newBadges.add("Streak Master")
+        val newBadges = updatedProfile.badges?.toSet() ?: emptySet()
 
         if (newBadges.size > currentBadges.size) {
-            val updatedProfile = profile.copy(badges = newBadges.toList())
-            lifecycleScope.launch {
+            viewLifecycleOwner.lifecycleScope.launch {
                 repository.updateProfile(updatedProfile)
             }
         } else {
@@ -201,6 +197,7 @@ class ProfileFragment : Fragment() {
     }
 
     private fun updateUI(profile: Profile) {
+        val binding = _binding ?: return
         binding.username.text = profile.username ?: getString(R.string.profile_default_name)
 
         if (!profile.explorer_class.isNullOrEmpty()) {
@@ -278,36 +275,34 @@ class ProfileFragment : Fragment() {
         } else {
             binding.badgesRecycler.visibility = View.VISIBLE
             binding.badgesTitle.text = getString(R.string.profile_badges_title)
-            binding.badgesRecycler.layoutManager = GridLayoutManager(requireContext(), 3)
-            binding.badgesRecycler.adapter = BadgesAdapter(profile.badges!!)
+            badgesAdapter.submitBadges(profile.badges!!)
         }
     }
 
     private fun copyFriendCode(friendCode: String) {
         val clipboardManager = requireContext().getSystemService(ClipboardManager::class.java)
-        clipboardManager?.setPrimaryClip(ClipData.newPlainText("Friend Code", friendCode))
+        clipboardManager?.setPrimaryClip(
+            ClipData.newPlainText(getString(R.string.profile_friend_code_clip_label), friendCode)
+        )
         showSnackbar(getString(R.string.friend_code_copied), isError = false)
     }
 
     private fun updateAvatarDisplay(avatarData: String?, username: String) {
+        val binding = _binding ?: return
         AvatarLoader.loadAvatar(binding.buzzyAvatar, binding.avatarInitial, avatarData, username)
     }
 
     private fun showEditUsernameDialog() {
-        val dialogBinding = DialogEditUsernameBinding.inflate(layoutInflater)
-        dialogBinding.usernameEditText.setText(currentProfile?.username)
-        AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-            .setView(dialogBinding.root)
-            .setPositiveButton("Update") { _, _ ->
-                val newUsername = dialogBinding.usernameEditText.text.toString().trim()
-                if (newUsername.length >= 3) {
-                    updateUsername(newUsername)
-                } else {
-                    showSnackbar("Username too short", isError = true)
-                }
+        ProfileDialogs.showEditUsernameDialog(
+            fragment = this,
+            currentUsername = currentProfile?.username
+        ) { newUsername ->
+            if (newUsername.length >= 3) {
+                updateUsername(newUsername)
+            } else {
+                showSnackbar(getString(R.string.profile_username_too_short), isError = true)
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
     }
 
     private fun getRankName(rank: Int) = when (rank) {
@@ -319,42 +314,35 @@ class ProfileFragment : Fragment() {
 
     private fun showClassSelectionDialog(profile: Profile) {
         isClassDialogShowing = true
-        val dialogBinding = DialogClassSelectionBinding.inflate(layoutInflater)
-        val dialog = AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-            .setView(dialogBinding.root)
-            .setCancelable(false)
-            .setOnDismissListener { isClassDialogShowing = false }
-            .create()
-
-        dialog.window?.setWindowAnimations(R.style.Wanderly_DialogAnimation)
-
-        dialogBinding.classExplorer.setOnClickListener { confirmClassSelection(profile, "EXPLORER", dialog) }
-        dialogBinding.classSocial.setOnClickListener { confirmClassSelection(profile, "SOCIAL BEE", dialog) }
-        dialogBinding.classAdventurer.setOnClickListener { confirmClassSelection(profile, "ADVENTURER", dialog) }
-
-        dialog.show()
+        ProfileDialogs.showClassSelectionDialog(
+            fragment = this,
+            onDismiss = { isClassDialogShowing = false }
+        ) { className, dialog ->
+            confirmClassSelection(profile, className, dialog)
+        }
     }
 
-    private fun confirmClassSelection(profile: Profile, className: String, parentDialog: AlertDialog) {
-        AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-            .setTitle("ARE YOU SURE?")
-            .setMessage("The path of the $className is permanent.")
-            .setPositiveButton("I AM READY") { _, _ ->
-                lifecycleScope.launch {
-                    val updated = profile.copy(explorer_class = className)
-                    val success = repository.updateProfile(updated)
-                    if (success) {
-                        currentProfile = updated
-                        updateUI(updated)
-                        parentDialog.dismiss()
-                        showSnackbar("Class locked: $className", isError = false)
-                    } else {
-                        showSnackbar("Failed to lock class. Check your Hive connection.", isError = true)
-                    }
+    private fun confirmClassSelection(profile: Profile, className: String, parentDialog: androidx.appcompat.app.AlertDialog) {
+        ProfileDialogs.showClassConfirmationDialog(
+            fragment = this,
+            className = className
+        ) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                val updated = profile.copy(explorer_class = className)
+                val success = repository.updateProfile(updated)
+                if (success) {
+                    currentProfile = updated
+                    updateUI(updated)
+                    parentDialog.dismiss()
+                    showSnackbar(
+                        getString(R.string.profile_class_locked, className),
+                        isError = false
+                    )
+                } else {
+                    showSnackbar(getString(R.string.profile_class_lock_failed), isError = true)
                 }
             }
-            .setNegativeButton("WAIT", null)
-            .show()
+        }
     }
 
     override fun onDestroyView() {
@@ -363,7 +351,11 @@ class ProfileFragment : Fragment() {
     }
 }
 
-class BadgesAdapter(private val badges: List<String>) : RecyclerView.Adapter<BadgesAdapter.BadgeViewHolder>() {
+class BadgesAdapter : ListAdapter<String, BadgesAdapter.BadgeViewHolder>(BadgeDiffCallback()) {
+    fun submitBadges(newBadges: List<String>) {
+        submitList(newBadges.toList())
+    }
+
     class BadgeViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val nameText: TextView = view.findViewById(R.id.badge_name)
         val iconImage: ImageView = view.findViewById(R.id.badge_icon)
@@ -376,7 +368,7 @@ class BadgesAdapter(private val badges: List<String>) : RecyclerView.Adapter<Bad
     }
 
     override fun onBindViewHolder(holder: BadgeViewHolder, position: Int) {
-        val badge = badges[position]
+        val badge = getItem(position)
         holder.nameText.text = badge
         when (badge) {
             "Early Bee" -> {
@@ -416,5 +408,9 @@ class BadgesAdapter(private val badges: List<String>) : RecyclerView.Adapter<Bad
         }
     }
 
-    override fun getItemCount(): Int = badges.size
+    private class BadgeDiffCallback : DiffUtil.ItemCallback<String>() {
+        override fun areItemsTheSame(oldItem: String, newItem: String): Boolean = oldItem == newItem
+
+        override fun areContentsTheSame(oldItem: String, newItem: String): Boolean = oldItem == newItem
+    }
 }

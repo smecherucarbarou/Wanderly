@@ -22,13 +22,14 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.ui.SocialViewModel
 import com.novahorizon.wanderly.ui.WanderlyViewModelFactory
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapListener
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.Marker
@@ -41,12 +42,14 @@ class MapFragment : Fragment() {
     private val binding get() = _binding!!
     
     private val viewModel: SocialViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyRepository(requireContext()))
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
     
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private val friendMarkers = mutableListOf<Marker>()
+    private var friendMarkerIcon: BitmapDrawable? = null
+    private var mapListener: MapListener? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -54,7 +57,7 @@ class MapFragment : Fragment() {
         if (isGranted) {
             setupLocation()
         } else {
-            showSnackbar("Location permission denied", isError = true)
+            showSnackbar(getString(R.string.map_location_permission_denied), isError = true)
         }
     }
 
@@ -112,15 +115,16 @@ class MapFragment : Fragment() {
         checkActiveMission()
         
         binding.mapLoading.visibility = View.VISIBLE
-        binding.mapView.addMapListener(object : org.osmdroid.events.MapListener {
+        mapListener = object : MapListener {
             override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean = false
             override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
                 _binding?.mapLoading?.visibility = View.GONE
                 return false
             }
-        })
+        }
+        binding.mapView.addMapListener(mapListener)
         // Hide after 3s regardless
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             kotlinx.coroutines.delay(3000)
             _binding?.mapLoading?.visibility = View.GONE
         }
@@ -135,16 +139,7 @@ class MapFragment : Fragment() {
                     val marker = Marker(binding.mapView).apply {
                         position = GeoPoint(friend.last_lat, friend.last_lng)
                         title = friend.username
-                        
-                        // Resize Buzzy Icon to 60x60 safely (handling VectorDrawables)
-                        val buzzyDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_buzzy)
-                        if (buzzyDrawable != null) {
-                            val bitmap = Bitmap.createBitmap(60, 60, Bitmap.Config.ARGB_8888)
-                            val canvas = Canvas(bitmap)
-                            buzzyDrawable.setBounds(0, 0, canvas.width, canvas.height)
-                            buzzyDrawable.draw(canvas)
-                            icon = BitmapDrawable(resources, bitmap)
-                        }
+                        icon = getFriendMarkerIcon()
 
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     }
@@ -157,13 +152,13 @@ class MapFragment : Fragment() {
     }
 
     private fun checkActiveMission() {
-        val repository = WanderlyRepository(requireContext())
+        val repository = WanderlyGraph.repository(requireContext())
         val targetCoordinates = repository.getMissionTargetCoordinates()
         val missionText = repository.getMissionText()
 
         if (targetCoordinates != null) {
-            binding.missionPreviewText.text = missionText ?: "Destination set!"
-            binding.newFlightButton.text = "Go to Missions"
+            binding.missionPreviewText.text = missionText ?: getString(R.string.map_active_mission_ready)
+            binding.newFlightButton.text = getString(R.string.map_go_to_missions)
 
             binding.newFlightButton.setOnClickListener {
                 findNavController().navigate(R.id.action_map_to_missions)
@@ -175,8 +170,8 @@ class MapFragment : Fragment() {
             return
         }
         
-        binding.missionPreviewText.text = "Ready for a new adventure?"
-        binding.newFlightButton.text = "Generate Mission"
+        binding.missionPreviewText.text = getString(R.string.map_preview_default)
+        binding.newFlightButton.text = getString(R.string.generate_mission)
         binding.newFlightButton.setOnClickListener {
             findNavController().navigate(R.id.action_map_to_missions)
         }
@@ -209,9 +204,9 @@ class MapFragment : Fragment() {
     }
     
     private fun updateUserLocation(lat: Double, lng: Double) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val repo = WanderlyRepository(requireContext())
+                val repo = WanderlyGraph.repository(requireContext())
                 val profile = repo.getCurrentProfile() ?: return@launch
                 
                 // Only update if location changed significantly (more than 50 meters approx)
@@ -230,6 +225,18 @@ class MapFragment : Fragment() {
         }
     }
 
+    private fun getFriendMarkerIcon(): BitmapDrawable? {
+        friendMarkerIcon?.let { return it }
+
+        val buzzyDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_buzzy) ?: return null
+        val bitmap = Bitmap.createBitmap(60, 60, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        buzzyDrawable.setBounds(0, 0, canvas.width, canvas.height)
+        buzzyDrawable.draw(canvas)
+
+        return BitmapDrawable(resources, bitmap).also { friendMarkerIcon = it }
+    }
+
     override fun onResume() {
         super.onResume()
         if (_binding == null) return
@@ -244,6 +251,20 @@ class MapFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        val mapView = _binding?.mapView
+        if (mapView != null) {
+            mapListener?.let { mapView.removeMapListener(it) }
+            mapView.overlays.removeAll(friendMarkers)
+            myLocationOverlay?.disableFollowLocation()
+            myLocationOverlay?.disableMyLocation()
+            myLocationOverlay?.let { mapView.overlays.remove(it) }
+            friendMarkers.clear()
+            mapView.onPause()
+            mapView.onDetach()
+        }
+        mapListener = null
+        myLocationOverlay = null
+        friendMarkerIcon = null
         super.onDestroyView()
         _binding = null
     }

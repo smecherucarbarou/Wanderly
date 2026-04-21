@@ -1,4 +1,3 @@
-/* FIXES APPLIED: BUG E — see inline comments */
 package com.novahorizon.wanderly.ui
 
 import android.graphics.Bitmap
@@ -14,14 +13,16 @@ import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
-import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
@@ -30,7 +31,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
     private val _missionState = MutableLiveData<MissionState>(MissionState.Idle)
     val missionState: LiveData<MissionState> = _missionState
-    
+
     private val _streakMessage = MutableLiveData<String?>()
     val streakMessage: LiveData<String?> = _streakMessage
 
@@ -45,7 +46,6 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         data class VerificationResult(val success: Boolean, val message: String) : MissionState()
         object Completing : MissionState()
         data class Error(val message: String) : MissionState()
-        
         object FetchingDetails : MissionState()
         data class DetailsReceived(val info: String) : MissionState()
     }
@@ -116,13 +116,14 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     """.trimIndent()
                     GeminiClient.generateWithSearch(prompt)
                 }
-                
+
                 val jsonStartIndex = responseText.indexOf("{")
                 val jsonEndIndex = responseText.lastIndexOf("}")
-                if (jsonStartIndex == -1 || jsonEndIndex == -1) throw Exception("Invalid JSON response")
-                
+                if (jsonStartIndex == -1 || jsonEndIndex == -1) {
+                    throw Exception("Invalid JSON response")
+                }
+
                 val finalJson = responseText.substring(jsonStartIndex, jsonEndIndex + 1)
-                
                 val missionResponse = json.decodeFromString<GeminiMissionResponse>(finalJson)
                 val resolvedTarget = PlacesGeocoder.resolveCoordinates(
                     placeName = missionResponse.targetName,
@@ -148,7 +149,6 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     targetLng = resolvedTarget.lng
                 )
                 _missionState.postValue(MissionState.MissionReceived(verifiedMissionText))
-
             } catch (e: Exception) {
                 _missionState.postValue(MissionState.Error("Failed to generate objective: ${e.message}"))
             } finally {
@@ -161,26 +161,36 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         val targetName = repository.getMissionTarget() ?: "this place"
         val targetCity = repository.getMissionCity() ?: ""
         _missionState.postValue(MissionState.Verifying)
-        
+
         viewModelScope.launch {
             try {
                 val prompt = """
                     Objective Validation System:
                     Target: "$targetName" in "$targetCity"
-                    
+
                     Does the image show "$targetName" in "$targetCity"?
                     Respond: "YES: [Confirmation]" or "NO: [Reason]".
                 """.trimIndent()
-                
+
                 val resultText = GeminiClient.analyzeImage(bitmap, prompt).trim().uppercase()
                 if (resultText.contains("YES")) {
-                    _missionState.postValue(MissionState.VerificationResult(true, "Location verified successfully."))
+                    _missionState.postValue(
+                        MissionState.VerificationResult(true, "Location verified successfully.")
+                    )
                 } else {
-                    val msg = resultText.substringAfter(":").trim().lowercase().replaceFirstChar { it.uppercase() }
-                    _missionState.postValue(MissionState.VerificationResult(false, if (msg.isEmpty()) "Could not verify location." else msg))
+                    val message = resultText.substringAfter(":")
+                        .trim()
+                        .lowercase()
+                        .replaceFirstChar { it.uppercase() }
+                    _missionState.postValue(
+                        MissionState.VerificationResult(
+                            false,
+                            if (message.isEmpty()) "Could not verify location." else message
+                        )
+                    )
                 }
             } catch (e: Exception) {
-                _missionState.postValue(MissionState.Error("System Error: ${e.message}"))
+                _missionState.postValue(MissionState.Error("System error: ${e.message}"))
             }
         }
     }
@@ -189,18 +199,18 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         val targetName = repository.getMissionTarget() ?: return
         val targetCity = repository.getMissionCity() ?: ""
         _missionState.postValue(MissionState.FetchingDetails)
-        
+
         viewModelScope.launch {
             try {
                 val prompt = """
-                    STRICT ACCURACY MODE with Google Search. 
+                    STRICT ACCURACY MODE with Google Search.
                     Place: "$targetName" in the city of "$targetCity".
                     Task: Provide a 3-sentence summary using real, up-to-date information.
                     CRITICAL: Use Google Search to verify details about "$targetName" in "$targetCity".
                     DO NOT mention venues from other cities.
                     Include one unique fun fact discovered via search.
                 """.trimIndent()
-                
+
                 val info = GeminiClient.generateWithSearchText(
                     prompt,
                     systemInstruction = "You are a precise local travel guide. Return normal plain text only. Do not return JSON, markdown, bullet lists, or code fences."
@@ -212,25 +222,31 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         }
     }
 
-    fun completeMission(distanceKm: Double = 0.0, isGroup: Boolean = false, isNewLocation: Boolean = false, isWild: Boolean = false) {
+    fun completeMission(
+        distanceKm: Double = 0.0,
+        isGroup: Boolean = false,
+        isNewLocation: Boolean = false,
+        isWild: Boolean = false
+    ) {
         val current = _profile.value ?: return
         _missionState.postValue(MissionState.Completing)
-        
+
         viewModelScope.launch {
             try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
                 val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                 val today = sdf.format(now.time)
-                
+
                 val yesterdayCal = now.clone() as Calendar
                 yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
                 val yesterday = sdf.format(yesterdayCal.time)
-                
+
                 val lastMissionDate = current.last_mission_date ?: ""
                 var newStreak = current.streak_count ?: 0
                 var streakBonusHoney = 0
-                
+
                 if (lastMissionDate != today) {
                     if (lastMissionDate == yesterday) {
                         newStreak += 1
@@ -238,44 +254,44 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     } else {
                         newStreak = 1
                     }
-                } else {
-                    // Already mission today. We still allow finishing, but don't double increment streak.
                 }
 
                 val newHoney = (current.honey ?: 0) + Constants.MISSION_HONEY_REWARD + streakBonusHoney
-                
                 val updatedProfile = current.copy(
                     honey = newHoney,
                     last_mission_date = today,
                     streak_count = newStreak
                 )
-                
+
                 val success = repository.updateProfile(updatedProfile)
                 if (success) {
-                    // BUG E FIXED: Use UTC for consistent date recording
-                    val sdfLocal = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { 
-                        timeZone = TimeZone.getTimeZone("UTC") 
-                    }
-                    val todayUTC = sdfLocal.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).time)
-                    repository.updateLastVisitDate(todayUTC)
+                    val recordedToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).time)
+                    repository.updateLastVisitDate(recordedToday)
                     repository.clearMissionData()
 
                     _profile.postValue(updatedProfile)
                     _missionState.postValue(MissionState.Idle)
-                    
-                    val msg = StringBuilder()
+
+                    val message = StringBuilder()
                     if (streakBonusHoney > 0) {
-                        msg.append("Streak: $newStreak Days! 🔥 +$streakBonusHoney Honey Bonus!\n")
+                        message.append("Streak: $newStreak days! +$streakBonusHoney Honey bonus!\n")
                         if (newStreak % 5 == 0) {
-                            WanderlyNotificationManager.sendMilestoneCelebration(repository.context, newStreak)
+                            WanderlyNotificationManager.sendMilestoneCelebration(
+                                repository.context,
+                                newStreak
+                            )
                         }
                     } else if (lastMissionDate != today) {
-                        msg.append("Streak Started! 🐝 First buzz today!\n")
+                        message.append("Streak started! First buzz today!\n")
                     }
-                    
-                    _streakMessage.postValue(msg.toString().trim())
+
+                    _streakMessage.postValue(message.toString().trim())
                 } else {
-                    _missionState.postValue(MissionState.Error("Failed to save progress to the hive. Check your connection!"))
+                    _missionState.postValue(
+                        MissionState.Error("Failed to save progress to the hive. Check your connection!")
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("WanderlyStreak", "Error calculating streak", e)

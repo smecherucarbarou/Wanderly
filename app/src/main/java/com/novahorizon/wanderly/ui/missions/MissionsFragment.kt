@@ -15,13 +15,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
-import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
 import com.novahorizon.wanderly.showSnackbar
@@ -39,10 +40,11 @@ class MissionsFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: MissionsViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyRepository(requireContext()))
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
 
     private var tempImageUri: Uri? = null
+    private var tempImageFile: File? = null
     private var locationLookupInFlight = false
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
@@ -51,25 +53,40 @@ class MissionsFragment : Fragment() {
         if (isGranted) {
             startCamera()
         } else {
-            showSnackbar("Buzzy needs camera access to see your progress!", isError = true)
+            showSnackbar(getString(R.string.mission_camera_permission_required), isError = true)
+        }
+    }
+
+    private val requestLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            checkLocationAndGenerate()
+        } else {
+            showSnackbar(getString(R.string.mission_location_permission_required), isError = true)
         }
     }
 
     private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success && tempImageUri != null) {
-            lifecycleScope.launch {
+            viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
-                        val input = requireContext().contentResolver.openInputStream(tempImageUri!!)
-                        android.graphics.BitmapFactory.decodeStream(input)
+                        requireContext().contentResolver.openInputStream(tempImageUri!!)?.use { input ->
+                            android.graphics.BitmapFactory.decodeStream(input)
+                        }
+                    }
+                    if (bitmap == null) {
+                        showSnackbar(getString(R.string.photo_read_failed), isError = true)
+                        return@launch
                     }
                     viewModel.verifyPhoto(bitmap)
                 } catch (_: Exception) {
-                    showSnackbar("Failed to process photo", isError = true)
+                    showSnackbar(getString(R.string.mission_photo_process_failed), isError = true)
                 }
             }
         } else {
-            showSnackbar("Buzzy did not see a photo. Try again?", isError = true)
+            showSnackbar(getString(R.string.mission_photo_missing), isError = true)
         }
     }
 
@@ -108,9 +125,10 @@ class MissionsFragment : Fragment() {
             when (state) {
                 is MissionsViewModel.MissionState.Generating -> {
                     binding.loadingIndicator.visibility = View.VISIBLE
-                    binding.missionText.visibility = View.GONE
+                    binding.missionText.visibility = View.VISIBLE
+                    binding.missionText.text = getString(R.string.mission_loading_state)
                     binding.newFlightButton.isEnabled = false
-                    binding.buzzyBubble.text = "Buzzy is scouting a real spot nearby..."
+                    binding.buzzyBubble.text = getString(R.string.mission_bubble_generating)
                 }
 
                 is MissionsViewModel.MissionState.MissionReceived -> {
@@ -121,16 +139,16 @@ class MissionsFragment : Fragment() {
                     binding.newFlightButton.visibility = View.GONE
                     binding.verifyButton.visibility = View.VISIBLE
                     binding.verifyButton.isEnabled = true
-                    binding.verifyButton.text = "Verify Location"
+                    binding.verifyButton.text = getString(R.string.mission_verify_location)
                     binding.completeButton.visibility = View.GONE
                     binding.learnMoreButton.visibility = View.GONE
-                    binding.buzzyBubble.text = "New mission! Use your bee-senses to find it!"
+                    binding.buzzyBubble.text = getString(R.string.mission_bubble_received)
                 }
 
                 is MissionsViewModel.MissionState.Verifying -> {
                     binding.verifyButton.isEnabled = false
-                    binding.verifyButton.text = "Buzzy is looking..."
-                    binding.buzzyBubble.text = "Let me check the map and your photo..."
+                    binding.verifyButton.text = getString(R.string.mission_verifying_state)
+                    binding.buzzyBubble.text = getString(R.string.mission_bubble_verifying)
                 }
 
                 is MissionsViewModel.MissionState.VerificationResult -> {
@@ -138,17 +156,17 @@ class MissionsFragment : Fragment() {
                         binding.verifyButton.visibility = View.GONE
                         binding.completeButton.visibility = View.VISIBLE
                         binding.learnMoreButton.visibility = View.VISIBLE
-                        binding.buzzyBubble.text = "Buzzing success!"
+                        binding.buzzyBubble.text = getString(R.string.mission_bubble_verified)
                     } else {
                         binding.verifyButton.isEnabled = true
-                        binding.verifyButton.text = "Take Photo to Verify"
+                        binding.verifyButton.text = getString(R.string.mission_take_photo_to_verify)
                         binding.buzzyBubble.text = state.message
                     }
                 }
 
                 is MissionsViewModel.MissionState.FetchingDetails -> {
                     binding.learnMoreButton.isEnabled = false
-                    binding.learnMoreButton.text = "Buzzy is thinking..."
+                    binding.learnMoreButton.text = getString(R.string.mission_fetching_details)
                 }
 
                 is MissionsViewModel.MissionState.DetailsReceived -> {
@@ -163,15 +181,24 @@ class MissionsFragment : Fragment() {
                     binding.learnMoreButton.visibility = View.GONE
                     binding.newFlightButton.visibility = View.VISIBLE
                     binding.newFlightButton.isEnabled = true
-                    binding.buzzyBubble.text = "Good job! Ready for another?"
+                    binding.newFlightButton.text = getString(R.string.generate_mission)
+                    binding.buzzyBubble.text = getString(R.string.mission_bubble_idle)
+                    binding.missionText.text = getString(R.string.mission_empty_state)
+                    binding.missionText.visibility = View.VISIBLE
                 }
 
                 is MissionsViewModel.MissionState.Error -> {
                     locationLookupInFlight = false
                     binding.loadingIndicator.visibility = View.GONE
+                    binding.missionText.visibility = View.VISIBLE
+                    binding.missionText.text = state.message
+                    binding.newFlightButton.visibility = View.VISIBLE
                     binding.newFlightButton.isEnabled = true
+                    binding.newFlightButton.text = getString(R.string.mission_retry)
+                    binding.verifyButton.visibility = View.GONE
+                    binding.completeButton.visibility = View.GONE
                     binding.learnMoreButton.isEnabled = true
-                    binding.learnMoreButton.text = "Learn more about this place"
+                    binding.learnMoreButton.text = getString(R.string.mission_learn_more)
                     binding.buzzyBubble.text = state.message
                     showSnackbar(state.message, isError = true)
                 }
@@ -184,25 +211,31 @@ class MissionsFragment : Fragment() {
     private fun checkLocationAndGenerate() {
         if (locationLookupInFlight) return
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            showSnackbar("Buzzy needs your location to find flowers!", isError = true)
+            requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             return
         }
         locationLookupInFlight = true
         binding.newFlightButton.isEnabled = false
         binding.loadingIndicator.visibility = View.VISIBLE
-        binding.buzzyBubble.text = "Pinning your launch point..."
+        binding.buzzyBubble.text = getString(R.string.mission_bubble_locating)
+        binding.missionText.visibility = View.VISIBLE
+        binding.missionText.text = getString(R.string.mission_location_loading)
 
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
             if (location != null) {
-                lifecycleScope.launch {
+                val lifecycleOwner = viewLifecycleOwner
+                lifecycleOwner.lifecycleScope.launch {
                     try {
                         val geocoder = Geocoder(requireContext(), Locale.getDefault())
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             geocoder.getFromLocation(location.latitude, location.longitude, 1) { addresses ->
+                                if (!isAdded || _binding == null || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                                    return@getFromLocation
+                                }
                                 val cityName = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.adminArea
                                 Log.d("MissionsFragment", "City from geocoder: $cityName")
-                                viewLifecycleOwner.lifecycleScope.launch {
+                                lifecycleOwner.lifecycleScope.launch {
                                     viewModel.generateMission(location.latitude, location.longitude, cityName)
                                 }
                             }
@@ -224,16 +257,16 @@ class MissionsFragment : Fragment() {
                 locationLookupInFlight = false
                 binding.loadingIndicator.visibility = View.GONE
                 binding.newFlightButton.isEnabled = true
-                binding.buzzyBubble.text = "Could not get your launch point."
-                showSnackbar("Could not get precise location", isError = true)
+                binding.buzzyBubble.text = getString(R.string.mission_location_failed)
+                showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
         }.addOnFailureListener { error ->
             Log.e("MissionsFragment", "Error getting precise location", error)
             locationLookupInFlight = false
             binding.loadingIndicator.visibility = View.GONE
             binding.newFlightButton.isEnabled = true
-            binding.buzzyBubble.text = "Could not get your launch point."
-            showSnackbar("Could not get precise location", isError = true)
+            binding.buzzyBubble.text = getString(R.string.mission_location_failed)
+            showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
     }
 
@@ -247,14 +280,13 @@ class MissionsFragment : Fragment() {
 
     private fun startCamera() {
         try {
-            val tempFile = File.createTempFile("mission_verify_", ".jpg", requireContext().cacheDir).apply {
-                createNewFile()
-                deleteOnExit()
-            }
+            tempImageFile?.delete()
+            val tempFile = File.createTempFile("mission_verify_", ".jpg", requireContext().cacheDir)
+            tempImageFile = tempFile
             tempImageUri = FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.fileprovider", tempFile)
             takePhotoLauncher.launch(tempImageUri)
         } catch (_: Exception) {
-            showSnackbar("Could not start camera interface", isError = true)
+            showSnackbar(getString(R.string.mission_camera_start_failed), isError = true)
         }
     }
 
@@ -262,7 +294,7 @@ class MissionsFragment : Fragment() {
         val honey = profile.honey ?: 0
         val derivedRank = profile.derivedHiveRank()
 
-        binding.honeyCount.text = "$honey Honey"
+        binding.honeyCount.text = getString(R.string.mission_honey_format, honey)
         binding.rankName.text = getRankName(derivedRank)
 
         val maxHoney = HiveRank.maxHoneyForRank(derivedRank)
@@ -284,6 +316,9 @@ class MissionsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        tempImageFile?.delete()
+        tempImageFile = null
+        tempImageUri = null
         super.onDestroyView()
         _binding = null
     }

@@ -15,7 +15,7 @@
     <item
         android:id="@+id/socialFragment"
         android:icon="@android:drawable/ic_menu_share"
-        android:title="Hive" />
+        android:title="@string/title_social" />
     <item
         android:id="@+id/profileFragment"
         android:icon="@android:drawable/ic_menu_myplaces"

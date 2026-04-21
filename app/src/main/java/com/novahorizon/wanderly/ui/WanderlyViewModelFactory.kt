@@ -8,7 +8,7 @@ class WanderlyViewModelFactory(private val repository: WanderlyRepository) : Vie
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AuthViewModel(repository) as T
+            return AuthViewModel() as T
         }
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")

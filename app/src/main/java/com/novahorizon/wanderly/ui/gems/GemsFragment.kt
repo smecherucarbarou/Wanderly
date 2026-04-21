@@ -12,16 +12,21 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
@@ -42,6 +47,8 @@ class GemsFragment : Fragment() {
     private lateinit var loadingIndicator: View
     private lateinit var loadingText: TextView
     private lateinit var refreshBtn: ImageButton
+    private lateinit var emptyStateText: TextView
+    private lateinit var retryBtn: Button
     private lateinit var repository: WanderlyRepository
 
     private val gemsAdapter = GemsAdapter { gem ->
@@ -50,6 +57,15 @@ class GemsFragment : Fragment() {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val seenGemsHistory = mutableSetOf<String>()
+    private val requestLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            checkLocationAndLoadGems()
+        } else {
+            showSnackbar(getString(R.string.gems_location_permission_required), isError = true)
+        }
+    }
 
     @Serializable
     private data class GemPick(
@@ -70,7 +86,9 @@ class GemsFragment : Fragment() {
         loadingIndicator = view.findViewById(R.id.gems_loading)
         loadingText = view.findViewById(R.id.gems_loading_text)
         refreshBtn = view.findViewById(R.id.refresh_gems_btn)
-        repository = WanderlyRepository(requireContext())
+        emptyStateText = view.findViewById(R.id.gems_empty_state)
+        retryBtn = view.findViewById(R.id.gems_retry_button)
+        repository = WanderlyGraph.repository(requireContext())
 
         gemsRecycler.layoutManager = LinearLayoutManager(requireContext())
         gemsRecycler.adapter = gemsAdapter
@@ -83,6 +101,9 @@ class GemsFragment : Fragment() {
         refreshBtn.setOnClickListener {
             checkLocationAndLoadGems(isRefresh = true)
         }
+        retryBtn.setOnClickListener {
+            checkLocationAndLoadGems(isRefresh = true)
+        }
 
         checkLocationAndLoadGems()
     }
@@ -90,12 +111,11 @@ class GemsFragment : Fragment() {
     private fun checkLocationAndLoadGems(isRefresh: Boolean = false) {
         android.util.Log.d("GemsFragment", "checkLocationAndLoadGems called, isRefresh=$isRefresh")
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            showSnackbar("Buzzy needs location to find gems!", isError = true)
+            requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             return
         }
 
-        loadingIndicator.visibility = View.VISIBLE
-        loadingText.visibility = View.VISIBLE
+        showLoadingState()
         if (isRefresh) {
             gemsAdapter.submitList(emptyList())
         }
@@ -103,7 +123,7 @@ class GemsFragment : Fragment() {
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
             if (location != null) {
-                lifecycleScope.launch {
+                viewLifecycleOwner.lifecycleScope.launch {
                     val searchCity = try {
                         val geocoder = Geocoder(requireContext(), Locale.getDefault())
                         val address = withContext(Dispatchers.IO) {
@@ -130,19 +150,20 @@ class GemsFragment : Fragment() {
                     }
                 }
             } else if (isAdded && view != null) {
-                loadingIndicator.visibility = View.GONE
-                loadingText.visibility = View.GONE
-                showSnackbar("Could not get location", isError = true)
+                showErrorState(getString(R.string.gems_location_failed))
+            }
+        }.addOnFailureListener {
+            if (isAdded && view != null) {
+                showErrorState(getString(R.string.gems_location_failed))
             }
         }
     }
 
     private fun loadGemsWithGemini(lat: Double, lng: Double, city: String) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 if (isAdded && view != null) {
-                    loadingIndicator.visibility = View.VISIBLE
-                    loadingText.text = "Buzzy is scouting $city..."
+                    showLoadingState(getString(R.string.gems_loading_city_format, city))
                 }
 
                 val candidates = repository.fetchHiddenGemCandidates(lat, lng, 2500, city)
@@ -171,21 +192,60 @@ class GemsFragment : Fragment() {
 
                 if (isAdded && view != null) {
                     if (gems.isEmpty()) {
-                        showSnackbar("Buzzy couldn't curate fresh gems here yet.", isError = true)
+                        showEmptyState(R.string.gems_empty_state)
+                        showSnackbar(getString(R.string.gems_no_fresh_results), isError = true)
+                    } else {
+                        hideEmptyState()
+                        gemsRecycler.visibility = View.VISIBLE
                     }
                     gemsAdapter.submitList(gems)
                     loadingIndicator.visibility = View.GONE
                     loadingText.visibility = View.GONE
+                    refreshBtn.isEnabled = true
                 }
             } catch (e: Exception) {
                 android.util.Log.e("GemsFragment", "Error loading gems", e)
                 if (isAdded && view != null) {
-                    loadingIndicator.visibility = View.GONE
-                    loadingText.visibility = View.GONE
-                    showSnackbar("Buzzy got lost: ${e.message}", isError = true)
+                    val message = e.message?.takeIf { it.isNotBlank() }
+                        ?: getString(R.string.gems_loading_failed)
+                    showErrorState(message)
+                    showSnackbar(getString(R.string.gems_loading_failed), isError = true)
                 }
             }
         }
+    }
+
+    private fun showLoadingState(message: String = getString(R.string.gems_loading_default)) {
+        gemsRecycler.visibility = View.VISIBLE
+        refreshBtn.isEnabled = false
+        loadingIndicator.visibility = View.VISIBLE
+        loadingText.visibility = View.VISIBLE
+        loadingText.text = message
+        hideEmptyState()
+    }
+
+    private fun showErrorState(message: String) {
+        gemsAdapter.submitList(emptyList())
+        showEmptyStateText(message, showRetry = true)
+    }
+
+    private fun showEmptyState(messageRes: Int) {
+        showEmptyStateText(getString(messageRes), showRetry = true)
+    }
+
+    private fun showEmptyStateText(message: String, showRetry: Boolean) {
+        gemsRecycler.visibility = View.GONE
+        refreshBtn.isEnabled = true
+        loadingIndicator.visibility = View.GONE
+        loadingText.visibility = View.GONE
+        emptyStateText.text = message
+        emptyStateText.visibility = View.VISIBLE
+        retryBtn.visibility = if (showRetry) View.VISIBLE else View.GONE
+    }
+
+    private fun hideEmptyState() {
+        emptyStateText.visibility = View.GONE
+        retryBtn.visibility = View.GONE
     }
 
     private fun buildCuratedPrompt(city: String, candidates: List<DiscoveredPlace>): String {
@@ -336,13 +396,7 @@ class GemsFragment : Fragment() {
     }
 }
 
-class GemsAdapter(private val onGemClick: (Gem) -> Unit) : RecyclerView.Adapter<GemsAdapter.ViewHolder>() {
-    private var gems = listOf<Gem>()
-
-    fun submitList(list: List<Gem>) {
-        gems = list
-        notifyDataSetChanged()
-    }
+class GemsAdapter(private val onGemClick: (Gem) -> Unit) : ListAdapter<Gem, GemsAdapter.ViewHolder>(GemDiffCallback()) {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val name: TextView = view.findViewById(R.id.gem_name)
@@ -357,7 +411,7 @@ class GemsAdapter(private val onGemClick: (Gem) -> Unit) : RecyclerView.Adapter<
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val gem = gems[position]
+        val gem = getItem(position)
         holder.name.text = gem.name
         holder.location.text = holder.itemView.context.getString(R.string.gem_location_format, gem.location)
         holder.description.text = gem.description
@@ -365,5 +419,11 @@ class GemsAdapter(private val onGemClick: (Gem) -> Unit) : RecyclerView.Adapter<
         holder.itemView.setOnClickListener { onGemClick(gem) }
     }
 
-    override fun getItemCount(): Int = gems.size
+    private class GemDiffCallback : DiffUtil.ItemCallback<Gem>() {
+        override fun areItemsTheSame(oldItem: Gem, newItem: Gem): Boolean {
+            return oldItem.name == newItem.name && oldItem.lat == newItem.lat && oldItem.lng == newItem.lng
+        }
+
+        override fun areContentsTheSame(oldItem: Gem, newItem: Gem): Boolean = oldItem == newItem
+    }
 }

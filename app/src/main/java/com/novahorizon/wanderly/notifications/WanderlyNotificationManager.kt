@@ -97,10 +97,10 @@ object WanderlyNotificationManager {
         notificationId: Int = 1001,
         dedupKey: String? = null,
         bypassCooldown: Boolean = false
-    ) {
+    ): Boolean {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             Log.w(LOG_TAG, "Notifications are disabled. Cannot show alert.")
-            return
+            return false
         }
 
         Log.d(
@@ -109,7 +109,7 @@ object WanderlyNotificationManager {
         )
 
         if (dedupKey != null && !bypassCooldown && isNotificationCooldownActive(context, dedupKey)) {
-            return
+            return false
         }
 
         createNotificationChannel(context)
@@ -138,13 +138,15 @@ object WanderlyNotificationManager {
         try {
             notificationManager.notify(notificationId, builder.build())
             Log.d(LOG_TAG, "SUCCESS: Notification $notificationId sent.")
+            return true
         } catch (e: Exception) {
             Log.e(LOG_TAG, "FAILED to send notification: ${e.message}")
+            return false
         }
     }
 
-    fun sendDailyReminder(context: Context, streakDays: Int, force: Boolean = false) {
-        showNotification(
+    fun sendDailyReminder(context: Context, streakDays: Int, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Do not break the streak",
             "You have a $streakDays-day streak. Complete today's mission!",
@@ -154,8 +156,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendEveningAlert(context: Context, force: Boolean = false) {
-        showNotification(
+    fun sendEveningAlert(context: Context, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Critical mission",
             "Your streak expires at midnight. Got time for one last run?",
@@ -165,8 +167,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendMilestoneCelebration(context: Context, streakDays: Int, force: Boolean = false) {
-        showNotification(
+    fun sendMilestoneCelebration(context: Context, streakDays: Int, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Milestone reached",
             "$streakDays days. Gemini is impressed.",
@@ -176,8 +178,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendStreakLost(context: Context, force: Boolean = false) {
-        showNotification(
+    fun sendStreakLost(context: Context, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Streak lost",
             "Time to rebuild from zero.",
@@ -187,9 +189,9 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendRivalActivity(context: Context, name: String, force: Boolean = false) {
+    fun sendRivalActivity(context: Context, name: String, force: Boolean = false): Boolean {
         val id = 3000 + (name.hashCode() and 0x0FFF)
-        showNotification(
+        return showNotification(
             context,
             "Rival alert",
             "$name just finished a mission. Keep up!",
@@ -199,8 +201,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendAggregatedRivalActivity(context: Context, count: Int, force: Boolean = false) {
-        showNotification(
+    fun sendAggregatedRivalActivity(context: Context, count: Int, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Hive activity",
             "$count rivals completed missions today. Get moving!",
@@ -210,8 +212,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendOvertakenAlert(context: Context, name: String, force: Boolean = false) {
-        showNotification(
+    fun sendOvertakenAlert(context: Context, name: String, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Overtaken",
             "$name has overtaken you in the hive rankings.",
@@ -221,8 +223,8 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendFightForFirst(context: Context, name: String, force: Boolean = false) {
-        showNotification(
+    fun sendFightForFirst(context: Context, name: String, force: Boolean = false): Boolean {
+        return showNotification(
             context,
             "Battle for first",
             "$name is right behind you. Do not let them win!",

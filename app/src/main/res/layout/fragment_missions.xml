@@ -4,40 +4,40 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/background">
+    android:background="@color/background"
+    android:fillViewport="true">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="20dp"
-        android:clipToPadding="false">
+        android:clipToPadding="false"
+        android:padding="20dp">
 
         <LinearLayout
             android:id="@+id/top_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            android:padding="8dp"
             app:layout_constraintEnd_toEndOf="parent"
-            android:padding="8dp">
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
             <TextView
                 android:id="@+id/honey_count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🍯 0 Honey"
+                android:layout_weight="1"
+                android:text="@string/mission_honey_default"
                 android:textColor="@color/primary"
                 android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_weight="1" />
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/rank_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Worker Bee"
+                android:text="@string/rank_1"
                 android:textColor="@color/text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -48,36 +48,37 @@
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:progress="0"
-            android:max="100"
-            android:progressTint="@color/primary"
             android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="@color/primary"
             app:layout_constraintTop_toBottomOf="@id/top_bar" />
 
         <ImageView
             android:id="@+id/buzzy_tip"
             android:layout_width="60dp"
             android:layout_height="60dp"
-            android:src="@drawable/ic_buzzy"
             android:layout_marginTop="24dp"
-            app:layout_constraintTop_toBottomOf="@id/honey_progress"
-            app:layout_constraintStart_toStartOf="parent" />
+            android:contentDescription="@null"
+            android:src="@drawable/ic_buzzy"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/honey_progress" />
 
         <TextView
             android:id="@+id/buzzy_bubble"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="@string/buzz_before_mission"
-            android:background="@drawable/bg_card_honeycomb"
-            android:padding="16dp"
-            android:elevation="4dp"
-            android:textColor="@color/text_primary"
             android:layout_marginStart="16dp"
-            android:minHeight="60dp"
+            android:background="@drawable/bg_card_honeycomb"
+            android:elevation="4dp"
             android:gravity="center_vertical"
-            app:layout_constraintTop_toTopOf="@id/buzzy_tip"
+            android:minHeight="60dp"
+            android:padding="16dp"
+            android:text="@string/buzz_before_mission"
+            android:textColor="@color/text_primary"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/buzzy_tip"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constraintTop_toTopOf="@id/buzzy_tip" />
 
         <androidx.constraintlayout.widget.Barrier
             android:id="@+id/buzzy_barrier"
@@ -90,46 +91,46 @@
             android:id="@+id/mission_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_honeycomb"
-            android:padding="24dp"
-            android:elevation="6dp"
             android:layout_marginTop="32dp"
             android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_card_honeycomb"
+            android:elevation="6dp"
+            android:padding="24dp"
             app:layout_constraintTop_toBottomOf="@id/buzzy_barrier">
 
             <TextView
                 android:id="@+id/mission_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No active mission. Generate a New Flight!"
+                android:gravity="center"
+                android:minLines="3"
+                android:text="@string/mission_empty_state"
                 android:textColor="@color/text_primary"
                 android:textSize="20sp"
                 android:textStyle="bold"
-                android:gravity="center"
-                android:minLines="3"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <ProgressBar
                 android:id="@+id/loading_indicator"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:visibility="gone"
+                android:layout_marginTop="16dp"
                 android:indeterminateTint="@color/primary"
-                app:layout_constraintTop_toBottomOf="@id/mission_text"
-                app:layout_constraintStart_toStartOf="parent"
+                android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
-                android:layout_marginTop="16dp" />
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/mission_text" />
 
             <Button
                 android:id="@+id/new_flight_button"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="@string/generate_mission"
+                android:layout_marginTop="24dp"
                 android:background="@drawable/bg_button_gradient"
+                android:text="@string/generate_mission"
+                android:textAllCaps="false"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold"
-                android:textAllCaps="false"
-                android:layout_marginTop="24dp"
                 app:layout_constraintTop_toBottomOf="@id/loading_indicator"
                 app:layout_goneMarginTop="24dp" />
 
@@ -137,12 +138,12 @@
                 android:id="@+id/verify_button"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="Verify Location"
+                android:layout_marginTop="16dp"
                 android:backgroundTint="@color/accent"
+                android:text="@string/mission_verify_location"
+                android:textAllCaps="false"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold"
-                android:textAllCaps="false"
-                android:layout_marginTop="16dp"
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/new_flight_button" />
 
@@ -150,12 +151,12 @@
                 android:id="@+id/complete_button"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="@string/complete_mission"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/bg_button_gradient"
+                android:text="@string/complete_mission"
+                android:textAllCaps="false"
                 android:textColor="@color/text_primary"
                 android:textStyle="bold"
-                android:textAllCaps="false"
-                android:layout_marginTop="16dp"
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/verify_button" />
 
@@ -163,11 +164,11 @@
                 android:id="@+id/learn_more_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Learn more about this place 🕵️"
-                android:backgroundTint="@color/secondary"
-                android:textColor="@color/primary"
-                android:textAllCaps="false"
                 android:layout_marginTop="12dp"
+                android:backgroundTint="@color/secondary"
+                android:text="@string/mission_learn_more"
+                android:textAllCaps="false"
+                android:textColor="@color/primary"
                 android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/complete_button" />
 
@@ -177,23 +178,23 @@
             android:id="@+id/dev_panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            android:background="#11000000"
-            android:padding="8dp"
             android:layout_marginTop="32dp"
             android:layout_marginBottom="32dp"
-            app:layout_constraintTop_toBottomOf="@id/mission_card"
-            app:layout_constraintBottom_toBottomOf="parent">
+            android:background="#11000000"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/mission_card">
 
             <TextView
                 android:id="@+id/dev_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="DEBUG TOOLS"
+                android:gravity="center"
+                android:text="@string/mission_debug_tools"
                 android:textColor="@color/text_secondary"
-                android:textSize="10sp"
-                android:gravity="center" />
+                android:textSize="10sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -205,18 +206,18 @@
                     style="?attr/materialButtonOutlinedStyle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Skip Verify"
-                    android:textSize="10sp"
-                    android:layout_weight="1" />
+                    android:layout_weight="1"
+                    android:text="@string/mission_debug_skip_verify"
+                    android:textSize="10sp" />
 
                 <Button
                     android:id="@+id/dev_force_button"
                     style="?attr/materialButtonOutlinedStyle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Force Gen"
-                    android:textSize="10sp"
-                    android:layout_weight="1" />
+                    android:layout_weight="1"
+                    android:text="@string/mission_debug_force_generate"
+                    android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
 

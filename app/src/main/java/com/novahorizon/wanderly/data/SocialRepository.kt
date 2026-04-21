@@ -50,9 +50,11 @@ class SocialRepository {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext "Not authenticated"
             val currentUserId = session.user!!.id
+            val normalizedCode = normalizeFriendCode(friendCode)
+                ?: return@withContext "Friend code must be 6 letters or digits"
 
             val targetUsers = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
-                .select { filter { ilike("friend_code", friendCode) } }
+                .select { filter { eq("friend_code", normalizedCode) } }
                 .decodeList<Profile>()
 
             if (targetUsers.isEmpty()) return@withContext "Friend code not found"
@@ -132,6 +134,15 @@ class SocialRepository {
         } catch (e: Exception) {
             Log.e("SocialRepository", "Error getting friends", e)
             emptyList()
+        }
+    }
+
+    companion object {
+        private val FRIEND_CODE_REGEX = Regex("^[A-Z0-9]{6}$")
+
+        internal fun normalizeFriendCode(friendCode: String): String? {
+            val normalizedCode = friendCode.trim().uppercase()
+            return normalizedCode.takeIf { FRIEND_CODE_REGEX.matches(it) }
         }
     }
 }

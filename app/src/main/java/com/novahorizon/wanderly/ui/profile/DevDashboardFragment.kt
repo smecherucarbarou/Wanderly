@@ -12,6 +12,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
@@ -36,7 +37,7 @@ class DevDashboardFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentDevDashboardBinding.inflate(inflater, container, false)
-        repository = WanderlyRepository(requireContext())
+        repository = WanderlyGraph.repository(requireContext())
         binding.root.visibility = View.INVISIBLE
         return binding.root
     }

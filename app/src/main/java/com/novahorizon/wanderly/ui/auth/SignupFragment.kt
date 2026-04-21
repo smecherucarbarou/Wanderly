@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
-import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentSignupBinding
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.ui.AuthViewModel
@@ -20,7 +20,7 @@ class SignupFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: AuthViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyRepository(requireContext()))
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
 
     override fun onCreateView(

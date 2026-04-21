@@ -1,31 +1,61 @@
-const corsHeaders = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+const MAX_BODY_BYTES = 64 * 1024
+
+function allowedOrigins(): string[] {
+  return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+}
+
+function buildCorsHeaders(req: Request): Headers {
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  })
+  const origin = req.headers.get("origin")
+  if (origin != null && allowedOrigins().includes(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin)
+  }
+  return headers
+}
+
+function jsonResponse(req: Request, body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: buildCorsHeaders(req),
+  })
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(req)
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: corsHeaders,
-    })
+    return jsonResponse(req, { error: "Method not allowed" }, 405)
+  }
+
+  const authorization = req.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) {
+    return jsonResponse(req, { error: "Missing bearer token" }, 401)
   }
 
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY")
   if (!geminiApiKey) {
-    return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY secret" }), {
-      status: 500,
-      headers: corsHeaders,
-    })
+    return jsonResponse(req, { error: "Missing GEMINI_API_KEY secret" }, 500)
   }
 
   try {
     const requestBody = await req.text()
+    if (requestBody.length === 0 || requestBody.length > MAX_BODY_BYTES) {
+      return jsonResponse(req, { error: "Invalid request size" }, 413)
+    }
+
+    JSON.parse(requestBody)
+
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
       {
@@ -44,9 +74,6 @@ Deno.serve(async (req: Request) => {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Gemini proxy error"
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: corsHeaders,
-    })
+    return jsonResponse(req, { error: message }, 500)
   }
 })

@@ -11,7 +11,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="20dp"
-        android:text="Hidden Gems Near You"
+        android:text="@string/gems_title"
         android:textColor="@color/primary"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -24,11 +24,13 @@
         android:layout_height="48dp"
         android:layout_marginEnd="20dp"
         android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/gems_refresh_content_description"
         android:src="@android:drawable/stat_notify_sync"
         app:tint="@color/primary"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/gems_title"
         app:layout_constraintBottom_toBottomOf="@id/gems_title" />
+        
 
     <ProgressBar
         android:id="@+id/gems_loading"
@@ -47,7 +49,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="8dp"
-        android:text="Buzzy is exploring..."
+        android:text="@string/gems_loading_default"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurface"
         android:alpha="0.6"
@@ -66,5 +68,36 @@
         app:layout_constraintTop_toBottomOf="@id/gems_title"
         app:layout_constraintBottom_toBottomOf="parent"
         tools:listitem="@layout/item_gem" />
+
+    <TextView
+        android:id="@+id/gems_empty_state"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingHorizontal="32dp"
+        android:text="@string/gems_empty_state"
+        android:textColor="@color/text_secondary"
+        android:textSize="16sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/gems_retry_button"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/gems_title"
+        tools:visibility="visible" />
+
+    <Button
+        android:id="@+id/gems_retry_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:backgroundTint="@color/primary"
+        android:text="@string/gems_retry"
+        android:textAllCaps="false"
+        android:textColor="@color/text_primary"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/gems_empty_state"
+        tools:visibility="visible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

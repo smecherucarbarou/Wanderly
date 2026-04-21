@@ -19,3 +19,29 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+-keep public class * extends com.bumptech.glide.module.AppGlideModule
+-keep class com.bumptech.glide.GeneratedAppGlideModuleImpl
+
+-keepclassmembers class **$$serializer {
+    *;
+}
+
+-keep class com.novahorizon.wanderly.data.** {
+    *;
+}
+
+-keep class io.github.jan.supabase.** {
+    *;
+}
+
+-keep class io.ktor.** {
+    *;
+}
+
+-keep class org.osmdroid.** {
+    *;
+}
+
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean

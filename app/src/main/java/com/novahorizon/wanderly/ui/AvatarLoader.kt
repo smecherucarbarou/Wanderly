@@ -5,7 +5,12 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
+import com.novahorizon.wanderly.R
 
 object AvatarLoader {
     fun loadAvatar(
@@ -35,11 +40,34 @@ object AvatarLoader {
             }
         }
 
-        initialView.visibility = View.GONE
-        imageView.visibility = View.VISIBLE
+        showInitial(initialView, imageView, displayName)
         requestBuilder
             .diskCacheStrategy(DiskCacheStrategy.ALL)
             .circleCrop()
+            .error(R.drawable.ic_buzzy)
+            .listener(object : RequestListener<android.graphics.drawable.Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<android.graphics.drawable.Drawable>,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    showInitial(initialView, imageView, displayName)
+                    return false
+                }
+
+                override fun onResourceReady(
+                    resource: android.graphics.drawable.Drawable,
+                    model: Any,
+                    target: Target<android.graphics.drawable.Drawable>?,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    initialView.visibility = View.GONE
+                    imageView.visibility = View.VISIBLE
+                    return false
+                }
+            })
             .into(imageView)
     }
 

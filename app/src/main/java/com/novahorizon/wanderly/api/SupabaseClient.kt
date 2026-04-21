@@ -21,9 +21,10 @@ object SupabaseClient {
 
     fun init(context: Context) {
         if (_client != null) return
-        
+
+        validateConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         Log.d(TAG, "Initializing Supabase with URL: ${BuildConfig.SUPABASE_URL}")
-        
+
         _client = createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY
@@ -44,6 +45,20 @@ object SupabaseClient {
                 autoLoadFromStorage = true
             }
             install(Realtime)
+        }
+    }
+
+    internal fun validateConfig(supabaseUrl: String, supabaseAnonKey: String) {
+        val normalizedUrl = supabaseUrl.trim()
+        val normalizedKey = supabaseAnonKey.trim()
+        if (normalizedUrl.isBlank() || normalizedKey.isBlank()) {
+            throw IllegalStateException("Supabase configuration is missing")
+        }
+
+        val usesPlaceholderValues = normalizedUrl.contains("your-supabase-url", ignoreCase = true) ||
+            normalizedKey.contains("your-supabase-anon-key", ignoreCase = true)
+        if (usesPlaceholderValues) {
+            throw IllegalStateException("Supabase configuration is still using placeholder values")
         }
     }
 }

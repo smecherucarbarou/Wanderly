@@ -9,9 +9,11 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.novahorizon.wanderly.auth.AuthRouting
+import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.databinding.ActivitySplashBinding
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class SplashActivity : AppCompatActivity() {
@@ -26,7 +28,6 @@ class SplashActivity : AppCompatActivity() {
         startAnimations()
 
         lifecycleScope.launch {
-            delay(3000)
             checkAuthAndNavigate()
         }
     }
@@ -71,11 +72,11 @@ class SplashActivity : AppCompatActivity() {
 
     private suspend fun checkAuthAndNavigate() {
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-        if (session != null) {
-            startActivity(Intent(this, MainActivity::class.java))
+        val rememberMe = PreferencesStore(this).isRememberMeEnabled()
+        if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {
+            SessionNavigator.openMain(this)
         } else {
-            startActivity(Intent(this, AuthActivity::class.java))
+            SessionNavigator.openAuth(this)
         }
-        finish()
     }
 }

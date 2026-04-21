@@ -28,6 +28,21 @@ class ProfileRepository(
     private val context: Context,
     private val preferencesStore: PreferencesStore
 ) {
+    internal data class ClientProfileUpdate(
+        val username: String?,
+        val honey: Int?,
+        val hive_rank: Int?,
+        val badges: List<String>?,
+        val cities_visited: List<String>?,
+        val avatar_url: String?,
+        val last_mission_date: String?,
+        val last_lat: Double?,
+        val last_lng: Double?,
+        val friend_code: String?,
+        val streak_count: Int?,
+        val explorer_class: String?
+    )
+
     private val _currentProfile = MutableStateFlow<Profile?>(null)
     val currentProfile: StateFlow<Profile?> = _currentProfile.asStateFlow()
 
@@ -161,34 +176,84 @@ class ProfileRepository(
     private fun normalizeProfile(profile: Profile): Profile = profile.withDerivedHiveRank()
 
     private suspend fun persistProfile(profile: Profile) {
+        val payload = toClientProfileUpdate(profile)
+
         // Use an explicit PATCH payload so values like streak_count = 0 are not skipped.
         SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
-            Profile::username setTo profile.username
-            Profile::honey setTo profile.honey
-            Profile::hive_rank setTo profile.hive_rank
-            Profile::admin_role setTo profile.admin_role
-            Profile::badges setTo profile.badges
-            Profile::cities_visited setTo profile.cities_visited
-            Profile::avatar_url setTo profile.avatar_url
-            Profile::last_mission_date setTo profile.last_mission_date
-            Profile::last_lat setTo profile.last_lat
-            Profile::last_lng setTo profile.last_lng
-            Profile::friend_code setTo profile.friend_code
-            Profile::streak_count setTo profile.streak_count
-            Profile::explorer_class setTo profile.explorer_class
+            Profile::username setTo payload.username
+            Profile::honey setTo payload.honey
+            Profile::hive_rank setTo payload.hive_rank
+            Profile::badges setTo payload.badges
+            Profile::cities_visited setTo payload.cities_visited
+            Profile::avatar_url setTo payload.avatar_url
+            Profile::last_mission_date setTo payload.last_mission_date
+            Profile::last_lat setTo payload.last_lat
+            Profile::last_lng setTo payload.last_lng
+            Profile::friend_code setTo payload.friend_code
+            Profile::streak_count setTo payload.streak_count
+            Profile::explorer_class setTo payload.explorer_class
         }) {
             filter { eq("id", profile.id) }
         }
     }
 
     private fun buildAvatarBytes(uri: Uri): ByteArray? {
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            BitmapFactory.decodeStream(inputStream, null, bounds)
+        } ?: return null
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = calculateInSampleSize(bounds, reqWidth = 512, reqHeight = 512)
+        }
         val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            BitmapFactory.decodeStream(inputStream)
+            BitmapFactory.decodeStream(inputStream, null, decodeOptions)
         } ?: return null
 
         return ByteArrayOutputStream().use { outputStream ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
             outputStream.toByteArray()
+        }
+    }
+
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val (height, width) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            var halfHeight = height / 2
+            var halfWidth = width / 2
+
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize
+    }
+
+    companion object {
+        internal fun toClientProfileUpdate(profile: Profile): ClientProfileUpdate {
+            return ClientProfileUpdate(
+                username = profile.username,
+                honey = profile.honey,
+                hive_rank = profile.hive_rank,
+                badges = profile.badges,
+                cities_visited = profile.cities_visited,
+                avatar_url = profile.avatar_url,
+                last_mission_date = profile.last_mission_date,
+                last_lat = profile.last_lat,
+                last_lng = profile.last_lng,
+                friend_code = profile.friend_code,
+                streak_count = profile.streak_count,
+                explorer_class = profile.explorer_class
+            )
         }
     }
 }

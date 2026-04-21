@@ -7,11 +7,16 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.novahorizon.wanderly.workers.StreakWorker
 import com.novahorizon.wanderly.workers.SocialWorker
-import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import java.util.concurrent.TimeUnit
 
 class WanderlyApplication : Application() {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onCreate() {
         super.onCreate()
         
@@ -21,8 +26,9 @@ class WanderlyApplication : Application() {
         // Required for OSMDroid to load map tiles without being blocked by servers
         Configuration.getInstance().userAgentValue = packageName
 
-        WanderlyNotificationManager.createNotificationChannel(this)
-        setupBackgroundWorkers()
+        appScope.launch {
+            setupBackgroundWorkers()
+        }
     }
 
     private fun setupBackgroundWorkers() {

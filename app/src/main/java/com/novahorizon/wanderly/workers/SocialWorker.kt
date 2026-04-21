@@ -4,8 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
-import com.novahorizon.wanderly.data.WanderlyRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +16,7 @@ class SocialWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val pid = android.os.Process.myPid()
         Log.d("SocialWorker", "--- Social Polling Started (PID: $pid) ---")
-        val repository = WanderlyRepository(applicationContext)
+        val repository = WanderlyGraph.repository(applicationContext)
 
         try {
             if (AuthSessionCoordinator.awaitResolvedSessionOrNull(7_000L) == null) {

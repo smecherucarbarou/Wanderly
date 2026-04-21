@@ -14,9 +14,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
+import com.google.android.material.snackbar.Snackbar
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
-import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.ActivityMainBinding
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.services.HiveRealtimeService
@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val repository by lazy { WanderlyRepository(this) }
+    private val repository by lazy { WanderlyGraph.repository(this) }
     private val viewModel: MainViewModel by viewModels {
         WanderlyViewModelFactory(repository)
     }
@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun stopHiveService() {
+        stopService(Intent(this, HiveRealtimeService::class.java))
+    }
+
     private fun applyWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -87,6 +91,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupObservers() {
         viewModel.streakMessage.observe(this) { message ->
             message?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
                 viewModel.clearStreakMessage()
             }
         }
@@ -100,13 +105,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showStreakCrisisDialog(days: Int, cost: Int) {
         androidx.appcompat.app.AlertDialog.Builder(this, R.style.Wanderly_AlertDialog)
-            .setTitle("STREAK CRISIS!")
-            .setMessage("Did you get stuck in a tourist trap yesterday? Your $days-day streak is dead. Pay $cost Honey to buy your reputation back, or start from zero.")
+            .setTitle(R.string.streak_crisis_title)
+            .setMessage(getString(R.string.streak_crisis_message, days, cost))
             .setCancelable(false)
-            .setPositiveButton("PAY THE TOLL ($cost Honey)") { _, _ ->
+            .setPositiveButton(getString(R.string.streak_crisis_pay, cost)) { _, _ ->
                 viewModel.restoreStreak(cost)
             }
-            .setNegativeButton("ACCEPT DEFEAT") { _, _ ->
+            .setNegativeButton(R.string.streak_crisis_accept_defeat) { _, _ ->
                 viewModel.acceptStreakLoss()
             }
             .show()
@@ -118,5 +123,12 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            stopHiveService()
+        }
+        super.onDestroy()
     }
 }

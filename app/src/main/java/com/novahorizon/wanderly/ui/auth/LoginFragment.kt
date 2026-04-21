@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.ui.auth
 
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.util.Patterns
 import android.view.LayoutInflater
@@ -11,9 +10,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.Constants
-import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.databinding.FragmentLoginBinding
 import com.novahorizon.wanderly.showSnackbar
 import com.novahorizon.wanderly.ui.AuthViewModel
@@ -25,7 +24,7 @@ class LoginFragment : Fragment() {
     private val binding get() = _binding!!
     
     private val viewModel: AuthViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyRepository(requireContext()))
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
 
     override fun onCreateView(
@@ -46,12 +45,12 @@ class LoginFragment : Fragment() {
             val password = binding.passwordInput.text.toString()
 
             if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                showSnackbar("Invalid email format", isError = true)
+                showSnackbar(getString(R.string.auth_invalid_email), isError = true)
                 return@setOnClickListener
             }
 
             if (password.isEmpty()) {
-                showSnackbar("Password is required", isError = true)
+                showSnackbar(getString(R.string.auth_password_required), isError = true)
                 return@setOnClickListener
             }
 
@@ -75,8 +74,7 @@ class LoginFragment : Fragment() {
                     val prefs = requireContext().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                     prefs.edit().putBoolean(Constants.KEY_REMEMBER_ME, isRememberMeChecked).apply()
 
-                    startActivity(Intent(requireContext(), MainActivity::class.java))
-                    requireActivity().finish()
+                    SessionNavigator.openMain(requireActivity())
                 }
                 is AuthViewModel.AuthState.Error -> {
                     binding.loginButton.isEnabled = true

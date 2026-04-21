@@ -49,6 +49,22 @@
         app:layout_constraintTop_toBottomOf="@id/social_tabs"
         tools:listitem="@layout/item_social_profile" />
 
+    <TextView
+        android:id="@+id/social_empty_state"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingHorizontal="32dp"
+        android:text="@string/social_empty_leaderboard"
+        android:textColor="@color/text_secondary"
+        android:textSize="16sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/add_friend_layout"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/social_tabs"
+        tools:visibility="visible" />
+
     <LinearLayout
         android:id="@+id/add_friend_layout"
         android:layout_width="match_parent"

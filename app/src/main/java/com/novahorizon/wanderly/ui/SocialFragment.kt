@@ -17,16 +17,16 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
-import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.showSnackbar
 import java.util.Locale
 
 class SocialFragment : Fragment() {
 
     private val viewModel: SocialViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyRepository(requireContext()))
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
     
     private lateinit var socialTabs: TabLayout
@@ -35,6 +35,7 @@ class SocialFragment : Fragment() {
     private lateinit var friendCodeInput: EditText
     private lateinit var addFriendButton: View
     private lateinit var loadingIndicator: View
+    private lateinit var emptyStateText: TextView
     private var formattingFriendCode = false
 
     private val socialAdapter = SocialAdapter { profile ->
@@ -52,6 +53,7 @@ class SocialFragment : Fragment() {
         friendCodeInput = view.findViewById(R.id.friend_username_input)
         addFriendButton = view.findViewById(R.id.add_friend_button)
         loadingIndicator = view.findViewById(R.id.social_loading)
+        emptyStateText = view.findViewById(R.id.social_empty_state)
         
         socialRecycler.layoutManager = LinearLayoutManager(requireContext())
         socialRecycler.adapter = socialAdapter
@@ -81,10 +83,18 @@ class SocialFragment : Fragment() {
                     0 -> { // Leaderboard
                         addFriendLayout.visibility = View.GONE
                         viewModel.loadLeaderboard()
+                        renderEmptyState(
+                            profiles = viewModel.leaderboard.value.orEmpty(),
+                            emptyMessage = R.string.social_empty_leaderboard
+                        )
                     }
                     1 -> { // Friends
                         addFriendLayout.visibility = View.VISIBLE
                         viewModel.loadFriends()
+                        renderEmptyState(
+                            profiles = viewModel.friends.value.orEmpty(),
+                            emptyMessage = R.string.social_empty_friends
+                        )
                     }
                 }
             }
@@ -107,17 +117,29 @@ class SocialFragment : Fragment() {
     private fun setupObservers() {
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
             loadingIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
+            if (isLoading) {
+                emptyStateText.visibility = View.GONE
+                socialRecycler.visibility = View.VISIBLE
+            }
         }
 
         viewModel.leaderboard.observe(viewLifecycleOwner) { profiles ->
             if (socialTabs.selectedTabPosition == 0) {
                 socialAdapter.submitProfiles(profiles, showRank = true, canRemove = false)
+                renderEmptyState(
+                    profiles = profiles,
+                    emptyMessage = R.string.social_empty_leaderboard
+                )
             }
         }
 
         viewModel.friends.observe(viewLifecycleOwner) { profiles ->
             if (socialTabs.selectedTabPosition == 1) {
                 socialAdapter.submitProfiles(profiles, showRank = false, canRemove = true)
+                renderEmptyState(
+                    profiles = profiles,
+                    emptyMessage = R.string.social_empty_friends
+                )
             }
         }
 
@@ -139,6 +161,17 @@ class SocialFragment : Fragment() {
             }
             .setNegativeButton(R.string.social_remove_friend_cancel, null)
             .show()
+    }
+
+    private fun renderEmptyState(profiles: List<Profile>, emptyMessage: Int) {
+        if (profiles.isEmpty()) {
+            socialRecycler.visibility = View.GONE
+            emptyStateText.visibility = View.VISIBLE
+            emptyStateText.text = getString(emptyMessage)
+        } else {
+            socialRecycler.visibility = View.VISIBLE
+            emptyStateText.visibility = View.GONE
+        }
     }
 }
 

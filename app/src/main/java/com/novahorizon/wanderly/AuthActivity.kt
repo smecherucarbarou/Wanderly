@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthCallbackMatcher
 import com.novahorizon.wanderly.auth.AuthRouting
+import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.databinding.ActivityAuthBinding
 import io.github.jan.supabase.auth.auth
@@ -58,8 +59,7 @@ class AuthActivity : AppCompatActivity() {
     }
 
     private fun navigateToMain() {
-        startActivity(Intent(this, MainActivity::class.java))
-        finish()
+        SessionNavigator.openMain(this)
     }
 
     private fun showAuthUi() {

@@ -2,6 +2,9 @@ package com.novahorizon.wanderly.data
 
 import android.util.Log
 import com.novahorizon.wanderly.api.PlacesProxyClient
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -162,19 +165,36 @@ class DiscoveryRepository {
             "tourist attraction in $city",
             "park in $city"
         )
-        val candidates = mutableListOf<DiscoveredPlace>()
-
-        for (query in queries) {
-            try {
-                val body = JSONObject().apply {
-                    put("textQuery", query)
+        val candidates = coroutineScope {
+            queries.map { query ->
+                async {
+                    fetchCandidatesFromGooglePlacesQuery(query, userLat, userLng, radiusMeters)
                 }
-                val responseJson = PlacesProxyClient.searchText(
-                    body = body,
-                    fieldMask = "places.displayName,places.location,places.formattedAddress,places.types,places.primaryType,places.businessStatus,places.rating,places.userRatingCount"
-                )
+            }.awaitAll().flatten()
+        }
 
-                val places = responseJson.optJSONArray("places") ?: continue
+        return@withContext candidates
+            .distinctBy { it.name.lowercase() }
+            .sortedBy { distanceKm(userLat, userLng, it.lat, it.lng) }
+    }
+
+    private suspend fun fetchCandidatesFromGooglePlacesQuery(
+        query: String,
+        userLat: Double,
+        userLng: Double,
+        radiusMeters: Int
+    ): List<DiscoveredPlace> {
+        return try {
+            val body = JSONObject().apply {
+                put("textQuery", query)
+            }
+            val responseJson = PlacesProxyClient.searchText(
+                body = body,
+                fieldMask = "places.displayName,places.location,places.formattedAddress,places.types,places.primaryType,places.businessStatus,places.rating,places.userRatingCount"
+            )
+
+            val places = responseJson.optJSONArray("places") ?: return emptyList()
+            buildList {
                 for (index in 0 until places.length()) {
                     val place = places.getJSONObject(index)
                     val businessStatus = place.optString("businessStatus", "OPERATIONAL")
@@ -200,25 +220,24 @@ class DiscoveryRepository {
                     val name = place.optJSONObject("displayName")?.optString("text").orEmpty().trim()
                     if (name.isBlank()) continue
 
-                    candidates += DiscoveredPlace(
-                        name = name,
-                        lat = lat,
-                        lng = lng,
-                        category = mapCategoryFromTypes(typeSet),
-                        areaLabel = place.optString("formattedAddress", "").substringBefore(",").trim().ifBlank { null },
-                        source = "google",
-                        rating = place.optDouble("rating").takeIf { !it.isNaN() && it > 0.0 },
-                        reviewCount = place.optInt("userRatingCount").takeIf { it > 0 }
+                    add(
+                        DiscoveredPlace(
+                            name = name,
+                            lat = lat,
+                            lng = lng,
+                            category = mapCategoryFromTypes(typeSet),
+                            areaLabel = place.optString("formattedAddress", "").substringBefore(",").trim().ifBlank { null },
+                            source = "google",
+                            rating = place.optDouble("rating").takeIf { !it.isNaN() && it > 0.0 },
+                            reviewCount = place.optInt("userRatingCount").takeIf { it > 0 }
+                        )
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("DiscoveryRepository", "Google Places fallback error: ${e.message}")
             }
+        } catch (e: Exception) {
+            Log.e("DiscoveryRepository", "Google Places fallback error for query '$query': ${e.message}")
+            emptyList()
         }
-
-        candidates
-            .distinctBy { it.name.lowercase() }
-            .sortedBy { distanceKm(userLat, userLng, it.lat, it.lng) }
     }
 
     private fun mapCategory(tags: JSONObject): String {

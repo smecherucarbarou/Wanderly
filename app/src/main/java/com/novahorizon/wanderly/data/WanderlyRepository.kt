@@ -7,9 +7,11 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-class WanderlyRepository(val context: Context) {
-    private val preferencesStore = PreferencesStore(context)
-    private val profileRepository = ProfileRepository(context, preferencesStore)
+class WanderlyRepository(context: Context) {
+    val context: Context = context.applicationContext
+
+    private val preferencesStore = PreferencesStore(this.context)
+    private val profileRepository = ProfileRepository(this.context, preferencesStore)
     private val socialRepository = SocialRepository()
     private val discoveryRepository = DiscoveryRepository()
 

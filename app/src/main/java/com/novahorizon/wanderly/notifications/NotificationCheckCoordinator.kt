@@ -148,11 +148,24 @@ object NotificationCheckCoordinator {
             }
 
             else -> {
-                log(
-                    "social",
-                    source,
-                    "Grouped rival activity is temporarily disabled (${rivalsFinishedToday.size} rivals today)."
-                )
+                val signature = rivalsFinishedToday
+                    .map { it.id }
+                    .sorted()
+                    .joinToString(",")
+                if (hasAggregateChanged(context, today, signature)) {
+                    val posted = WanderlyNotificationManager.sendAggregatedRivalActivity(
+                        context,
+                        rivalsFinishedToday.size
+                    )
+                    if (posted) {
+                        persistAggregateState(context, today, signature)
+                        log("social", source, "Sent grouped rival activity for ${rivalsFinishedToday.size} rivals.")
+                    } else {
+                        log("social", source, "Grouped rival activity suppressed for ${rivalsFinishedToday.size} rivals.")
+                    }
+                } else {
+                    log("social", source, "Grouped rival activity already handled for signature=$signature.")
+                }
             }
         }
 
@@ -309,12 +322,16 @@ object NotificationCheckCoordinator {
             return
         }
 
-        WanderlyNotificationManager.sendOvertakenAlert(
+        val posted = WanderlyNotificationManager.sendOvertakenAlert(
             context,
             topRival.username ?: "Someone"
         )
-        prefs.edit().putString(KEY_SOCIAL_TOP_OVERTAKEN, topRival.id).apply()
-        log("social", source, "Sent overtaken alert for ${topRival.id}.")
+        if (posted) {
+            prefs.edit().putString(KEY_SOCIAL_TOP_OVERTAKEN, topRival.id).apply()
+            log("social", source, "Sent overtaken alert for ${topRival.id}.")
+        } else {
+            log("social", source, "Overtaken alert suppressed for ${topRival.id}.")
+        }
     }
 
     private fun handleThreatState(context: Context, topThreat: Profile?, source: String) {
@@ -334,12 +351,16 @@ object NotificationCheckCoordinator {
             return
         }
 
-        WanderlyNotificationManager.sendFightForFirst(
+        val posted = WanderlyNotificationManager.sendFightForFirst(
             context,
             topThreat.username ?: "Someone"
         )
-        prefs.edit().putString(KEY_SOCIAL_TOP_THREAT, topThreat.id).apply()
-        log("social", source, "Sent fight-for-first alert for ${topThreat.id}.")
+        if (posted) {
+            prefs.edit().putString(KEY_SOCIAL_TOP_THREAT, topThreat.id).apply()
+            log("social", source, "Sent fight-for-first alert for ${topThreat.id}.")
+        } else {
+            log("social", source, "Fight-for-first alert suppressed for ${topThreat.id}.")
+        }
     }
 
     private fun markRivalMissionIfNew(context: Context, day: String, rivalId: String): Boolean {
@@ -353,19 +374,18 @@ object NotificationCheckCoordinator {
         return true
     }
 
-    private fun markAggregateIfChanged(context: Context, day: String, signature: String): Boolean {
+    private fun hasAggregateChanged(context: Context, day: String, signature: String): Boolean {
         val prefs = prefs(context)
         val savedDay = prefs.getString(KEY_SOCIAL_AGGREGATE_DATE, null)
         val savedSignature = prefs.getString(KEY_SOCIAL_AGGREGATE_SIGNATURE, null)
-        if (savedDay == day && savedSignature == signature) {
-            return false
-        }
+        return savedDay != day || savedSignature != signature
+    }
 
-        prefs.edit()
+    private fun persistAggregateState(context: Context, day: String, signature: String) {
+        prefs(context).edit()
             .putString(KEY_SOCIAL_AGGREGATE_DATE, day)
             .putString(KEY_SOCIAL_AGGREGATE_SIGNATURE, signature)
             .apply()
-        return true
     }
 
     private fun clearTopState(context: Context) {

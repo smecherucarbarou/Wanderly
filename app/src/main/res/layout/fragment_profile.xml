@@ -63,6 +63,7 @@
                             android:id="@+id/buzzy_avatar"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
+                            android:contentDescription="@null"
                             android:padding="12dp"
                             android:scaleType="centerCrop"
                             android:src="@drawable/ic_buzzy" />
@@ -74,6 +75,7 @@
                     android:layout_width="160dp"
                     android:layout_height="160dp"
                     android:layout_gravity="center"
+                    android:contentDescription="@null"
                     android:elevation="5dp"
                     android:src="@drawable/ic_streak_fire"
                     android:visibility="gone"
@@ -87,6 +89,7 @@
                     android:layout_marginEnd="16dp"
                     android:layout_marginBottom="16dp"
                     android:background="@drawable/bg_button_gradient"
+                    android:contentDescription="@string/profile_change_avatar"
                     android:elevation="6dp"
                     android:padding="8dp"
                     android:src="@android:drawable/ic_menu_camera"
@@ -119,6 +122,7 @@
                     android:layout_height="32dp"
                     android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/profile_edit_username"
                     android:src="@android:drawable/ic_menu_edit"
                     app:tint="@color/primary" />
             </LinearLayout>
@@ -266,7 +270,7 @@
                         android:id="@+id/missions_completed_count"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0"
+                        android:text="@string/profile_zero_stat"
                         android:textColor="@color/primary"
                         android:textSize="22sp"
                         android:textStyle="bold" />
@@ -320,7 +324,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Next Rank in 50 Honey"
+                    android:text="@string/profile_progress_default"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>

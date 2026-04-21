@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -25,12 +26,11 @@ import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class HiveRealtimeService : Service() {
@@ -38,11 +38,12 @@ class HiveRealtimeService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: WanderlyRepository
     private var realtimeChannel: RealtimeChannel? = null
+    private var realtimeCollectorJob: Job? = null
     private var isSubscribed = false
 
     override fun onCreate() {
         super.onCreate()
-        repository = WanderlyRepository(this)
+        repository = WanderlyGraph.repository(this)
         startForegroundService()
         observeHiveChanges()
     }
@@ -96,23 +97,6 @@ class HiveRealtimeService : Service() {
                     }
                 }.launchIn(this)
 
-                while (isActive) {
-                    NotificationCheckCoordinator.runTimedStreakCheck(
-                        context = applicationContext,
-                        repository = repository,
-                        source = "service_timer"
-                    )
-                    NotificationCheckCoordinator.runSocialFallbackCheck(
-                        context = applicationContext,
-                        repository = repository,
-                        source = "service_timer"
-                    )
-                    if (SupabaseClient.client.realtime.status.value != Realtime.Status.CONNECTED) {
-                        Log.w("HiveRealtime", "Not connected, attempting reconnection...")
-                        SupabaseClient.client.realtime.connect()
-                    }
-                    delay(20_000)
-                }
             } catch (e: Exception) {
                 Log.e("HiveRealtime", "Critical error in service", e)
             }
@@ -120,6 +104,7 @@ class HiveRealtimeService : Service() {
     }
 
     private suspend fun setupSubscription(currentUserId: String) {
+        realtimeCollectorJob?.cancel()
         realtimeChannel?.unsubscribe()
 
         val channel = SupabaseClient.client.realtime.channel("hive_updates")
@@ -142,18 +127,19 @@ class HiveRealtimeService : Service() {
                 currentProfile = currentProfile,
                 updatedProfile = updatedProfile
             )
-        }.launchIn(serviceScope)
+        }.launchIn(serviceScope).also { realtimeCollectorJob = it }
 
         channel.subscribe()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         serviceScope.launch {
             try {
+                realtimeCollectorJob?.cancel()
                 realtimeChannel?.unsubscribe()
                 Log.d("HiveRealtime", "Unsubscribed from channel.")
             } catch (e: Exception) {
