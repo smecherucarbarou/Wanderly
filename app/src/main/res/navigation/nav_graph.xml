@@ -6,6 +6,21 @@
     app:startDestination="@id/mapFragment">
 
     <fragment
+        android:id="@+id/onboardingFragment"
+        android:name="com.novahorizon.wanderly.ui.onboarding.OnboardingFragment"
+        android:label="Onboarding">
+        <action
+            android:id="@+id/action_onboarding_to_map"
+            app:destination="@id/mapFragment"
+            app:enterAnim="@anim/fade_in"
+            app:exitAnim="@anim/fade_out"
+            app:popEnterAnim="@anim/fade_in"
+            app:popExitAnim="@anim/fade_out"
+            app:popUpTo="@id/onboardingFragment"
+            app:popUpToInclusive="true" />
+    </fragment>
+
+    <fragment
         android:id="@+id/mapFragment"
         android:name="com.novahorizon.wanderly.ui.map.MapFragment"
         android:label="Map"
@@ -13,7 +28,11 @@
         <action
             android:id="@+id/action_map_to_missions"
             app:destination="@id/missionsFragment"
+            app:enterAnim="@anim/slide_in_right"
             app:launchSingleTop="true"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right"
             app:popUpTo="@id/mapFragment"
             app:popUpToInclusive="false" />
     </fragment>
@@ -43,7 +62,11 @@
         tools:layout="@layout/fragment_profile">
         <action
             android:id="@+id/action_profile_to_devDashboard"
-            app:destination="@id/devDashboardFragment" />
+            app:destination="@id/devDashboardFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
     </fragment>
 
     <fragment

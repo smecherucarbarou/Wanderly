@@ -5,6 +5,7 @@ object Constants {
     const val KEY_LAST_VISIT = "last_visit_date"
     const val KEY_USERNAME = "username"
     const val KEY_REMEMBER_ME = "remember_me"
+    const val KEY_ONBOARDING_SEEN = "onboarding_seen"
     const val KEY_MISSION_TEXT = "mission_text"
     const val KEY_MISSION_TARGET = "mission_target_name"
     const val KEY_MISSION_CITY = "mission_target_city"
@@ -13,6 +14,8 @@ object Constants {
     const val KEY_MISSION_TARGET_LNG = "mission_target_lng"
     const val KEY_MISSION_TARGET_LAT_TYPED = "mission_target_lat_typed"
     const val KEY_MISSION_TARGET_LNG_TYPED = "mission_target_lng_typed"
+    const val KEY_LOCAL_LAST_MISSION_DATE = "local_last_mission_date"
+    const val KEY_LOCAL_STREAK_COUNT = "local_streak_count"
 
     const val AUTH_CALLBACK_SCHEME = "wanderly"
     const val AUTH_CALLBACK_HOST = "auth"

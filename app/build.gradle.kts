@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.com.google.android.material.material)
     implementation(libs.androidx.constraintlayout.constraintlayout)
+    implementation(libs.androidx.viewpager2)
     
     // Navigation Component
     implementation(libs.androidx.navigation.fragment.ktx)
@@ -65,6 +66,7 @@ dependencies {
     
     // OSMDroid
     implementation(libs.osmdroid.android)
+    implementation(libs.osmdroid.bonuspack)
     
     // Location
     implementation(libs.play.services.location)
@@ -83,6 +85,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.datastore.preferences)
 
     // Glide
     implementation(libs.glide)
@@ -101,4 +104,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.espresso.intents)
 }

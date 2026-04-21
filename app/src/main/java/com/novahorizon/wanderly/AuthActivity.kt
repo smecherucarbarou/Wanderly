@@ -14,6 +14,7 @@ import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.databinding.ActivityAuthBinding
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.coroutines.launch
 
 class AuthActivity : AppCompatActivity() {
@@ -29,30 +30,22 @@ class AuthActivity : AppCompatActivity() {
             val uri = intent.data
 
             if (isAuthCallback(uri)) {
-                try {
-                    SupabaseClient.client.auth.importAuthToken(uri.toString())
-                    navigateToMain()
-                    return@launch
-                } catch (e: Exception) {
-                    Log.e("AuthActivity", "Failed to import auth callback (${e.javaClass.simpleName})")
-                }
-            }
-
-            val rememberMe = WanderlyGraph.repository(this@AuthActivity).isRememberMeEnabled()
-            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-
-            if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {
-                navigateToMain()
-            } else {
-                if (session != null && !rememberMe) {
-                    try {
-                        SupabaseClient.client.auth.signOut()
-                    } catch (e: Exception) {
-                        Log.e("AuthActivity", "Sign out error: ${e.message}")
+                SupabaseClient.client.handleDeeplinks(
+                    intent = intent,
+                    onSessionSuccess = {
+                        navigateToMain()
+                    },
+                    onError = { error ->
+                        Log.e("AuthActivity", "Failed to import auth callback (${error.javaClass.simpleName})")
+                        lifecycleScope.launch {
+                            resumeStandardAuthFlow()
+                        }
                     }
-                }
-                showAuthUi()
+                )
+                return@launch
             }
+
+            resumeStandardAuthFlow()
         }
     }
 
@@ -63,6 +56,24 @@ class AuthActivity : AppCompatActivity() {
     private fun showAuthUi() {
         binding.authLoading.visibility = View.GONE
         binding.authNavHost.visibility = View.VISIBLE
+    }
+
+    private suspend fun resumeStandardAuthFlow() {
+        val rememberMe = WanderlyGraph.repository(this@AuthActivity).isRememberMeEnabled()
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+
+        if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {
+            navigateToMain()
+        } else {
+            if (session != null && !rememberMe) {
+                try {
+                    SupabaseClient.client.auth.signOut()
+                } catch (e: Exception) {
+                    Log.e("AuthActivity", "Sign out error: ${e.message}")
+                }
+            }
+            showAuthUi()
+        }
     }
 
     private fun isAuthCallback(uri: Uri?): Boolean {

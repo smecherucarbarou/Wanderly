@@ -128,17 +128,38 @@
                     app:tint="@color/primary" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/friend_code_display"
+            <LinearLayout
+                android:id="@+id/friend_code_layout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/username_layout"
-                tools:text="Friend Code: A1B2C3" />
+                app:layout_constraintTop_toBottomOf="@id/username_layout">
+
+                <TextView
+                    android:id="@+id/friend_code_display"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    tools:text="Friend Code: A1B2C3" />
+
+                <ImageButton
+                    android:id="@+id/share_friend_code_button"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/profile_share_friend_code"
+                    android:padding="8dp"
+                    android:src="@android:drawable/ic_menu_share"
+                    android:visibility="gone"
+                    app:tint="@color/primary"
+                    tools:visibility="visible" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/rank_badge"
@@ -152,7 +173,7 @@
                 android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/friend_code_display"
+                app:layout_constraintTop_toBottomOf="@id/friend_code_layout"
                 tools:text="Worker Bee" />
 
             <TextView

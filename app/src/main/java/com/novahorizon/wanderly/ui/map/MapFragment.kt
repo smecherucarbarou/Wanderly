@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.location.Location
 import android.net.Uri
@@ -33,10 +34,11 @@ import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.social.SocialViewModel
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
+import org.osmdroid.bonuspack.clustering.RadiusMarkerClusterer
+import org.osmdroid.bonuspack.overlays.Marker
 import org.osmdroid.events.MapListener
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 
@@ -52,7 +54,9 @@ class MapFragment : Fragment() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private val friendMarkers = mutableListOf<Marker>()
+    private var friendClusterer: RadiusMarkerClusterer? = null
     private var friendMarkerIcon: BitmapDrawable? = null
+    private var friendClusterIcon: Bitmap? = null
     private var mapListener: MapListener? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -97,6 +101,7 @@ class MapFragment : Fragment() {
         binding.mapView.setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
 
         binding.mapView.controller.setZoom(16.0)
+        friendClusterer = buildFriendClusterer().also { binding.mapView.overlays.add(it) }
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
@@ -123,22 +128,23 @@ class MapFragment : Fragment() {
         
         // Observe friends to display on map
         viewModel.friends.observe(viewLifecycleOwner) { friends ->
-            _binding?.mapView?.overlays?.removeAll(friendMarkers)
+            friendClusterer?.items?.clear()
             friendMarkers.clear()
-            
+
             friends.forEach { friend ->
                 if (friend.last_lat != null && friend.last_lng != null) {
                     val marker = Marker(binding.mapView).apply {
                         position = GeoPoint(friend.last_lat, friend.last_lng)
                         title = friend.username
-                        icon = getFriendMarkerIcon()
+                        setIcon(getFriendMarkerIcon())
 
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     }
                     friendMarkers.add(marker)
-                    _binding?.mapView?.overlays?.add(marker)
+                    friendClusterer?.add(marker)
                 }
             }
+            friendClusterer?.invalidate()
             _binding?.mapView?.invalidate()
         }
 
@@ -294,6 +300,40 @@ class MapFragment : Fragment() {
         return BitmapDrawable(resources, bitmap).also { friendMarkerIcon = it }
     }
 
+    private fun buildFriendClusterer(): RadiusMarkerClusterer {
+        return WanderlyRadiusMarkerClusterer(requireContext()).apply {
+            setIcon(getFriendClusterIcon())
+            setRadius(120)
+            setMaxClusteringZoomLevel(16)
+            textPaint.apply {
+                color = ContextCompat.getColor(requireContext(), R.color.text_primary)
+                textAlign = Paint.Align.CENTER
+                isFakeBoldText = true
+                textSize = 20f * resources.displayMetrics.density
+                isAntiAlias = true
+            }
+        }
+    }
+
+    private fun getFriendClusterIcon(): Bitmap {
+        friendClusterIcon?.let { return it }
+
+        val size = (72 * resources.displayMetrics.density).toInt()
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        ContextCompat.getDrawable(requireContext(), R.drawable.bg_button_gradient)?.let { background ->
+            background.setBounds(0, 0, size, size)
+            background.draw(canvas)
+        }
+        ContextCompat.getDrawable(requireContext(), R.drawable.ic_honeycomb)?.let { honeycomb ->
+            val inset = size / 4
+            honeycomb.alpha = 160
+            honeycomb.setBounds(inset, inset, size - inset, size - inset)
+            honeycomb.draw(canvas)
+        }
+        return bitmap.also { friendClusterIcon = it }
+    }
+
     override fun onResume() {
         super.onResume()
         if (_binding == null) return
@@ -311,7 +351,7 @@ class MapFragment : Fragment() {
         val mapView = _binding?.mapView
         if (mapView != null) {
             mapListener?.let { mapView.removeMapListener(it) }
-            mapView.overlays.removeAll(friendMarkers)
+            friendClusterer?.let { mapView.overlays.remove(it) }
             myLocationOverlay?.disableFollowLocation()
             myLocationOverlay?.disableMyLocation()
             myLocationOverlay?.let { mapView.overlays.remove(it) }
@@ -321,7 +361,9 @@ class MapFragment : Fragment() {
         }
         mapListener = null
         myLocationOverlay = null
+        friendClusterer = null
         friendMarkerIcon = null
+        friendClusterIcon = null
         super.onDestroyView()
         _binding = null
     }

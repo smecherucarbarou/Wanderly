@@ -19,6 +19,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -29,19 +30,13 @@ import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.GeminiClient
-import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
-import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
-import com.novahorizon.wanderly.util.AiResponseParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import java.text.Normalizer
 import java.util.Locale
 
@@ -54,14 +49,14 @@ class GemsFragment : Fragment() {
     private lateinit var refreshBtn: ImageButton
     private lateinit var emptyStateText: TextView
     private lateinit var retryBtn: Button
-    private lateinit var repository: WanderlyRepository
+    private val viewModel: GemsViewModel by viewModels {
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
+    }
 
     private val gemsAdapter = GemsAdapter { gem ->
         openInMaps(gem)
     }
 
-    private val json = Json { ignoreUnknownKeys = true }
-    private val seenGemsHistory = mutableSetOf<String>()
     private val requestLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -71,14 +66,6 @@ class GemsFragment : Fragment() {
             showLocationPermissionFeedback()
         }
     }
-
-    @Serializable
-    private data class GemPick(
-        @SerialName("candidateIndex") val candidateIndex: Int,
-        @SerialName("description") val description: String,
-        @SerialName("reason") val reason: String,
-        @SerialName("category") val category: String
-    )
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -93,7 +80,6 @@ class GemsFragment : Fragment() {
         refreshBtn = view.findViewById(R.id.refresh_gems_btn)
         emptyStateText = view.findViewById(R.id.gems_empty_state)
         retryBtn = view.findViewById(R.id.gems_retry_button)
-        repository = WanderlyGraph.repository(requireContext())
 
         gemsRecycler.layoutManager = LinearLayoutManager(requireContext())
         gemsRecycler.adapter = gemsAdapter
@@ -102,6 +88,37 @@ class GemsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        viewModel.gemsState.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                is GemsViewModel.GemsState.Idle -> Unit
+                is GemsViewModel.GemsState.Loading -> showLoadingState(state.message)
+                is GemsViewModel.GemsState.Loaded -> {
+                    hideEmptyState()
+                    gemsRecycler.visibility = View.VISIBLE
+                    gemsAdapter.submitList(state.gems)
+                    loadingIndicator.visibility = View.GONE
+                    loadingText.visibility = View.GONE
+                    refreshBtn.isEnabled = true
+                }
+
+                is GemsViewModel.GemsState.Empty -> {
+                    gemsAdapter.submitList(emptyList())
+                    showEmptyStateText(state.message, showRetry = true)
+                }
+
+                is GemsViewModel.GemsState.Error -> {
+                    gemsAdapter.submitList(emptyList())
+                    showErrorState(state.message)
+                }
+            }
+        }
+
+        viewModel.message.observe(viewLifecycleOwner) { message ->
+            if (message.isNullOrBlank()) return@observe
+            showSnackbar(message, isError = true)
+            viewModel.clearMessage()
+        }
 
         refreshBtn.setOnClickListener {
             requestGemsLoad()
@@ -170,7 +187,7 @@ class GemsFragment : Fragment() {
                     }
 
                     if (isAdded && view != null) {
-                        loadGemsWithGemini(location.latitude, location.longitude, searchCity)
+                        viewModel.loadGems(location.latitude, location.longitude, searchCity)
                     }
                 }
             } else if (isAdded && view != null) {
@@ -218,71 +235,6 @@ class GemsFragment : Fragment() {
         startActivity(intent)
     }
 
-    private fun loadGemsWithGemini(lat: Double, lng: Double, city: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                if (isAdded && view != null) {
-                    showLoadingState(getString(R.string.gems_loading_city_format, city))
-                }
-
-                val candidates = repository.fetchHiddenGemCandidates(lat, lng, 2500, city)
-                    .filterNot { seenGemsHistory.contains(it.name) }
-                    .take(40)
-
-                if (candidates.isEmpty()) {
-                    throw Exception("Not enough verified local place candidates nearby yet.")
-                }
-
-                val prompt = buildCuratedPrompt(city, candidates)
-                val response = GeminiClient.generateWithSearch(prompt)
-                val cleanJson = AiResponseParser.extractFirstJsonArray(response)
-                    ?: throw IllegalStateException(getString(R.string.gems_invalid_response))
-                val gemPicks = runCatching {
-                    json.decodeFromString<List<GemPick>>(cleanJson)
-                }.onFailure {
-                    if (BuildConfig.DEBUG) {
-                        logDebug("Raw gem response: $response")
-                    }
-                }.getOrElse {
-                    throw IllegalStateException(getString(R.string.gems_invalid_response))
-                }
-
-                val gems = gemPicks.mapNotNull { pick ->
-                    val candidate = candidates.getOrNull(pick.candidateIndex - 1) ?: return@mapNotNull null
-                    seenGemsHistory.add(candidate.name)
-                    candidate.toGem(
-                        description = pick.description,
-                        reason = pick.reason,
-                        pickedCategory = pick.category,
-                        fallbackLocation = city
-                    )
-                }.distinctBy { it.name.lowercase() }
-
-                if (isAdded && view != null) {
-                    if (gems.isEmpty()) {
-                        showEmptyState(R.string.gems_empty_state)
-                        showSnackbar(getString(R.string.gems_no_fresh_results), isError = true)
-                    } else {
-                        hideEmptyState()
-                        gemsRecycler.visibility = View.VISIBLE
-                    }
-                    gemsAdapter.submitList(gems)
-                    loadingIndicator.visibility = View.GONE
-                    loadingText.visibility = View.GONE
-                    refreshBtn.isEnabled = true
-                }
-            } catch (e: Exception) {
-                logError("Error loading gems", e)
-                if (isAdded && view != null) {
-                    val message = e.message?.takeIf { it.isNotBlank() }
-                        ?: getString(R.string.gems_loading_failed)
-                    showErrorState(message)
-                    showSnackbar(getString(R.string.gems_loading_failed), isError = true)
-                }
-            }
-        }
-    }
-
     private fun showLoadingState(message: String = getString(R.string.gems_loading_default)) {
         gemsRecycler.visibility = View.VISIBLE
         refreshBtn.isEnabled = false
@@ -295,10 +247,6 @@ class GemsFragment : Fragment() {
     private fun showErrorState(message: String) {
         gemsAdapter.submitList(emptyList())
         showEmptyStateText(message, showRetry = true)
-    }
-
-    private fun showEmptyState(messageRes: Int) {
-        showEmptyStateText(getString(messageRes), showRetry = true)
     }
 
     private fun showEmptyStateText(message: String, showRetry: Boolean) {
@@ -314,69 +262,6 @@ class GemsFragment : Fragment() {
     private fun hideEmptyState() {
         emptyStateText.visibility = View.GONE
         retryBtn.visibility = View.GONE
-    }
-
-    private fun buildCuratedPrompt(city: String, candidates: List<DiscoveredPlace>): String {
-        val historyFilter = if (seenGemsHistory.isNotEmpty()) {
-            "Avoid places the user has already seen recently: ${seenGemsHistory.toList().takeLast(12).joinToString(", ")}."
-        } else {
-            ""
-        }
-
-        val candidateList = candidates.mapIndexed { index, candidate ->
-            val area = candidate.areaLabel?.takeIf { it.isNotBlank() } ?: city
-            val ratingInfo = when {
-                candidate.rating != null && candidate.reviewCount != null -> " | rating=${"%.1f".format(Locale.US, candidate.rating)} | reviews=${candidate.reviewCount}"
-                else -> ""
-            }
-            "${index + 1}. ${candidate.name} | category=${candidate.category} | area=$area | source=${candidate.source}$ratingInfo"
-        }.joinToString("\n")
-
-        val maxPicks = minOf(6, candidates.size)
-        val minPicks = minOf(4, maxPicks).coerceAtLeast(1)
-
-        return """
-            You are curating Hidden Gems for a travel app in $city.
-            You MUST pick ONLY from the numbered candidate list below.
-            Do not invent names, do not translate names, and do not rename any place.
-            Return between $minPicks and $maxPicks picks.
-
-            Prioritize:
-            - stylish food and drinks spots first
-            - specialty coffee, brunch, dessert, bakery, ice cream, terraces, and date-night restaurants
-            - bars and lounges only if they feel polished, welcoming, and not too rough
-            - memorable culture spots only if they feel genuinely visit-worthy
-            - places that feel worth opening in Maps right away
-            - places that sound real, public, and visitable today
-            - a mix that feels good for both young adults and occasional kid-friendly daytime visits
-
-            Rules:
-            - Use each candidate at most once.
-            - Make most picks Food or soft daytime-friendly options if possible.
-            - Drinks should appear, but should not dominate the list.
-            - Culture and Viewpoint should be occasional, not dominant, unless the candidate list is weak.
-            - If a candidate sounds weak, skip it instead of forcing it.
-            - Prefer source=google and places with ratings/reviews when available.
-            - Do NOT write historical claims, backstory, legends, or factual statements you cannot verify from the candidate list itself.
-            - Description and reason must stay short, practical, and vibe-based.
-            - Avoid places that feel mainly for heavy drinking, rowdy nightlife, or an unsafe/rough vibe unless the list is extremely limited.
-            - Bad example: "where Constantin Brancusi was an apprentice".
-            - Good example: "A lively cocktail stop with a polished local vibe."
-            - Good example: "A stylish coffee pick that feels worth a detour."
-            - Good example: "A relaxed dessert stop that works well in the daytime too."
-            $historyFilter
-
-            Candidate list:
-            $candidateList
-
-            Return ONLY a raw JSON array with objects in this exact shape:
-            {
-              "candidateIndex": 1,
-              "description": "One short stylish sentence.",
-              "reason": "Why it stands out in one sentence.",
-              "category": "Food"
-            }
-        """.trimIndent()
     }
 
     private fun resolveSearchCity(address: Address?): String {
@@ -421,28 +306,6 @@ class GemsFragment : Fragment() {
         return normalized.startsWith("judet") || normalized.endsWith(" county")
     }
 
-    private fun DiscoveredPlace.toGem(
-        description: String,
-        reason: String,
-        pickedCategory: String,
-        fallbackLocation: String
-    ): Gem {
-        val safeDescription = description.trim().ifBlank { "A local spot worth checking out while you wander." }
-        val safeReason = reason.trim().ifBlank { "It stands out from the usual route." }
-        val safeCategory = pickedCategory.trim().ifBlank { category }
-        val safeLocation = areaLabel?.takeIf { it.isNotBlank() } ?: fallbackLocation
-
-        return Gem(
-            name = name,
-            description = safeDescription,
-            location = safeLocation,
-            reason = safeReason,
-            category = safeCategory,
-            lat = lat,
-            lng = lng
-        )
-    }
-
     private fun openInMaps(gem: Gem) {
         val geoUri = Uri.parse("geo:${gem.lat},${gem.lng}?q=${Uri.encode(gem.name)}")
         val mapsIntent = Intent(Intent.ACTION_VIEW, geoUri).setPackage("com.google.android.apps.maps")
@@ -460,15 +323,6 @@ class GemsFragment : Fragment() {
         }
     }
 
-    private fun logError(message: String, throwable: Throwable? = null) {
-        if (BuildConfig.DEBUG) {
-            if (throwable != null) {
-                android.util.Log.e(logTag, message, throwable)
-            } else {
-                android.util.Log.e(logTag, message)
-            }
-        }
-    }
 }
 
 class GemsAdapter(private val onGemClick: (Gem) -> Unit) : ListAdapter<Gem, GemsAdapter.ViewHolder>(GemDiffCallback()) {

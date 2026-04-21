@@ -5,15 +5,20 @@ import android.util.Patterns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.databinding.FragmentLoginBinding
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.Google
+import kotlinx.coroutines.launch
 
 class LoginFragment : Fragment() {
 
@@ -22,6 +27,10 @@ class LoginFragment : Fragment() {
     
     private val viewModel: AuthViewModel by viewModels {
         WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
+    }
+
+    private val authCallbackUrl by lazy(LazyThreadSafetyMode.NONE) {
+        "${Constants.AUTH_CALLBACK_SCHEME}://${Constants.AUTH_CALLBACK_HOST}${Constants.AUTH_CALLBACK_PATH}"
     }
 
     override fun onCreateView(
@@ -54,6 +63,25 @@ class LoginFragment : Fragment() {
             viewModel.login(email, password)
         }
 
+        binding.googleSignInButton.setOnClickListener {
+            binding.googleSignInButton.isEnabled = false
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    com.novahorizon.wanderly.api.SupabaseClient.client.auth.signInWith(
+                        provider = Google,
+                        redirectUrl = authCallbackUrl
+                    )
+                } catch (e: Exception) {
+                    binding.googleSignInButton.isEnabled = true
+                    showSnackbar(
+                        getString(R.string.auth_google_sign_in_failed),
+                        isError = true
+                    )
+                }
+            }
+        }
+
         binding.newBeeLink.setOnClickListener {
             findNavController().navigate(R.id.action_login_to_signup)
         }
@@ -64,6 +92,7 @@ class LoginFragment : Fragment() {
             when (state) {
                 is AuthViewModel.AuthState.Loading -> {
                     binding.loginButton.isEnabled = false
+                    binding.googleSignInButton.isEnabled = false
                 }
                 is AuthViewModel.AuthState.Success -> {
                     val isRememberMeChecked = binding.rememberMeCheckbox.isChecked
@@ -73,10 +102,12 @@ class LoginFragment : Fragment() {
                 }
                 is AuthViewModel.AuthState.Error -> {
                     binding.loginButton.isEnabled = true
+                    binding.googleSignInButton.isEnabled = true
                     showSnackbar(state.message, isError = true)
                 }
                 else -> {
                     binding.loginButton.isEnabled = true
+                    binding.googleSignInButton.isEnabled = true
                 }
             }
         }

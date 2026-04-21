@@ -3,9 +3,7 @@ package com.novahorizon.wanderly.ui.missions
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -19,8 +17,6 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
@@ -35,7 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.Locale
 
 class MissionsFragment : Fragment() {
 
@@ -243,33 +238,20 @@ class MissionsFragment : Fragment() {
         binding.missionText.visibility = View.VISIBLE
         binding.missionText.text = getString(R.string.mission_location_loading)
 
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
+        WanderlyGraph.missionLocationProvider().requestCurrentLocation(
+            fragment = this,
+            onSuccess = { location ->
             if (location != null) {
                 val lifecycleOwner = viewLifecycleOwner
                 lifecycleOwner.lifecycleScope.launch {
                     try {
-                        val geocoder = Geocoder(requireContext(), Locale.getDefault())
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            geocoder.getFromLocation(location.latitude, location.longitude, 1) { addresses ->
-                                if (!isAdded || _binding == null || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
-                                    return@getFromLocation
-                                }
-                                val cityName = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.adminArea
-                                logDebug("City from geocoder: $cityName")
-                                lifecycleOwner.lifecycleScope.launch {
-                                    viewModel.generateMission(location.latitude, location.longitude, cityName)
-                                }
-                            }
-                        } else {
-                            @Suppress("DEPRECATION")
-                            val addresses = withContext(Dispatchers.IO) {
-                                geocoder.getFromLocation(location.latitude, location.longitude, 1)
-                            }
-                            val cityName = addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea
-                            logDebug("City from geocoder: $cityName")
-                            viewModel.generateMission(location.latitude, location.longitude, cityName)
+                        val cityName = WanderlyGraph.missionCityResolver()
+                            .resolveCityName(requireContext(), location)
+                        if (!isAdded || _binding == null || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                            return@launch
                         }
+                        logDebug("City from geocoder: $cityName")
+                        viewModel.generateMission(location.latitude, location.longitude, cityName)
                     } catch (e: Exception) {
                         logError("Error getting city name", e)
                         viewModel.generateMission(location.latitude, location.longitude, null)
@@ -282,7 +264,8 @@ class MissionsFragment : Fragment() {
                 binding.buzzyBubble.text = getString(R.string.mission_location_failed)
                 showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
-        }.addOnFailureListener { error ->
+        },
+            onFailure = { error ->
             logError("Error getting precise location", error)
             locationLookupInFlight = false
             binding.loadingIndicator.visibility = View.GONE
@@ -290,6 +273,7 @@ class MissionsFragment : Fragment() {
             binding.buzzyBubble.text = getString(R.string.mission_location_failed)
             showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
+        )
     }
 
     private fun resolveLocationPermissionState(): LocationPermissionGate.State {

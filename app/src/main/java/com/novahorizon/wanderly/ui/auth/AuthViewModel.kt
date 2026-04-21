@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -46,10 +47,7 @@ class AuthViewModel : ViewModel() {
         _authState.value = AuthState.Loading
         viewModelScope.launch {
             try {
-                SupabaseClient.client.auth.signInWith(Email) {
-                    this.email = email
-                    this.password = pass
-                }
+                WanderlyGraph.emailAuthService().signInWithEmail(email, pass)
                 _authState.postValue(AuthState.Success)
             } catch (e: Exception) {
                 _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))

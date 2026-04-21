@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="widget_padding">12dp</dimen>
+    <dimen name="widget_icon_size">28dp</dimen>
+    <dimen name="widget_streak_text_size">28sp</dimen>
+    <dimen name="widget_subtitle_text_size">12sp</dimen>
+    <dimen name="widget_spacing_small">8dp</dimen>
+    <dimen name="widget_spacing_tiny">4dp</dimen>
+    <dimen name="widget_corner_radius">22dp</dimen>
+    <dimen name="widget_stroke_width">2dp</dimen>
+</resources>

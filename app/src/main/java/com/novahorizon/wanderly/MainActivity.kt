@@ -43,6 +43,16 @@ class MainActivity : AppCompatActivity() {
 
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
+        val navGraph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
+            if (!repository.isOnboardingSeen()) {
+                setStartDestination(R.id.onboardingFragment)
+            }
+        }
+        navController.setGraph(navGraph, null)
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            binding.bottomNavigation.visibility =
+                if (destination.id == R.id.onboardingFragment) android.view.View.GONE else android.view.View.VISIBLE
+        }
 
         lifecycleScope.launch {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()

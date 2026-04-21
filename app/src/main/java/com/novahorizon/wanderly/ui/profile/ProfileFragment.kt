@@ -17,9 +17,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
@@ -27,20 +24,16 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileRepository
-import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.yalantis.ucrop.UCrop
-import io.github.jan.supabase.auth.auth
-import kotlinx.coroutines.launch
 import java.io.File
 
 class ProfileFragment : Fragment() {
@@ -52,7 +45,7 @@ class ProfileFragment : Fragment() {
     private var pendingAvatarDestinationUri: Uri? = null
     private var pendingAvatarPreviewSource: String? = null
     private var pendingAvatarRemotePath: String? = null
-    private lateinit var repository: WanderlyRepository
+    private var pendingClassSelectionDialog: androidx.appcompat.app.AlertDialog? = null
     private var isClassDialogShowing = false
     private val badgesAdapter = BadgesAdapter()
     private val viewModel: ProfileViewModel by viewModels {
@@ -98,21 +91,56 @@ class ProfileFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentProfileBinding.inflate(inflater, container, false)
-        repository = WanderlyGraph.repository(requireContext())
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                repository.currentProfile.collect { profile ->
-                    profile?.let {
+        viewModel.profile.observe(viewLifecycleOwner) { profile ->
+            profile?.let {
+                currentProfile = it
+                updateUI(it)
+            }
+        }
+
+        viewModel.profileEvent.observe(viewLifecycleOwner) { event ->
+            when (event) {
+                is ProfileViewModel.ProfileEvent.ShowMessage -> {
+                    if (event.isError && pendingAvatarPreviewSource != null && pendingAvatarRemotePath == null) {
+                        pendingAvatarPreviewSource = null
+                        pendingAvatarRemotePath = null
+                    }
+                    showSnackbar(event.message, isError = event.isError)
+                    viewModel.clearProfileEvent()
+                }
+
+                is ProfileViewModel.ProfileEvent.AvatarUpdated -> {
+                    pendingAvatarRemotePath = event.remotePath
+                    showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
+                    viewModel.clearProfileEvent()
+                }
+
+                is ProfileViewModel.ProfileEvent.ClassLocked -> {
+                    pendingClassSelectionDialog?.dismiss()
+                    pendingClassSelectionDialog = null
+                    currentProfile?.copy(explorer_class = event.className)?.let {
                         currentProfile = it
                         updateUI(it)
                     }
+                    showSnackbar(
+                        getString(R.string.profile_class_locked, event.className),
+                        isError = false
+                    )
+                    viewModel.clearProfileEvent()
                 }
+
+                ProfileViewModel.ProfileEvent.LoggedOut -> {
+                    SessionNavigator.openAuth(requireActivity())
+                    viewModel.clearProfileEvent()
+                }
+
+                null -> Unit
             }
         }
 
@@ -127,17 +155,8 @@ class ProfileFragment : Fragment() {
             findNavController().navigate(R.id.action_profile_to_devDashboard)
         }
         binding.logoutButton.setOnClickListener {
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    requireContext().stopService(Intent(requireContext(), HiveRealtimeService::class.java))
-                    SupabaseClient.client.auth.signOut()
-                    repository.clearRememberMe()
-                    repository.clearLocalState()
-                    SessionNavigator.openAuth(requireActivity())
-                } catch (_: Exception) {
-                    showSnackbar(getString(R.string.profile_logout_failed), isError = true)
-                }
-            }
+            requireContext().stopService(Intent(requireContext(), HiveRealtimeService::class.java))
+            viewModel.logout()
         }
     }
 
@@ -159,11 +178,17 @@ class ProfileFragment : Fragment() {
 
         if (!profile.friend_code.isNullOrEmpty()) {
             binding.friendCodeDisplay.text = getString(R.string.friend_code_display, profile.friend_code)
+            binding.friendCodeLayout.visibility = View.VISIBLE
             binding.friendCodeDisplay.visibility = View.VISIBLE
             binding.friendCodeDisplay.setOnClickListener { copyFriendCode(profile.friend_code) }
+            binding.shareFriendCodeButton.visibility = View.VISIBLE
+            binding.shareFriendCodeButton.setOnClickListener { shareFriendCode(profile.friend_code) }
         } else {
+            binding.friendCodeLayout.visibility = View.GONE
             binding.friendCodeDisplay.visibility = View.GONE
             binding.friendCodeDisplay.setOnClickListener(null)
+            binding.shareFriendCodeButton.visibility = View.GONE
+            binding.shareFriendCodeButton.setOnClickListener(null)
         }
 
         binding.adminDashboardButton.visibility = if (profile.admin_role) View.VISIBLE else View.GONE
@@ -240,47 +265,19 @@ class ProfileFragment : Fragment() {
     }
 
     private fun uploadAvatarToSupabase(uri: Uri) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val profile = currentProfile ?: return@launch
-                pendingAvatarPreviewSource = uri.toString()
-                pendingAvatarRemotePath = null
-                updateAvatarDisplay(pendingAvatarPreviewSource, profile.username ?: getString(R.string.profile_default_name))
-
-                val avatarUrl = repository.uploadAvatar(uri, profile.id)
-                pendingAvatarRemotePath = avatarUrl
-
-                val updatedProfile = profile.copy(avatar_url = avatarUrl)
-                if (!repository.updateProfile(updatedProfile)) {
-                    throw IllegalStateException("Avatar uploaded but profile update failed")
-                }
-
-                currentProfile = updatedProfile
-                updateUI(updatedProfile)
-                showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
-            } catch (e: Exception) {
-                pendingAvatarPreviewSource = null
-                pendingAvatarRemotePath = null
-                Log.e("ProfileFragment", "Avatar upload failed", e)
-                showSnackbar(getString(R.string.profile_avatar_upload_failed), isError = true)
-            }
-        }
+        val profile = currentProfile ?: return
+        pendingAvatarPreviewSource = uri.toString()
+        pendingAvatarRemotePath = null
+        updateAvatarDisplay(
+            pendingAvatarPreviewSource,
+            profile.username ?: getString(R.string.profile_default_name)
+        )
+        viewModel.uploadAvatar(profile, uri)
     }
 
     private fun updateUsername(newUsername: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val profile = currentProfile ?: return@launch
-                val updatedProfile = profile.copy(username = newUsername)
-                repository.updateProfile(updatedProfile)
-
-                currentProfile = updatedProfile
-                binding.username.text = newUsername
-                showSnackbar(getString(R.string.profile_username_updated), isError = false)
-            } catch (_: Exception) {
-                showSnackbar(getString(R.string.profile_username_update_failed), isError = true)
-            }
-        }
+        val profile = currentProfile ?: return
+        viewModel.updateUsername(profile, newUsername)
     }
 
     private fun copyFriendCode(friendCode: String) {
@@ -289,6 +286,15 @@ class ProfileFragment : Fragment() {
             ClipData.newPlainText(getString(R.string.profile_friend_code_clip_label), friendCode)
         )
         showSnackbar(getString(R.string.friend_code_copied), isError = false)
+    }
+
+    private fun shareFriendCode(friendCode: String) {
+        val shareMessage = getString(R.string.profile_share_invite_message, friendCode, friendCode)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareMessage)
+        }
+        startActivity(Intent.createChooser(shareIntent, getString(R.string.profile_share_friend_code)))
     }
 
     private fun updateAvatarDisplay(avatarData: String?, username: String) {
@@ -327,7 +333,10 @@ class ProfileFragment : Fragment() {
         isClassDialogShowing = true
         ProfileDialogs.showClassSelectionDialog(
             fragment = this,
-            onDismiss = { isClassDialogShowing = false }
+            onDismiss = {
+                pendingClassSelectionDialog = null
+                isClassDialogShowing = false
+            }
         ) { className, dialog ->
             confirmClassSelection(profile, className, dialog)
         }
@@ -338,21 +347,8 @@ class ProfileFragment : Fragment() {
             fragment = this,
             className = className
         ) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                val updated = profile.copy(explorer_class = className)
-                val success = repository.updateProfile(updated)
-                if (success) {
-                    currentProfile = updated
-                    updateUI(updated)
-                    parentDialog.dismiss()
-                    showSnackbar(
-                        getString(R.string.profile_class_locked, className),
-                        isError = false
-                    )
-                } else {
-                    showSnackbar(getString(R.string.profile_class_lock_failed), isError = true)
-                }
-            }
+            pendingClassSelectionDialog = parentDialog
+            viewModel.confirmClassSelection(profile, className)
         }
     }
 

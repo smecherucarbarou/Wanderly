@@ -100,6 +100,10 @@ class ProfileRepository(
             }
 
             _currentProfile.value = profile
+            preferencesStore.cacheProfileStreakState(
+                lastMissionDate = profile.last_mission_date,
+                streakCount = profile.streak_count
+            )
             profile
         } catch (e: Exception) {
             logError("Error getting profile: ${e.message}", e)
@@ -112,6 +116,10 @@ class ProfileRepository(
             val normalizedProfile = normalizeProfile(profile)
             persistProfile(normalizedProfile)
             _currentProfile.value = normalizedProfile
+            preferencesStore.cacheProfileStreakState(
+                lastMissionDate = normalizedProfile.last_mission_date,
+                streakCount = normalizedProfile.streak_count
+            )
             true
         } catch (e: Exception) {
             logError("Update profile failed: ${e.message}", e)

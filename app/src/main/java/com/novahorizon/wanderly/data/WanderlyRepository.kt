@@ -7,7 +7,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-class WanderlyRepository(context: Context) {
+open class WanderlyRepository(context: Context) {
     val context: Context = context.applicationContext
 
     private val preferencesStore = PreferencesStore(this.context)
@@ -15,11 +15,11 @@ class WanderlyRepository(context: Context) {
     private val socialRepository = SocialRepository()
     private val discoveryRepository = DiscoveryRepository()
 
-    val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
+    open val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
 
-    suspend fun getCurrentProfile(): Profile? = profileRepository.getCurrentProfile()
+    open suspend fun getCurrentProfile(): Profile? = profileRepository.getCurrentProfile()
 
-    suspend fun updateProfile(profile: Profile): Boolean = profileRepository.updateProfile(profile)
+    open suspend fun updateProfile(profile: Profile): Boolean = profileRepository.updateProfile(profile)
 
     suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
@@ -27,9 +27,9 @@ class WanderlyRepository(context: Context) {
 
     suspend fun removeFriend(friendId: String): Boolean = socialRepository.removeFriend(friendId)
 
-    suspend fun getFriends(): List<Profile> = socialRepository.getFriends()
+    open suspend fun getFriends(): List<Profile> = socialRepository.getFriends()
 
-    suspend fun fetchNearbyPlaces(lat: Double, lng: Double, radius: Int): List<String> =
+    open suspend fun fetchNearbyPlaces(lat: Double, lng: Double, radius: Int): List<String> =
         discoveryRepository.fetchNearbyPlaces(lat, lng, radius)
 
     suspend fun fetchHiddenGems(lat: Double, lng: Double, radius: Int): List<String> =
@@ -48,7 +48,7 @@ class WanderlyRepository(context: Context) {
 
     suspend fun resetMissionDateForTesting(): Boolean = profileRepository.resetMissionDateForTesting()
 
-    fun getMissionHistory(): String = preferencesStore.getMissionHistory()
+    open fun getMissionHistory(): String = preferencesStore.getMissionHistory()
 
     fun getMissionTarget(): String? = preferencesStore.getMissionTarget()
 
@@ -60,7 +60,7 @@ class WanderlyRepository(context: Context) {
 
     fun getMissionTargetCoordinates(): Pair<Double, Double>? = preferencesStore.getMissionTargetCoordinates()
 
-    fun saveMissionData(
+    open fun saveMissionData(
         text: String,
         target: String,
         history: String,
@@ -79,6 +79,10 @@ class WanderlyRepository(context: Context) {
     fun isRememberMeEnabled(): Boolean = preferencesStore.isRememberMeEnabled()
 
     fun setRememberMeEnabled(enabled: Boolean) = preferencesStore.setRememberMeEnabled(enabled)
+
+    open fun isOnboardingSeen(): Boolean = preferencesStore.isOnboardingSeen()
+
+    fun setOnboardingSeen(seen: Boolean) = preferencesStore.setOnboardingSeen(seen)
 
     fun clearRememberMe() = preferencesStore.setRememberMeEnabled(false)
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.api.PlacesGeocoder
 import com.novahorizon.wanderly.data.HiveRank
@@ -105,7 +106,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                         Return ONLY raw JSON:
                         {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
                     """.trimIndent()
-                    GeminiClient.generateText(prompt)
+                    WanderlyGraph.missionGenerationService().generateText(prompt)
                 } else {
                     val prompt = """
                         User location: $promptCity
@@ -120,7 +121,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                         Return ONLY raw JSON:
                         {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
                     """.trimIndent()
-                    GeminiClient.generateWithSearch(prompt)
+                    WanderlyGraph.missionGenerationService().generateWithSearch(prompt)
                 }
 
                 val finalJson = AiResponseParser.extractFirstJsonObject(responseText)
@@ -132,7 +133,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 }.getOrElse {
                     throw IllegalStateException("Buzzy couldn't understand the mission response. Please try again.")
                 }
-                val resolvedTarget = PlacesGeocoder.resolveCoordinates(
+                val resolvedTarget = WanderlyGraph.missionGenerationService().resolveCoordinates(
                     placeName = missionResponse.targetName,
                     targetCity = city.orEmpty(),
                     userLat = lat,
@@ -183,7 +184,10 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     Respond: "YES: [Confirmation]" or "NO: [Reason]".
                 """.trimIndent()
 
-                val resultText = GeminiClient.analyzeImage(bitmap, prompt).trim().uppercase()
+                val resultText = WanderlyGraph.missionGenerationService()
+                    .analyzeImage(bitmap, prompt)
+                    .trim()
+                    .uppercase()
                 if (resultText.contains("YES")) {
                     _missionState.postValue(
                         MissionState.VerificationResult(true, "Location verified successfully.")
