@@ -1,19 +1,21 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="200dp"
-    android:height="200dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
-    <!-- Blue/Cyan Intense Fire for 25 Day Streak -->
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
     <path
-        android:fillColor="#00BFFF"
-        android:fillType="evenOdd"
-        android:pathData="M100,195 C158,195 195,153 195,100 C195,42 158,5 100,5 C42,5 5,42 5,100 C5,153 42,195 100,195 Z M100,165 C64,165 35,136 35,100 C35,64 64,35 100,35 C136,35 165,64 165,100 C165,136 136,165 100,165 Z" />
-
-    <!-- More intense licking flames -->
+        android:fillColor="#D83BFF"
+        android:pathData="M48,6 C56,14 64,16 68,28 C71,19 79,24 79,36 C79,54 67,69 48,86 C29,69 17,54 17,36 C17,24 25,19 28,28 C32,16 40,14 48,6 Z" />
     <path
-        android:fillColor="#87CEEB"
-        android:pathData="M100,5 Q75,-20 50,10 Q70,30 75,50 Z M100,5 Q125,-20 150,10 Q130,30 125,50 Z M25,55 Q-10,20 15,5 Q35,40 45,55 Z M175,55 Q210,20 185,5 Q165,40 155,55 Z" />
+        android:fillColor="#FF4F9A"
+        android:pathData="M48,15 C55,21 60,28 60,37 C60,47 55,55 48,67 C41,55 36,47 36,37 C36,28 41,21 48,15 Z" />
     <path
-        android:fillColor="#00FA9A"
-        android:pathData="M100,20 Q85,0 75,20 Q85,35 90,45 Z M100,20 Q115,0 125,20 Q115,35 110,45 Z" />
+        android:fillColor="#FF8A3D"
+        android:pathData="M48,27 C53,32 56,37 56,43 C56,50 52,57 48,63 C44,57 40,50 40,43 C40,37 43,32 48,27 Z" />
+    <path
+        android:fillColor="#FFF2B3"
+        android:pathData="M48,39 C51,42 53,46 53,50 C53,55 50,59 48,62 C46,59 43,55 43,50 C43,46 45,42 48,39 Z" />
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M18,26 L22,33 L30,35 L22,38 L18,45 L14,38 L6,35 L14,33 Z" />
 </vector>

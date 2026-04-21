@@ -13,7 +13,7 @@
         android:animateLayoutChanges="true"
         android:clipChildren="false"
         android:clipToPadding="false"
-        android:padding="24dp">
+        android:padding="20dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/header_card"
@@ -28,21 +28,116 @@
 
             <FrameLayout
                 android:id="@+id/avatar_container"
-                android:layout_width="160dp"
-                android:layout_height="160dp"
+                android:layout_width="@dimen/profile_avatar_container_size"
+                android:layout_height="@dimen/profile_avatar_container_size"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent">
 
-                <androidx.cardview.widget.CardView
-                    android:id="@+id/avatar_card"
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
+                <FrameLayout
+                    android:id="@+id/streak_aura"
+                    android:layout_width="@dimen/profile_halo_size"
+                    android:layout_height="@dimen/profile_halo_size"
                     android:layout_gravity="center"
-                    app:cardCornerRadius="60dp"
-                    app:cardElevation="4dp">
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <ImageView
+                        android:id="@+id/streak_flame_top"
+                        android:layout_width="92dp"
+                        android:layout_height="92dp"
+                        android:layout_gravity="top|center_horizontal"
+                        android:layout_marginTop="2dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_left"
+                        android:layout_width="74dp"
+                        android:layout_height="74dp"
+                        android:layout_gravity="center_vertical|start"
+                        android:layout_marginStart="2dp"
+                        android:contentDescription="@null"
+                        android:rotation="270"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_right"
+                        android:layout_width="74dp"
+                        android:layout_height="74dp"
+                        android:layout_gravity="center_vertical|end"
+                        android:layout_marginEnd="2dp"
+                        android:contentDescription="@null"
+                        android:rotation="90"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_bottom"
+                        android:layout_width="76dp"
+                        android:layout_height="76dp"
+                        android:layout_gravity="bottom|center_horizontal"
+                        android:layout_marginBottom="2dp"
+                        android:contentDescription="@null"
+                        android:rotation="180"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_top_start"
+                        android:layout_width="60dp"
+                        android:layout_height="60dp"
+                        android:layout_gravity="top|start"
+                        android:layout_marginStart="14dp"
+                        android:layout_marginTop="12dp"
+                        android:contentDescription="@null"
+                        android:rotation="322"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_top_end"
+                        android:layout_width="60dp"
+                        android:layout_height="60dp"
+                        android:layout_gravity="top|end"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginEnd="14dp"
+                        android:contentDescription="@null"
+                        android:rotation="38"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_bottom_start"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_gravity="bottom|start"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginBottom="18dp"
+                        android:contentDescription="@null"
+                        android:rotation="220"
+                        android:src="@drawable/ic_streak_fire" />
+
+                    <ImageView
+                        android:id="@+id/streak_flame_bottom_end"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_gravity="bottom|end"
+                        android:layout_marginEnd="16dp"
+                        android:layout_marginBottom="18dp"
+                        android:contentDescription="@null"
+                        android:rotation="140"
+                        android:src="@drawable/ic_streak_fire" />
+                </FrameLayout>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/avatar_card"
+                    android:layout_width="@dimen/profile_avatar_size"
+                    android:layout_height="@dimen/profile_avatar_size"
+                    android:layout_gravity="center"
+                    app:cardBackgroundColor="@color/card_background"
+                    app:cardCornerRadius="@dimen/profile_avatar_radius"
+                    app:cardElevation="4dp"
+                    app:strokeColor="@android:color/transparent"
+                    app:strokeWidth="0dp">
 
                     <FrameLayout
                         android:layout_width="match_parent"
@@ -64,22 +159,10 @@
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:contentDescription="@null"
-                            android:padding="12dp"
                             android:scaleType="centerCrop"
                             android:src="@drawable/ic_buzzy" />
                     </FrameLayout>
-                </androidx.cardview.widget.CardView>
-
-                <ImageView
-                    android:id="@+id/streak_aura"
-                    android:layout_width="160dp"
-                    android:layout_height="160dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:elevation="5dp"
-                    android:src="@drawable/ic_streak_fire"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
+                </com.google.android.material.card.MaterialCardView>
 
                 <ImageView
                     android:id="@+id/camera_icon"
@@ -100,7 +183,7 @@
                 android:id="@+id/username_layout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="14dp"
                 android:gravity="center"
                 android:orientation="horizontal"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -112,7 +195,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_primary"
-                    android:textSize="26sp"
+                    android:textSize="28sp"
                     android:textStyle="bold"
                     tools:text="Buzzy Explorer" />
 
@@ -132,7 +215,7 @@
                 android:id="@+id/friend_code_layout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -165,8 +248,9 @@
                 android:id="@+id/rank_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="14dp"
                 android:background="@drawable/bg_button_gradient"
+                android:letterSpacing="0.06"
                 android:paddingHorizontal="24dp"
                 android:paddingVertical="10dp"
                 android:textColor="@color/text_primary"
@@ -180,10 +264,10 @@
                 android:id="@+id/explorerClassText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
                 android:letterSpacing="0.1"
                 android:textColor="@color/primary"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -198,125 +282,205 @@
             android:id="@+id/stats_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="18dp"
             android:orientation="horizontal"
             app:layout_constraintTop_toBottomOf="@id/header_card">
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="2dp">
+                app:cardCornerRadius="22dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
+                    android:gravity="center_horizontal"
+                    android:minHeight="116dp"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="16dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/profile_stat_honey_icon"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="@string/profile_stat_honey"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/honey_total"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:autoSizeMaxTextSize="28sp"
+                        android:autoSizeMinTextSize="16sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
                         android:textColor="@color/primary"
-                        android:textSize="22sp"
+                        android:textSize="28sp"
                         android:textStyle="bold"
-                        tools:text="260" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/profile_stat_honey"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        tools:text="2600" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="4dp"
+                android:layout_marginHorizontal="3dp"
                 android:layout_weight="1"
                 app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="2dp">
+                app:cardCornerRadius="22dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
+                    android:gravity="center_horizontal"
+                    android:minHeight="116dp"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="16dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/profile_stat_streak_icon"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="@string/profile_stat_streak"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/streak_count"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:autoSizeMaxTextSize="28sp"
+                        android:autoSizeMinTextSize="16sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
                         android:textColor="@color/primary"
-                        android:textSize="22sp"
+                        android:textSize="28sp"
                         android:textStyle="bold"
-                        tools:text="5" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/profile_stat_streak"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        tools:text="12" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="2dp">
+                app:cardCornerRadius="22dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/primary"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
+                    android:gravity="center_horizontal"
+                    android:minHeight="116dp"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="16dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/profile_stat_flights_icon"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="@string/profile_stat_flights"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/missions_completed_count"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:autoSizeMaxTextSize="28sp"
+                        android:autoSizeMinTextSize="16sp"
+                        android:autoSizeStepGranularity="1sp"
+                        android:autoSizeTextType="uniform"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
                         android:text="@string/profile_zero_stat"
                         android:textColor="@color/primary"
-                        android:textSize="22sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/profile_stat_flights"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
+                        android:textSize="28sp"
                         android:textStyle="bold" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
             android:id="@+id/progress_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="18dp"
             app:cardBackgroundColor="@color/card_background"
-            app:cardCornerRadius="20dp"
+            app:cardCornerRadius="24dp"
             app:cardElevation="2dp"
-            app:layout_constraintTop_toBottomOf="@id/stats_layout">
+            app:layout_constraintTop_toBottomOf="@id/stats_layout"
+            app:strokeColor="@color/primary"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -337,7 +501,7 @@
                     style="@android:style/Widget.ProgressBar.Horizontal"
                     android:layout_width="match_parent"
                     android:layout_height="12dp"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="14dp"
                     android:progress="40"
                     android:progressDrawable="@drawable/bg_progress_honey" />
 
@@ -345,12 +509,12 @@
                     android:id="@+id/progress_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="10dp"
                     android:text="@string/profile_progress_default"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:id="@+id/badges_title"
@@ -368,7 +532,7 @@
             android:id="@+id/badges_recycler"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="14dp"
             app:layout_constraintTop_toBottomOf="@id/badges_title"
             tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
             tools:listitem="@layout/item_badge"
@@ -378,7 +542,7 @@
             android:id="@+id/admin_dashboard_button"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="18dp"
             android:backgroundTint="@color/primary"
             android:text="@string/profile_admin_dashboard"
             android:textAllCaps="false"

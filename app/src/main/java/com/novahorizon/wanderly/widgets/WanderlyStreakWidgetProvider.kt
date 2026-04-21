@@ -80,34 +80,29 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             val preferencesStore = PreferencesStore(context)
             val streakCount = preferencesStore.getStoredStreakCount()
             val lastMissionDate = preferencesStore.getStoredLastMissionDate()
-            val inDanger = StreakWidgetStateHelper.isInDanger(lastMissionDate)
+            val visualState = StreakWidgetStateHelper.resolveVisualState(
+                streakCount = streakCount,
+                lastMissionDate = lastMissionDate
+            )
 
             appWidgetIds.forEach { appWidgetId ->
                 val views = RemoteViews(context.packageName, R.layout.widget_streak).apply {
                     setTextViewText(R.id.widget_streak_count, streakCount.toString())
-                    setTextViewText(
-                        R.id.widget_subtitle,
-                        context.getString(
-                            if (inDanger) {
-                                R.string.widget_streak_subtitle_danger
-                            } else {
-                                R.string.widget_streak_subtitle_normal
-                            }
-                        )
-                    )
-                    setImageViewResource(R.id.widget_icon, R.drawable.ic_streak_fire)
+                    setTextViewText(R.id.widget_subtitle, context.getString(visualState.subtitleRes))
+                    setImageViewResource(R.id.widget_mascot, visualState.mascotRes)
+                    setImageViewResource(R.id.widget_fire_icon, visualState.fireRes)
                     setTextColor(
                         R.id.widget_streak_count,
-                        context.getColor(if (inDanger) R.color.accent else R.color.pollen_white)
+                        context.getColor(visualState.countColorRes)
                     )
                     setTextColor(
                         R.id.widget_subtitle,
-                        context.getColor(if (inDanger) R.color.accent else R.color.pollen_white)
+                        context.getColor(visualState.subtitleColorRes)
                     )
                     setInt(
                         R.id.widget_container,
                         "setBackgroundResource",
-                        if (inDanger) R.drawable.bg_widget_streak_warning else R.drawable.bg_widget_streak
+                        visualState.backgroundRes
                     )
                     setOnClickPendingIntent(R.id.widget_container, mainActivityPendingIntent(context))
                 }

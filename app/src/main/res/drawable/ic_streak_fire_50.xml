@@ -1,22 +1,24 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="200dp"
-    android:height="200dp"
-    android:viewportWidth="200"
-    android:viewportHeight="200">
-    <!-- Purple/Magic Intense Fire for 50 Day Streak -->
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
     <path
-        android:fillColor="#A020F0"
-        android:fillType="evenOdd"
-        android:pathData="M100,200 C160,200 200,160 200,100 C200,40 160,0 100,0 C40,0 0,40 0,100 C0,160 40,200 100,200 Z M100,165 C64,165 35,136 35,100 C35,64 64,35 100,35 C136,35 165,64 165,100 C165,136 136,165 100,165 Z" />
-
-    <!-- Extreme licking flames -->
+        android:fillColor="#4E6BFF"
+        android:pathData="M48,6 C56,14 64,16 68,28 C71,19 79,24 79,36 C79,54 67,69 48,86 C29,69 17,54 17,36 C17,24 25,19 28,28 C32,16 40,14 48,6 Z" />
     <path
-        android:fillColor="#E040FB"
-        android:pathData="M100,0 Q70,-30 40,15 Q65,40 70,60 Z M100,0 Q130,-30 160,15 Q135,40 130,60 Z M15,50 Q-20,10 10,-5 Q30,40 40,60 Z M185,50 Q220,10 190,-5 Q170,40 160,60 Z M70,195 Q100,230 130,195 Q115,175 100,175 Q85,175 70,195 Z" />
+        android:fillColor="#39B8FF"
+        android:pathData="M48,15 C55,21 60,28 60,37 C60,47 55,55 48,67 C41,55 36,47 36,37 C36,28 41,21 48,15 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M100,15 Q85,-5 70,15 Q80,30 85,45 Z M100,15 Q115,-5 130,15 Q120,30 115,45 Z" />
-
-    <!-- Sparks -->
-    <path android:fillColor="#FFFFFF" android:pathData="M40,30 l4,4 l-4,4 l-4,-4 z M160,30 l4,4 l-4,4 l-4,-4 z M20,150 l3,3 l-3,3 l-3,-3 z M180,150 l3,3 l-3,3 l-3,-3 z" />
+        android:fillColor="#89E4FF"
+        android:pathData="M48,27 C53,32 56,37 56,43 C56,50 52,57 48,63 C44,57 40,50 40,43 C40,37 43,32 48,27 Z" />
+    <path
+        android:fillColor="#F2FDFF"
+        android:pathData="M48,39 C51,42 53,46 53,50 C53,55 50,59 48,62 C46,59 43,55 43,50 C43,46 45,42 48,39 Z" />
+    <path
+        android:fillColor="#B8F8FF"
+        android:pathData="M18,24 L22,31 L30,33 L22,36 L18,43 L14,36 L6,33 L14,31 Z" />
+    <path
+        android:fillColor="#B8F8FF"
+        android:pathData="M78,18 L82,25 L90,27 L82,30 L78,37 L74,30 L66,27 L74,25 Z" />
 </vector>

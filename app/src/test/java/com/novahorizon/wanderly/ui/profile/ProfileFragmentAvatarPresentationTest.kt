@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.novahorizon.wanderly.R
 
 class ProfileFragmentAvatarPresentationTest {
 
@@ -44,5 +45,26 @@ class ProfileFragmentAvatarPresentationTest {
             decision.displaySource
         )
         assertTrue(decision.shouldClearPendingPreview)
+    }
+
+    @Test
+    fun `hides profile halo when streak is inactive`() {
+        val haloRes = ProfileFragment.resolveProfileHaloRes(0)
+
+        assertEquals(null, haloRes)
+    }
+
+    @Test
+    fun `uses base halo for any active streak before milestone tiers`() {
+        val haloRes = ProfileFragment.resolveProfileHaloRes(1)
+
+        assertEquals(R.drawable.ic_streak_fire, haloRes)
+    }
+
+    @Test
+    fun `uses tiered halos for higher streak milestones`() {
+        assertEquals(R.drawable.ic_streak_fire_5, ProfileFragment.resolveProfileHaloRes(5))
+        assertEquals(R.drawable.ic_streak_fire_25, ProfileFragment.resolveProfileHaloRes(25))
+        assertEquals(R.drawable.ic_streak_fire_50, ProfileFragment.resolveProfileHaloRes(50))
     }
 }

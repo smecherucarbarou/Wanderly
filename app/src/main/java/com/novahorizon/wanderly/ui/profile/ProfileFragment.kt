@@ -35,6 +35,7 @@ import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.yalantis.ucrop.UCrop
 import java.io.File
+import java.text.NumberFormat
 
 class ProfileFragment : Fragment() {
 
@@ -202,20 +203,15 @@ class ProfileFragment : Fragment() {
         }
 
         val currentRank = HiveRank.fromHoney(currentHoney)
-        binding.honeyTotal.text = currentHoney.toString()
-        binding.streakCount.text = currentStreak.toString()
+        binding.honeyTotal.text = formatWholeNumber(currentHoney)
+        binding.streakCount.text = formatWholeNumber(currentStreak)
         binding.rankBadge.text = getRankName(currentRank)
-        binding.missionsCompletedCount.text = flights.toString()
+        binding.missionsCompletedCount.text = formatWholeNumber(flights)
 
-        if (currentStreak >= 3) {
+        val haloDrawable = resolveProfileHaloRes(currentStreak)
+        if (haloDrawable != null) {
             binding.streakAura.visibility = View.VISIBLE
-            val fireDrawable = when {
-                currentStreak >= 50 -> R.drawable.ic_streak_fire_50
-                currentStreak >= 25 -> R.drawable.ic_streak_fire_25
-                currentStreak >= 5 -> R.drawable.ic_streak_fire_5
-                else -> R.drawable.ic_streak_fire
-            }
-            binding.streakAura.setImageResource(fireDrawable)
+            applyProfileHalo(binding, haloDrawable)
         } else {
             binding.streakAura.visibility = View.GONE
         }
@@ -302,6 +298,17 @@ class ProfileFragment : Fragment() {
         AvatarLoader.loadAvatar(binding.buzzyAvatar, binding.avatarInitial, avatarData, username)
     }
 
+    private fun applyProfileHalo(binding: FragmentProfileBinding, haloDrawable: Int) {
+        binding.streakFlameTop.setImageResource(haloDrawable)
+        binding.streakFlameLeft.setImageResource(haloDrawable)
+        binding.streakFlameRight.setImageResource(haloDrawable)
+        binding.streakFlameBottom.setImageResource(haloDrawable)
+        binding.streakFlameTopStart.setImageResource(haloDrawable)
+        binding.streakFlameTopEnd.setImageResource(haloDrawable)
+        binding.streakFlameBottomStart.setImageResource(haloDrawable)
+        binding.streakFlameBottomEnd.setImageResource(haloDrawable)
+    }
+
     private fun isUsableCropResult(uri: Uri): Boolean {
         val localFilePath = ProfileRepository.extractLocalFilePath(uri.scheme, uri.path)
             ?: return true
@@ -328,6 +335,8 @@ class ProfileFragment : Fragment() {
         3 -> getString(R.string.rank_3)
         else -> getString(R.string.rank_4)
     }
+
+    private fun formatWholeNumber(value: Int): String = NumberFormat.getIntegerInstance().format(value)
 
     private fun showClassSelectionDialog(profile: Profile) {
         isClassDialogShowing = true
@@ -363,6 +372,14 @@ class ProfileFragment : Fragment() {
     )
 
     companion object {
+        internal fun resolveProfileHaloRes(streakCount: Int): Int? = when {
+            streakCount >= 50 -> R.drawable.ic_streak_fire_50
+            streakCount >= 25 -> R.drawable.ic_streak_fire_25
+            streakCount >= 5 -> R.drawable.ic_streak_fire_5
+            streakCount >= 1 -> R.drawable.ic_streak_fire
+            else -> null
+        }
+
         internal fun resolveAvatarPresentation(
             profileAvatarSource: String?,
             pendingAvatarPreviewSource: String?,

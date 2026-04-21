@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/bg_widget_mascot_aura_spark" />
+    <item android:drawable="@drawable/ic_buzzy" android:insetLeft="10dp" android:insetTop="10dp" android:insetRight="10dp" android:insetBottom="10dp" />
+    <item android:drawable="@drawable/ic_widget_mascot_stressed_overlay" android:insetLeft="10dp" android:insetTop="10dp" android:insetRight="10dp" android:insetBottom="10dp" />
+</layer-list>
