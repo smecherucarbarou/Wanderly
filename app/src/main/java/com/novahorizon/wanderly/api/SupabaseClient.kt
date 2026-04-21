@@ -23,7 +23,9 @@ object SupabaseClient {
         if (_client != null) return
 
         validateConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
-        Log.d(TAG, "Initializing Supabase with URL: ${BuildConfig.SUPABASE_URL}")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "Initializing Supabase with URL: ${BuildConfig.SUPABASE_URL}")
+        }
 
         _client = createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,

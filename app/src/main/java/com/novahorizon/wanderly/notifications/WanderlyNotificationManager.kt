@@ -10,8 +10,10 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.PreferencesStore
 
 object WanderlyNotificationManager {
     enum class NotificationType {
@@ -28,7 +30,6 @@ object WanderlyNotificationManager {
     private const val CHANNEL_ID = "wanderly_alerts_v3"
     private const val CHANNEL_NAME = "Wanderly Hive Alerts"
     private const val LOG_TAG = "WanderlyNotif"
-    private const val PREFS_NAME = "notif_dedup"
     private const val DEFAULT_COOLDOWN_MS = 30 * 60 * 1000L
     private const val DAILY_REMINDER_COOLDOWN_MS = 2 * 60 * 60 * 1000L
     private const val EVENING_ALERT_COOLDOWN_MS = 90 * 60 * 1000L
@@ -40,35 +41,33 @@ object WanderlyNotificationManager {
     private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
 
     private fun isNotificationCooldownActive(context: Context, key: String): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val lastSent = prefs.getLong(key, 0L)
+        val preferencesStore = PreferencesStore(context)
+        val lastSent = preferencesStore.getNotificationCooldown(key)
         val now = System.currentTimeMillis()
         val cooldownMs = cooldownForKey(key)
 
         if (now - lastSent < cooldownMs) {
-            Log.d(LOG_TAG, "Cooldown active for $key (${cooldownMs / 1000}s). Skipping notification.")
+            logDebug("Cooldown active for $key (${cooldownMs / 1000}s). Skipping notification.")
             return true
         }
 
-        prefs.edit().putLong(key, now).apply()
+        preferencesStore.setNotificationCooldown(key, now)
         return false
     }
 
     fun clearNotificationCooldowns(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
-        Log.d(LOG_TAG, "Notification cooldown cache cleared.")
+        PreferencesStore(context).clearNotificationCooldowns()
+        logDebug("Notification cooldown cache cleared.")
     }
 
     fun clearNotificationCooldown(context: Context, type: NotificationType) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        for (key in prefs.all.keys) {
+        val preferencesStore = PreferencesStore(context)
+        for (key in preferencesStore.getNotificationCooldownKeys()) {
             if (matchesType(key, type)) {
-                editor.remove(key)
+                preferencesStore.removeNotificationCooldown(key)
             }
         }
-        editor.apply()
-        Log.d(LOG_TAG, "Notification cooldown cleared for $type.")
+        logDebug("Notification cooldown cleared for $type.")
     }
 
     fun createNotificationChannel(context: Context) {
@@ -99,14 +98,11 @@ object WanderlyNotificationManager {
         bypassCooldown: Boolean = false
     ): Boolean {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            Log.w(LOG_TAG, "Notifications are disabled. Cannot show alert.")
+            logWarn("Notifications are disabled. Cannot show alert.")
             return false
         }
 
-        Log.d(
-            LOG_TAG,
-            "Attempting notification id=$notificationId key=${dedupKey ?: "none"} title=$title"
-        )
+        logDebug("Attempting notification id=$notificationId key=${dedupKey ?: "none"} title=$title")
 
         if (dedupKey != null && !bypassCooldown && isNotificationCooldownActive(context, dedupKey)) {
             return false
@@ -137,10 +133,10 @@ object WanderlyNotificationManager {
 
         try {
             notificationManager.notify(notificationId, builder.build())
-            Log.d(LOG_TAG, "SUCCESS: Notification $notificationId sent.")
+            logDebug("SUCCESS: Notification $notificationId sent.")
             return true
         } catch (e: Exception) {
-            Log.e(LOG_TAG, "FAILED to send notification: ${e.message}")
+            logError("FAILED to send notification: ${e.message}")
             return false
         }
     }
@@ -255,5 +251,23 @@ object WanderlyNotificationManager {
         NotificationType.AGGREGATED_RIVAL_ACTIVITY -> key == "aggregated_rivals"
         NotificationType.OVERTAKEN -> key == "overtaken"
         NotificationType.FIGHT_FOR_FIRST -> key == "fight_for_first"
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(LOG_TAG, message)
+        }
+    }
+
+    private fun logWarn(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.w(LOG_TAG, message)
+        }
+    }
+
+    private fun logError(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.e(LOG_TAG, message)
+        }
     }
 }

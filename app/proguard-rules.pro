@@ -23,25 +23,13 @@
 -keep public class * extends com.bumptech.glide.module.AppGlideModule
 -keep class com.bumptech.glide.GeneratedAppGlideModuleImpl
 
--keepclassmembers class **$$serializer {
-    *;
+-keep @androidx.annotation.Keep class * { *; }
+-keep @kotlinx.serialization.Serializable class * { *; }
+-keepclassmembers class **$$serializer { *; }
+-keepclassmembers class **$Companion {
+    kotlinx.serialization.KSerializer serializer(...);
 }
-
--keep class com.novahorizon.wanderly.data.** {
-    *;
-}
-
--keep class io.github.jan.supabase.** {
-    *;
-}
-
--keep class io.ktor.** {
-    *;
-}
-
--keep class org.osmdroid.** {
-    *;
-}
+-keepclassmembers enum * { *; }
 
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean

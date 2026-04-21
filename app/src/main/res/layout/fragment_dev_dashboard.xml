@@ -10,7 +10,7 @@
         android:id="@+id/dev_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Control Room"
+        android:text="@string/dev_dashboard_title"
         android:textColor="@color/primary"
         android:textSize="32sp"
         android:textStyle="bold"
@@ -23,7 +23,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="Live tools for stats, notifications, and worker runs."
+        android:text="@string/dev_dashboard_subtitle"
         android:textColor="@color/text_secondary"
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -58,7 +58,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Modify Stats"
+                        android:text="@string/dev_dashboard_modify_stats"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
@@ -66,7 +66,7 @@
                         android:id="@+id/edit_honey"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Honey"
+                        android:hint="@string/dev_dashboard_honey_hint"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -74,7 +74,7 @@
                         android:id="@+id/edit_streak"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Streak"
+                        android:hint="@string/dev_dashboard_streak_hint"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -82,7 +82,7 @@
                         android:id="@+id/edit_flights"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Flights (updates honey/50)"
+                        android:hint="@string/dev_dashboard_flights_hint"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -91,7 +91,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Update Reality (Honey &amp; Streak)" />
+                        android:text="@string/dev_dashboard_update_reality" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -111,7 +111,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Notification Sandbox"
+                        android:text="@string/dev_dashboard_notification_sandbox"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
@@ -119,7 +119,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Every trigger here bypasses cooldowns so you can test instantly."
+                        android:text="@string/dev_dashboard_notification_subtitle"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
@@ -128,7 +128,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="Target rival name"
+                        android:hint="@string/dev_dashboard_target_rival_hint"
                         android:textColor="@color/text_primary" />
 
                     <Button
@@ -136,98 +136,98 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Daily Streak Reminder"
+                        android:text="@string/dev_dashboard_notify_streak"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_daily_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Daily Reminder Cooldown"
+                        android:text="@string/dev_dashboard_reset_daily_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_evening"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Evening Rescue Alert"
+                        android:text="@string/dev_dashboard_notify_evening"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_evening_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Evening Alert Cooldown"
+                        android:text="@string/dev_dashboard_reset_evening_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_milestone"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Milestone Celebration"
+                        android:text="@string/dev_dashboard_notify_milestone"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_milestone_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Milestone Cooldown"
+                        android:text="@string/dev_dashboard_reset_milestone_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_lost"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Streak Lost Alert"
+                        android:text="@string/dev_dashboard_notify_lost"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_lost_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Streak Lost Cooldown"
+                        android:text="@string/dev_dashboard_reset_lost_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_rival"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Rival Activity Alert"
+                        android:text="@string/dev_dashboard_notify_rival"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_rival_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Rival Activity Cooldown"
+                        android:text="@string/dev_dashboard_reset_rival_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_overtaken"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Overtaken Alert"
+                        android:text="@string/dev_dashboard_notify_overtaken"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_overtaken_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Overtaken Cooldown"
+                        android:text="@string/dev_dashboard_reset_overtaken_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_notify_fight"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Fight for First"
+                        android:text="@string/dev_dashboard_notify_fight"
                         android:textAllCaps="false" />
 
                     <Button
                         android:id="@+id/btn_reset_fight_cooldown"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Reset Fight for First Cooldown"
+                        android:text="@string/dev_dashboard_reset_fight_cooldown"
                         android:textAllCaps="false" />
 
                     <Button
@@ -236,7 +236,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:backgroundTint="@color/error"
-                        android:text="Reset All Notification State"
+                        android:text="@string/dev_dashboard_clear_notification_state"
                         android:textAllCaps="false" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -257,7 +257,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="AI Notification Preview"
+                        android:text="@string/dev_dashboard_ai_preview_title"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
@@ -265,7 +265,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Generates one polished reminder from live profile data and sends the final result immediately."
+                        android:text="@string/dev_dashboard_ai_preview_subtitle"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
@@ -274,7 +274,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Generate AI Reminder + Send"
+                        android:text="@string/dev_dashboard_ai_generate"
                         android:textAllCaps="false" />
 
                     <Button
@@ -282,7 +282,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Show Live Profile JSON"
+                        android:text="@string/dev_dashboard_show_profile_json"
                         android:textAllCaps="false" />
 
                     <TextView
@@ -314,7 +314,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Background Tools"
+                        android:text="@string/dev_dashboard_background_tools"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
@@ -324,7 +324,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:backgroundTint="@color/error"
-                        android:text="Reset Last Visit (Test Background)"
+                        android:text="@string/dev_dashboard_reset_visit"
                         android:textAllCaps="false" />
 
                     <Button
@@ -333,7 +333,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:backgroundTint="@color/primary"
-                        android:text="Force Run Background Workers"
+                        android:text="@string/dev_dashboard_force_run_workers"
                         android:textAllCaps="false" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

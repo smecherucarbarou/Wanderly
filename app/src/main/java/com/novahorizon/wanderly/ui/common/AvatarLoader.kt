@@ -1,6 +1,7 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly.ui.common
 
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -13,6 +14,8 @@ import com.bumptech.glide.request.target.Target
 import com.novahorizon.wanderly.R
 
 object AvatarLoader {
+    private const val TAG = "AvatarLoader"
+
     fun loadAvatar(
         imageView: ImageView,
         initialView: TextView,
@@ -27,8 +30,14 @@ object AvatarLoader {
         val trimmedSource = avatarSource.trim()
         val requestBuilder = when {
             trimmedSource.startsWith("http://", ignoreCase = true) ||
-                trimmedSource.startsWith("https://", ignoreCase = true) ->
+                trimmedSource.startsWith("https://", ignoreCase = true) -> {
+                if (!isRemoteAvatarUrlAllowed(trimmedSource)) {
+                    Log.w(TAG, "Blocked non-HTTPS avatar URL.")
+                    showPlaceholder(initialView, imageView)
+                    return
+                }
                 Glide.with(imageView).load(trimmedSource)
+            }
 
             else -> {
                 val imageBytes = decodeLegacyAvatar(trimmedSource)
@@ -71,10 +80,20 @@ object AvatarLoader {
             .into(imageView)
     }
 
+    internal fun isRemoteAvatarUrlAllowed(source: String): Boolean {
+        return source.trim().startsWith("https://", ignoreCase = true)
+    }
+
     private fun showInitial(initialView: TextView, imageView: ImageView, displayName: String) {
         imageView.visibility = View.GONE
         initialView.visibility = View.VISIBLE
         initialView.text = displayName.firstOrNull()?.uppercase() ?: "E"
+    }
+
+    private fun showPlaceholder(initialView: TextView, imageView: ImageView) {
+        initialView.visibility = View.GONE
+        imageView.visibility = View.VISIBLE
+        imageView.setImageResource(R.drawable.ic_buzzy)
     }
 
     private fun decodeLegacyAvatar(avatarSource: String): ByteArray? {

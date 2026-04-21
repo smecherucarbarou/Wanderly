@@ -19,15 +19,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
-import com.novahorizon.wanderly.showSnackbar
-import com.novahorizon.wanderly.ui.MissionsViewModel
-import com.novahorizon.wanderly.ui.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.showSnackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +46,7 @@ class MissionsFragment : Fragment() {
     private var tempImageUri: Uri? = null
     private var tempImageFile: File? = null
     private var locationLookupInFlight = false
+    private val logTag = "MissionsFragment"
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -68,11 +69,16 @@ class MissionsFragment : Fragment() {
     }
 
     private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success && tempImageUri != null) {
+        if (success) {
+            val imageUri = tempImageUri
+            if (imageUri == null) {
+                showSnackbar(getString(R.string.mission_photo_missing), isError = true)
+                return@registerForActivityResult
+            }
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
-                        requireContext().contentResolver.openInputStream(tempImageUri!!)?.use { input ->
+                        requireContext().contentResolver.openInputStream(imageUri)?.use { input ->
                             android.graphics.BitmapFactory.decodeStream(input)
                         }
                     }
@@ -234,7 +240,7 @@ class MissionsFragment : Fragment() {
                                     return@getFromLocation
                                 }
                                 val cityName = addresses.firstOrNull()?.locality ?: addresses.firstOrNull()?.adminArea
-                                Log.d("MissionsFragment", "City from geocoder: $cityName")
+                                logDebug("City from geocoder: $cityName")
                                 lifecycleOwner.lifecycleScope.launch {
                                     viewModel.generateMission(location.latitude, location.longitude, cityName)
                                 }
@@ -245,11 +251,11 @@ class MissionsFragment : Fragment() {
                                 geocoder.getFromLocation(location.latitude, location.longitude, 1)
                             }
                             val cityName = addresses?.firstOrNull()?.locality ?: addresses?.firstOrNull()?.adminArea
-                            Log.d("MissionsFragment", "City from geocoder: $cityName")
+                            logDebug("City from geocoder: $cityName")
                             viewModel.generateMission(location.latitude, location.longitude, cityName)
                         }
                     } catch (e: Exception) {
-                        Log.e("MissionsFragment", "Error getting city name", e)
+                        logError("Error getting city name", e)
                         viewModel.generateMission(location.latitude, location.longitude, null)
                     }
                 }
@@ -261,7 +267,7 @@ class MissionsFragment : Fragment() {
                 showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
         }.addOnFailureListener { error ->
-            Log.e("MissionsFragment", "Error getting precise location", error)
+            logError("Error getting precise location", error)
             locationLookupInFlight = false
             binding.loadingIndicator.visibility = View.GONE
             binding.newFlightButton.isEnabled = true
@@ -321,5 +327,21 @@ class MissionsFragment : Fragment() {
         tempImageUri = null
         super.onDestroyView()
         _binding = null
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(logTag, message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                Log.e(logTag, message, throwable)
+            } else {
+                Log.e(logTag, message)
+            }
+        }
     }
 }

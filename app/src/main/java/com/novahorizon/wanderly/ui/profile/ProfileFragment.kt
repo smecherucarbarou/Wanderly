@@ -3,7 +3,6 @@ package com.novahorizon.wanderly.ui.profile
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -13,9 +12,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -24,7 +25,6 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
@@ -34,8 +34,9 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
 import com.novahorizon.wanderly.services.HiveRealtimeService
-import com.novahorizon.wanderly.showSnackbar
-import com.novahorizon.wanderly.ui.AvatarLoader
+import com.novahorizon.wanderly.ui.common.AvatarLoader
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.yalantis.ucrop.UCrop
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
@@ -50,14 +51,19 @@ class ProfileFragment : Fragment() {
     private lateinit var repository: WanderlyRepository
     private var isClassDialogShowing = false
     private val badgesAdapter = BadgesAdapter()
+    private val viewModel: ProfileViewModel by viewModels {
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
+    }
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val resultUri = UCrop.getOutput(result.data!!)
-            if (resultUri != null) {
-                uploadAvatarToSupabase(resultUri)
-            }
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+
+        val resultUri = result.data?.let(UCrop::getOutput)
+        if (resultUri == null) {
+            Toast.makeText(requireContext(), R.string.profile_avatar_crop_failed, Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
         }
+        uploadAvatarToSupabase(resultUri)
     }
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -114,9 +120,8 @@ class ProfileFragment : Fragment() {
                 try {
                     requireContext().stopService(Intent(requireContext(), HiveRealtimeService::class.java))
                     SupabaseClient.client.auth.signOut()
-                    val prefs = requireActivity().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-                    prefs.edit().putBoolean(Constants.KEY_REMEMBER_ME, false).apply()
-                    prefs.edit().clear().apply()
+                    repository.clearRememberMe()
+                    repository.clearLocalState()
                     SessionNavigator.openAuth(requireActivity())
                 } catch (_: Exception) {
                     showSnackbar(getString(R.string.profile_logout_failed), isError = true)
@@ -127,73 +132,7 @@ class ProfileFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        loadProfile()
-    }
-
-    private fun uploadAvatarToSupabase(uri: Uri) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val profile = currentProfile ?: return@launch
-                val avatarUrl = repository.uploadAvatar(uri, profile.id)
-                    ?: throw IllegalStateException("Avatar upload failed")
-
-                val updatedProfile = profile.copy(avatar_url = avatarUrl)
-                repository.updateProfile(updatedProfile)
-
-                currentProfile = updatedProfile
-                updateAvatarDisplay(avatarUrl, updatedProfile.username ?: "")
-                showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
-            } catch (e: Exception) {
-                Log.e("ProfileFragment", "Avatar upload failed", e)
-                showSnackbar(getString(R.string.profile_avatar_upload_failed), isError = true)
-            }
-        }
-    }
-
-    private fun updateUsername(newUsername: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val profile = currentProfile ?: return@launch
-                val updatedProfile = profile.copy(username = newUsername)
-                repository.updateProfile(updatedProfile)
-
-                currentProfile = updatedProfile
-                binding.username.text = newUsername
-                showSnackbar(getString(R.string.profile_username_updated), isError = false)
-            } catch (_: Exception) {
-                showSnackbar(getString(R.string.profile_username_update_failed), isError = true)
-            }
-        }
-    }
-
-    private fun loadProfile() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val result = repository.getCurrentProfile()
-                if (result != null) {
-                    currentProfile = result
-                    checkAndUnlockBadges(result)
-                }
-            } catch (e: Exception) {
-                Log.e("ProfileFragment", "Error loading profile", e)
-                showSnackbar("Could not load profile from hive.", isError = true)
-            }
-        }
-    }
-
-    private fun checkAndUnlockBadges(profile: Profile) {
-        val updatedProfile = ProfileBadgeEvaluator.updatedProfileWithUnlockedBadges(profile)
-        val currentBadges = profile.badges?.toSet() ?: emptySet()
-        val newBadges = updatedProfile.badges?.toSet() ?: emptySet()
-
-        if (newBadges.size > currentBadges.size) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                repository.updateProfile(updatedProfile)
-            }
-        } else {
-            currentProfile = profile
-            updateUI(profile)
-        }
+        viewModel.loadProfile()
     }
 
     private fun updateUI(profile: Profile) {
@@ -269,13 +208,50 @@ class ProfileFragment : Fragment() {
 
         updateAvatarDisplay(profile.avatar_url, profile.username ?: getString(R.string.profile_default_name))
 
-        if (profile.badges.isNullOrEmpty()) {
+        val badges = profile.badges.orEmpty()
+        if (badges.isEmpty()) {
             binding.badgesRecycler.visibility = View.GONE
             binding.badgesTitle.text = getString(R.string.profile_badges_empty)
         } else {
             binding.badgesRecycler.visibility = View.VISIBLE
             binding.badgesTitle.text = getString(R.string.profile_badges_title)
-            badgesAdapter.submitBadges(profile.badges!!)
+            badgesAdapter.submitBadges(badges)
+        }
+    }
+
+    private fun uploadAvatarToSupabase(uri: Uri) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val profile = currentProfile ?: return@launch
+                val avatarUrl = repository.uploadAvatar(uri, profile.id)
+                    ?: throw IllegalStateException("Avatar upload failed")
+
+                val updatedProfile = profile.copy(avatar_url = avatarUrl)
+                repository.updateProfile(updatedProfile)
+
+                currentProfile = updatedProfile
+                updateAvatarDisplay(avatarUrl, updatedProfile.username ?: "")
+                showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
+            } catch (e: Exception) {
+                Log.e("ProfileFragment", "Avatar upload failed", e)
+                showSnackbar(getString(R.string.profile_avatar_upload_failed), isError = true)
+            }
+        }
+    }
+
+    private fun updateUsername(newUsername: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val profile = currentProfile ?: return@launch
+                val updatedProfile = profile.copy(username = newUsername)
+                repository.updateProfile(updatedProfile)
+
+                currentProfile = updatedProfile
+                binding.username.text = newUsername
+                showSnackbar(getString(R.string.profile_username_updated), isError = false)
+            } catch (_: Exception) {
+                showSnackbar(getString(R.string.profile_username_update_failed), isError = true)
+            }
         }
     }
 

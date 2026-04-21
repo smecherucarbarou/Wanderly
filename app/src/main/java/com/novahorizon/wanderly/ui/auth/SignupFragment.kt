@@ -8,11 +8,11 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
+import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentSignupBinding
-import com.novahorizon.wanderly.showSnackbar
-import com.novahorizon.wanderly.ui.AuthViewModel
-import com.novahorizon.wanderly.ui.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.showSnackbar
 
 class SignupFragment : Fragment() {
 
@@ -43,22 +43,22 @@ class SignupFragment : Fragment() {
             val confirmPassword = binding.confirmPasswordInput.text.toString()
 
             if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                showSnackbar("Invalid email format", isError = true)
+                showSnackbar(getString(R.string.auth_invalid_email), isError = true)
                 return@setOnClickListener
             }
 
             if (password.length < 8 || !password.any { it.isDigit() }) {
-                showSnackbar("Password must be 8+ chars & contain a number", isError = true)
+                showSnackbar(getString(R.string.auth_password_requirements), isError = true)
                 return@setOnClickListener
             }
 
             if (password != confirmPassword) {
-                showSnackbar("Passwords do not match", isError = true)
+                showSnackbar(getString(R.string.auth_passwords_do_not_match), isError = true)
                 return@setOnClickListener
             }
 
             if (username.length < 3) {
-                showSnackbar("Username must be 3+ chars", isError = true)
+                showSnackbar(getString(R.string.auth_username_minimum), isError = true)
                 return@setOnClickListener
             }
 
@@ -77,7 +77,7 @@ class SignupFragment : Fragment() {
                     binding.signupButton.isEnabled = false
                 }
                 is AuthViewModel.AuthState.Success -> {
-                    showSnackbar("Welcome to the Hive!", isError = false)
+                    showSnackbar(getString(R.string.auth_signup_success), isError = false)
                     findNavController().navigateUp()
                 }
                 is AuthViewModel.AuthState.Error -> {

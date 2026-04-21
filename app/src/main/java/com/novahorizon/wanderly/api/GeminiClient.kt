@@ -144,7 +144,7 @@ object GeminiClient {
                         throw Exception("Proxy call failed: ${resp.code}")
                     }
                     logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
-                    extractText(responseBody)
+                    extractText(responseBody).getOrElse { throw it }
                 }
             } catch (e: Exception) {
                 logException(e)
@@ -153,25 +153,29 @@ object GeminiClient {
         }
     }
 
-    private fun extractText(responseBody: String): String {
-        val json = JSONObject(responseBody)
-        val parts = json.getJSONArray("candidates")
-            .getJSONObject(0)
-            .getJSONObject("content")
-            .getJSONArray("parts")
+    private fun extractText(responseBody: String): Result<String> {
+        val json = runCatching { JSONObject(responseBody) }.getOrElse {
+            return Result.failure(IllegalStateException("Gemini returned malformed JSON."))
+        }
+        val candidates = json.optJSONArray("candidates")
+            ?: return Result.failure(IllegalStateException("Gemini response did not include candidates."))
+        val firstCandidate = candidates.optJSONObject(0)
+            ?: return Result.failure(IllegalStateException("Gemini response did not include any candidates."))
+        val parts = firstCandidate.optJSONObject("content")?.optJSONArray("parts")
+            ?: return Result.failure(IllegalStateException("Gemini response did not include content parts."))
 
         val textBuilder = StringBuilder()
         for (index in 0 until parts.length()) {
-            val part = parts.getJSONObject(index)
-            if (part.has("text")) {
-                if (textBuilder.isNotEmpty()) textBuilder.append('\n')
-                textBuilder.append(part.getString("text"))
-            }
+            val part = parts.optJSONObject(index) ?: continue
+            val text = part.optString("text").takeIf { it.isNotBlank() } ?: continue
+            if (textBuilder.isNotEmpty()) textBuilder.append('\n')
+            textBuilder.append(text)
         }
 
-        return textBuilder.toString().ifBlank {
-            throw Exception("Empty Gemini response")
-        }
+        return textBuilder.toString()
+            .takeIf { it.isNotBlank() }
+            ?.let(Result.Companion::success)
+            ?: Result.failure(IllegalStateException("Gemini response did not include any text parts."))
     }
 
     private inline fun logDebug(message: () -> String) {

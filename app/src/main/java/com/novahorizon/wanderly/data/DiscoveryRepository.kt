@@ -6,6 +6,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -166,9 +168,12 @@ class DiscoveryRepository {
             "park in $city"
         )
         val candidates = coroutineScope {
+            val semaphore = Semaphore(3)
             queries.map { query ->
                 async {
-                    fetchCandidatesFromGooglePlacesQuery(query, userLat, userLng, radiusMeters)
+                    semaphore.withPermit {
+                        fetchCandidatesFromGooglePlacesQuery(query, userLat, userLng, radiusMeters)
+                    }
                 }
             }.awaitAll().flatten()
         }

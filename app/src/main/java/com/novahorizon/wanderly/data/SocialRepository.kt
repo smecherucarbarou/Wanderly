@@ -13,7 +13,7 @@ class SocialRepository {
     suspend fun getLeaderboard(): List<Profile> = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
-            val currentUserId = session.user!!.id
+            val currentUserId = session.user?.id ?: return@withContext emptyList()
 
             val friendships = SupabaseClient.client.postgrest["friendships"]
                 .select {
@@ -49,7 +49,7 @@ class SocialRepository {
     suspend fun addFriendByCode(friendCode: String): String = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext "Not authenticated"
-            val currentUserId = session.user!!.id
+            val currentUserId = session.user?.id ?: return@withContext "User not authenticated"
             val normalizedCode = normalizeFriendCode(friendCode)
                 ?: return@withContext "Friend code must be 6 letters or digits"
 
@@ -78,7 +78,7 @@ class SocialRepository {
     suspend fun removeFriend(friendId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext false
-            val currentUserId = session.user!!.id
+            val currentUserId = session.user?.id ?: return@withContext false
 
             SupabaseClient.client.postgrest["friendships"].delete {
                 filter {
@@ -104,7 +104,7 @@ class SocialRepository {
     suspend fun getFriends(): List<Profile> = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
-            val currentUserId = session.user!!.id
+            val currentUserId = session.user?.id ?: return@withContext emptyList()
 
             val friendships = SupabaseClient.client.postgrest["friendships"]
                 .select {

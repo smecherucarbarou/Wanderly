@@ -20,8 +20,8 @@ import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.databinding.ActivityMainBinding
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.services.HiveRealtimeService
-import com.novahorizon.wanderly.ui.MainViewModel
-import com.novahorizon.wanderly.ui.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {

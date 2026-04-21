@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
@@ -32,6 +33,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 class HiveRealtimeService : Service() {
 
@@ -39,6 +42,7 @@ class HiveRealtimeService : Service() {
     private lateinit var repository: WanderlyRepository
     private var realtimeChannel: RealtimeChannel? = null
     private var realtimeCollectorJob: Job? = null
+    private var statusCollectorJob: Job? = null
     private var isSubscribed = false
 
     override fun onCreate() {
@@ -77,28 +81,29 @@ class HiveRealtimeService : Service() {
         serviceScope.launch {
             try {
                 val profile = repository.getCurrentProfile() ?: run {
-                    Log.w("HiveRealtime", "No profile found, stopping service.")
+                    logWarn("No profile found, stopping service.")
                     stopSelf()
                     return@launch
                 }
 
                 SupabaseClient.client.realtime.connect()
 
-                SupabaseClient.client.realtime.status.onEach { status ->
-                    Log.d("HiveRealtime", "Connection Status: $status")
+                statusCollectorJob?.cancel()
+                statusCollectorJob = SupabaseClient.client.realtime.status.onEach { status ->
+                    logDebug("Connection Status: $status")
                     if (status == Realtime.Status.CONNECTED) {
                         if (!isSubscribed) {
-                            Log.d("HiveRealtime", "Connected! Subscribing to channel...")
+                            logDebug("Connected! Subscribing to channel...")
                             setupSubscription(profile.id)
                             isSubscribed = true
                         }
                     } else {
                         isSubscribed = false
                     }
-                }.launchIn(this)
+                }.launchIn(serviceScope)
 
             } catch (e: Exception) {
-                Log.e("HiveRealtime", "Critical error in service", e)
+                logError("Critical error in service", e)
             }
         }
     }
@@ -120,7 +125,7 @@ class HiveRealtimeService : Service() {
 
             val currentProfile = repository.getCurrentProfile() ?: return@onEach
 
-            Log.d("HiveRealtime", "Realtime update from: ${updatedProfile.username}")
+            logDebug("Realtime update from: ${updatedProfile.username}")
             NotificationCheckCoordinator.handleRealtimeProfileUpdate(
                 context = applicationContext,
                 repository = repository,
@@ -137,17 +142,42 @@ class HiveRealtimeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        serviceScope.launch {
-            try {
-                realtimeCollectorJob?.cancel()
-                realtimeChannel?.unsubscribe()
-                Log.d("HiveRealtime", "Unsubscribed from channel.")
-            } catch (e: Exception) {
-                Log.e("HiveRealtime", "Error during unsubscribe", e)
-            } finally {
-                serviceScope.cancel()
+        realtimeCollectorJob?.cancel()
+        statusCollectorJob?.cancel()
+        try {
+            runBlocking {
+                withTimeout(2_000L) {
+                    realtimeChannel?.unsubscribe()
+                }
+            }
+            logDebug("Unsubscribed from channel.")
+        } catch (e: Exception) {
+            logError("Error during unsubscribe", e)
+        } finally {
+            serviceScope.cancel()
+            super.onDestroy()
+        }
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d("HiveRealtime", message)
+        }
+    }
+
+    private fun logWarn(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.w("HiveRealtime", message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                Log.e("HiveRealtime", message, throwable)
+            } else {
+                Log.e("HiveRealtime", message)
             }
         }
-        super.onDestroy()
     }
 }

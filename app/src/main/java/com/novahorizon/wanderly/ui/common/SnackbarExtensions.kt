@@ -1,10 +1,10 @@
-package com.novahorizon.wanderly
+package com.novahorizon.wanderly.ui.common
 
 import android.app.Activity
-import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.snackbar.Snackbar
+import com.novahorizon.wanderly.R
 
 fun Fragment.showSnackbar(message: String, isError: Boolean = false) {
     val snackbar = Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)

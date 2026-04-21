@@ -24,9 +24,9 @@ import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
-import com.novahorizon.wanderly.showSnackbar
-import com.novahorizon.wanderly.ui.SocialViewModel
-import com.novahorizon.wanderly.ui.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.showSnackbar
+import com.novahorizon.wanderly.ui.social.SocialViewModel
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
@@ -193,8 +193,7 @@ class MapFragment : Fragment() {
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
                 if (location != null) {
                     val geoPoint = GeoPoint(location.latitude, location.longitude)
-                    val prefs = requireActivity().getSharedPreferences("WanderlyPrefs", Context.MODE_PRIVATE)
-                    if (prefs.getString(Constants.KEY_MISSION_TARGET_LAT, null) == null) {
+                    if (!WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
                         binding.mapView.controller.setCenter(geoPoint)
                     }
                     updateUserLocation(location.latitude, location.longitude)

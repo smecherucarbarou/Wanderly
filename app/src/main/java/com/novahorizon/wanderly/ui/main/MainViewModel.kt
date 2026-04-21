@@ -1,4 +1,4 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly.ui.main
 
 import android.util.Log
 import androidx.lifecycle.LiveData
@@ -6,10 +6,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.util.DateUtils
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Locale
 import java.util.TimeZone
 
 class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
@@ -30,16 +29,12 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
     val streakStatus: LiveData<StreakStatus> = _streakStatus
 
     fun checkDailyStreak() {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-
         val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-        val today = sdf.format(now.time)
+        val today = DateUtils.formatUtcDate(now.time)
 
         val yesterdayCal = now.clone() as Calendar
         yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
-        val yesterday = sdf.format(yesterdayCal.time)
+        val yesterday = DateUtils.formatUtcDate(yesterdayCal.time)
 
         viewModelScope.launch {
             try {
@@ -66,12 +61,9 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
             val profile = repository.getCurrentProfile() ?: return@launch
             val currentHoney = profile.honey ?: 0
             if (currentHoney >= cost) {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }
                 val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                 calendar.add(Calendar.DAY_OF_YEAR, -1)
-                val yesterday = sdf.format(calendar.time)
+                val yesterday = DateUtils.formatUtcDate(calendar.time)
 
                 val updated = profile.copy(
                     honey = currentHoney - cost,
@@ -93,12 +85,9 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
         viewModelScope.launch {
             val profile = repository.getCurrentProfile() ?: return@launch
 
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
             val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
             calendar.add(Calendar.DAY_OF_YEAR, -1)
-            val yesterday = sdf.format(calendar.time)
+            val yesterday = DateUtils.formatUtcDate(calendar.time)
 
             val updated = profile.copy(
                 streak_count = 0,

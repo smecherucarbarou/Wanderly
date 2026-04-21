@@ -32,7 +32,7 @@
 
     <fragment
         android:id="@+id/socialFragment"
-        android:name="com.novahorizon.wanderly.ui.SocialFragment"
+        android:name="com.novahorizon.wanderly.ui.social.SocialFragment"
         android:label="Hive"
         tools:layout="@layout/fragment_social" />
 

@@ -56,6 +56,8 @@ class WanderlyRepository(context: Context) {
 
     fun getMissionText(): String? = preferencesStore.getMissionText()
 
+    fun hasMissionTargetCoordinates(): Boolean = preferencesStore.hasMissionTargetCoordinates()
+
     fun getMissionTargetCoordinates(): Pair<Double, Double>? = preferencesStore.getMissionTargetCoordinates()
 
     fun saveMissionData(
@@ -78,8 +80,12 @@ class WanderlyRepository(context: Context) {
 
     fun setRememberMeEnabled(enabled: Boolean) = preferencesStore.setRememberMeEnabled(enabled)
 
+    fun clearRememberMe() = preferencesStore.setRememberMeEnabled(false)
+
     fun clearLocalState() = preferencesStore.clearAll()
 
     suspend fun uploadAvatar(uri: Uri, profileId: String): String? =
         profileRepository.uploadAvatar(uri, profileId)
+
+    fun preferencesStore(): PreferencesStore = preferencesStore
 }

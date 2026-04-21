@@ -122,11 +122,11 @@
 
         <ImageView
             android:id="@+id/remove_friend_btn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/social_remove_friend_title"
-            android:padding="8dp"
+            android:padding="12dp"
             android:src="@drawable/ic_remove_friend"
             android:tint="@color/error"
             android:visibility="gone"

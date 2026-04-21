@@ -18,7 +18,7 @@ import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
-import com.novahorizon.wanderly.showSnackbar
+import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.workers.SocialWorker
 import com.novahorizon.wanderly.workers.StreakWorker
 import kotlinx.coroutines.launch
@@ -65,89 +65,89 @@ class DevDashboardFragment : Fragment() {
         binding.btnNotifyStreak.setOnClickListener {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 7
             WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
-            announceTrigger("Daily streak reminder forced for $streak days")
+            announceTrigger(getString(R.string.dev_dashboard_forced_daily_reminder, streak))
         }
         binding.btnResetDailyCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.DAILY_REMINDER,
-                "Daily reminder"
+                getString(R.string.dev_dashboard_daily_reminder_label)
             )
         }
 
         binding.btnNotifyEvening.setOnClickListener {
             WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
-            announceTrigger("Evening rescue alert forced")
+            announceTrigger(getString(R.string.dev_dashboard_forced_evening_alert))
         }
         binding.btnResetEveningCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.EVENING_ALERT,
-                "Evening alert"
+                getString(R.string.dev_dashboard_evening_alert_label)
             )
         }
 
         binding.btnNotifyMilestone.setOnClickListener {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10
             WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
-            announceTrigger("Milestone alert forced for $streak days")
+            announceTrigger(getString(R.string.dev_dashboard_forced_milestone, streak))
         }
         binding.btnResetMilestoneCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.MILESTONE,
-                "Milestone celebration"
+                getString(R.string.dev_dashboard_milestone_label)
             )
         }
 
         binding.btnNotifyLost.setOnClickListener {
             WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
-            announceTrigger("Streak lost alert forced")
+            announceTrigger(getString(R.string.dev_dashboard_forced_streak_lost))
         }
         binding.btnResetLostCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.STREAK_LOST,
-                "Streak lost"
+                getString(R.string.dev_dashboard_streak_lost_label)
             )
         }
 
         binding.btnNotifyRival.setOnClickListener {
-            val name = rivalName(default = "BuzzyBee")
+            val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_one))
             WanderlyNotificationManager.sendRivalActivity(requireContext(), name, force = true)
-            announceTrigger("Rival activity forced for $name")
+            announceTrigger(getString(R.string.dev_dashboard_forced_rival_activity, name))
         }
         binding.btnResetRivalCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.RIVAL_ACTIVITY,
-                "Rival activity"
+                getString(R.string.dev_dashboard_rival_activity_label)
             )
         }
 
         binding.btnNotifyOvertaken.setOnClickListener {
-            val name = rivalName(default = "QueenExplorer")
+            val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_two))
             WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name, force = true)
-            announceTrigger("Overtaken alert forced for $name")
+            announceTrigger(getString(R.string.dev_dashboard_forced_overtaken, name))
         }
         binding.btnResetOvertakenCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.OVERTAKEN,
-                "Overtaken"
+                getString(R.string.dev_dashboard_overtaken_label)
             )
         }
 
         binding.btnNotifyFight.setOnClickListener {
-            val name = rivalName(default = "KingBee")
+            val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_three))
             WanderlyNotificationManager.sendFightForFirst(requireContext(), name, force = true)
-            announceTrigger("Fight-for-first alert forced for $name")
+            announceTrigger(getString(R.string.dev_dashboard_forced_fight, name))
         }
         binding.btnResetFightCooldown.setOnClickListener {
             resetNotificationType(
                 WanderlyNotificationManager.NotificationType.FIGHT_FOR_FIRST,
-                "Fight for first"
+                getString(R.string.dev_dashboard_fight_label)
             )
         }
 
         binding.btnClearNotifCooldowns.setOnClickListener {
             WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
             NotificationCheckCoordinator.clearCheckState(requireContext())
-            announceTrigger("Notification cooldowns and check state cleared")
+            announceTrigger(getString(R.string.dev_dashboard_cleared_notification_state))
         }
 
         binding.btnRawLogs.setOnClickListener {
@@ -155,12 +155,12 @@ class DevDashboardFragment : Fragment() {
                 val profile = repository.getCurrentProfile()
                 if (profile != null) {
                     AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-                        .setTitle("Live Profile JSON")
+                        .setTitle(getString(R.string.dev_dashboard_live_profile_title))
                         .setMessage(prettyJson.encodeToString(profile))
-                        .setPositiveButton("OK", null)
+                        .setPositiveButton(getString(R.string.dev_dashboard_ok), null)
                         .show()
                 } else {
-                    showSnackbar("Failed to fetch live profile", isError = true)
+                    showSnackbar(getString(R.string.dev_dashboard_failed_profile_fetch), isError = true)
                 }
             }
         }
@@ -172,9 +172,9 @@ class DevDashboardFragment : Fragment() {
                 repository.updateLastVisitDate("2000-01-01")
                 val success = repository.resetMissionDateForTesting()
                 if (success) {
-                    showSnackbar("Local and remote visit dates reset. Restart the app if needed.", isError = false)
+                    showSnackbar(getString(R.string.dev_dashboard_reset_visit_success), isError = false)
                 } else {
-                    showSnackbar("Local reset worked, but the remote reset failed.", isError = true)
+                    showSnackbar(getString(R.string.dev_dashboard_reset_visit_partial_failure), isError = true)
                 }
             }
         }
@@ -186,27 +186,40 @@ class DevDashboardFragment : Fragment() {
             WorkManager.getInstance(requireContext()).enqueue(socialRequest)
             WorkManager.getInstance(requireContext()).enqueue(streakRequest)
 
-            announceTrigger("SocialWorker and StreakWorker were queued immediately")
+            announceTrigger(getString(R.string.dev_dashboard_workers_queued))
         }
     }
 
     private fun runAiNotificationTest() {
         binding.btnTestAiNotif.isEnabled = false
-        binding.tvAiLogs.text = "AI notification preview started.\n\n"
+        binding.tvAiLogs.text = getString(R.string.dev_dashboard_ai_preview_started) + "\n\n"
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val profile = repository.getCurrentProfile() ?: throw Exception("No live profile available.")
+                val profile = repository.getCurrentProfile()
+                    ?: throw Exception(getString(R.string.dev_dashboard_no_live_profile))
                 val payload = buildJsonObject {
-                    put("trigger", "Daily Reminder")
+                    put("trigger", getString(R.string.dev_dashboard_ai_trigger_daily))
                     put("current_streak", profile.streak_count ?: 0)
-                    put("user_name", profile.username ?: "Explorer")
+                    put("user_name", profile.username ?: getString(R.string.dev_dashboard_default_explorer))
                     put("honey_balance", profile.honey ?: 0)
                     put("hive_rank", profile.hive_rank ?: 1)
                 }
 
-                logToUi("Using live profile for ${profile.username ?: "Explorer"}")
-                logToUi("Streak: ${profile.streak_count ?: 0} | Honey: ${profile.honey ?: 0} | Rank: ${profile.hive_rank ?: 1}")
+                logToUi(
+                    getString(
+                        R.string.dev_dashboard_using_live_profile,
+                        profile.username ?: getString(R.string.dev_dashboard_default_explorer)
+                    )
+                )
+                logToUi(
+                    getString(
+                        R.string.dev_dashboard_live_profile_stats,
+                        profile.streak_count ?: 0,
+                        profile.honey ?: 0,
+                        profile.hive_rank ?: 1
+                    )
+                )
 
                 val prompt = """
                     Write one polished mobile push notification for Wanderly.
@@ -226,12 +239,16 @@ class DevDashboardFragment : Fragment() {
                 val rawResponse = GeminiClient.generateText(prompt)
                 val jsonStart = rawResponse.indexOf("{")
                 val jsonEnd = rawResponse.lastIndexOf("}")
-                if (jsonStart == -1 || jsonEnd == -1) throw Exception("AI did not return valid JSON.")
+                if (jsonStart == -1 || jsonEnd == -1) {
+                    throw Exception(getString(R.string.dev_dashboard_ai_invalid_json))
+                }
 
                 val parsed = JSONObject(rawResponse.substring(jsonStart, jsonEnd + 1))
-                val title = parsed.optString("title").trim().ifBlank { "Hive update" }.take(32)
+                val title = parsed.optString("title").trim()
+                    .ifBlank { getString(R.string.dev_dashboard_ai_default_title) }
+                    .take(32)
                 val message = parsed.optString("message").trim().ifBlank {
-                    "Your streak is waiting. One quick mission keeps the hive alive."
+                    getString(R.string.dev_dashboard_ai_default_message)
                 }.take(110)
 
                 WanderlyNotificationManager.showNotification(
@@ -243,13 +260,14 @@ class DevDashboardFragment : Fragment() {
                     bypassCooldown = true
                 )
 
-                logToUi("Final title: $title")
-                logToUi("Final message: $message")
-                logToUi("Sent as a real local notification with cooldown bypass.")
-                showSnackbar("AI reminder generated and sent", isError = false)
+                logToUi(getString(R.string.dev_dashboard_ai_final_title, title))
+                logToUi(getString(R.string.dev_dashboard_ai_final_message, message))
+                logToUi(getString(R.string.dev_dashboard_ai_sent_notice))
+                showSnackbar(getString(R.string.dev_dashboard_ai_sent_success), isError = false)
             } catch (e: Exception) {
-                logToUi("AI preview failed: ${e.message}")
-                showSnackbar("AI preview failed: ${e.message}", isError = true)
+                val errorMessage = e.message ?: getString(R.string.error_network)
+                logToUi(getString(R.string.dev_dashboard_ai_failed, errorMessage))
+                showSnackbar(getString(R.string.dev_dashboard_ai_failed, errorMessage), isError = true)
             } finally {
                 binding.btnTestAiNotif.isEnabled = true
             }
@@ -276,7 +294,7 @@ class DevDashboardFragment : Fragment() {
     ) {
         WanderlyNotificationManager.clearNotificationCooldown(requireContext(), type)
         NotificationCheckCoordinator.clearCheckStateForType(requireContext(), type)
-        announceTrigger("$label cooldown/state reset")
+        announceTrigger(getString(R.string.dev_dashboard_cooldown_reset, label))
     }
 
     private fun rivalName(default: String): String {
@@ -296,17 +314,17 @@ class DevDashboardFragment : Fragment() {
             val parsedStreak = streakInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
 
             if (honeyInput.isNotEmpty() && editHoney == null) {
-                showSnackbar("Honey must be a valid number.", isError = true)
+                showSnackbar(getString(R.string.dev_dashboard_honey_invalid), isError = true)
                 return@launch
             }
 
             if (flightsInput.isNotEmpty() && editFlights == null) {
-                showSnackbar("Flights must be a valid number.", isError = true)
+                showSnackbar(getString(R.string.dev_dashboard_flights_invalid), isError = true)
                 return@launch
             }
 
             if (streakInput.isNotEmpty() && parsedStreak == null) {
-                showSnackbar("Streak must be a valid number.", isError = true)
+                showSnackbar(getString(R.string.dev_dashboard_streak_invalid), isError = true)
                 return@launch
             }
 
@@ -321,11 +339,15 @@ class DevDashboardFragment : Fragment() {
             if (repository.updateProfile(updated)) {
                 val refreshed = repository.getCurrentProfile() ?: updated
                 showSnackbar(
-                    "Reality altered. Honey: ${refreshed.honey ?: 0}, Streak: ${refreshed.streak_count ?: 0}",
+                    getString(
+                        R.string.dev_dashboard_reality_updated,
+                        refreshed.honey ?: 0,
+                        refreshed.streak_count ?: 0
+                    ),
                     isError = false
                 )
             } else {
-                showSnackbar("Failed to alter reality.", isError = true)
+                showSnackbar(getString(R.string.dev_dashboard_reality_update_failed), isError = true)
             }
         }
     }

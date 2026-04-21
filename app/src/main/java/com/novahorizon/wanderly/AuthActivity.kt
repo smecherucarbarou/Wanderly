@@ -1,6 +1,5 @@
 package com.novahorizon.wanderly
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -39,8 +38,7 @@ class AuthActivity : AppCompatActivity() {
                 }
             }
 
-            val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-            val rememberMe = prefs.getBoolean(Constants.KEY_REMEMBER_ME, false)
+            val rememberMe = WanderlyGraph.repository(this@AuthActivity).isRememberMeEnabled()
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
 
             if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {

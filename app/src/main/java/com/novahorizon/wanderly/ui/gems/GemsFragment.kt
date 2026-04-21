@@ -25,13 +25,15 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.data.WanderlyRepository
-import com.novahorizon.wanderly.showSnackbar
+import com.novahorizon.wanderly.ui.common.showSnackbar
+import com.novahorizon.wanderly.util.AiResponseParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,6 +44,7 @@ import java.text.Normalizer
 import java.util.Locale
 
 class GemsFragment : Fragment() {
+    private val logTag = "GemsFragment"
 
     private lateinit var gemsRecycler: RecyclerView
     private lateinit var loadingIndicator: View
@@ -80,7 +83,7 @@ class GemsFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        android.util.Log.d("GemsFragment", "onCreateView called")
+        logDebug("onCreateView called")
         val view = inflater.inflate(R.layout.fragment_gems, container, false)
         gemsRecycler = view.findViewById(R.id.gems_recycler)
         loadingIndicator = view.findViewById(R.id.gems_loading)
@@ -109,7 +112,7 @@ class GemsFragment : Fragment() {
     }
 
     private fun checkLocationAndLoadGems(isRefresh: Boolean = false) {
-        android.util.Log.d("GemsFragment", "checkLocationAndLoadGems called, isRefresh=$isRefresh")
+        logDebug("checkLocationAndLoadGems called, isRefresh=$isRefresh")
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             return
@@ -135,8 +138,7 @@ class GemsFragment : Fragment() {
                             }
                         }
 
-                        android.util.Log.d(
-                            "GemsFragment",
+                        logDebug(
                             "Geocoder details: locality=${address?.locality}, subLocality=${address?.subLocality}, subAdmin=${address?.subAdminArea}, admin=${address?.adminArea}, feature=${address?.featureName}"
                         )
 
@@ -176,8 +178,17 @@ class GemsFragment : Fragment() {
 
                 val prompt = buildCuratedPrompt(city, candidates)
                 val response = GeminiClient.generateWithSearch(prompt)
-                val cleanJson = extractJsonArray(response)
-                val gemPicks = json.decodeFromString<List<GemPick>>(cleanJson)
+                val cleanJson = AiResponseParser.extractFirstJsonArray(response)
+                    ?: throw IllegalStateException(getString(R.string.gems_invalid_response))
+                val gemPicks = runCatching {
+                    json.decodeFromString<List<GemPick>>(cleanJson)
+                }.onFailure {
+                    if (BuildConfig.DEBUG) {
+                        logDebug("Raw gem response: $response")
+                    }
+                }.getOrElse {
+                    throw IllegalStateException(getString(R.string.gems_invalid_response))
+                }
 
                 val gems = gemPicks.mapNotNull { pick ->
                     val candidate = candidates.getOrNull(pick.candidateIndex - 1) ?: return@mapNotNull null
@@ -204,7 +215,7 @@ class GemsFragment : Fragment() {
                     refreshBtn.isEnabled = true
                 }
             } catch (e: Exception) {
-                android.util.Log.e("GemsFragment", "Error loading gems", e)
+                logError("Error loading gems", e)
                 if (isAdded && view != null) {
                     val message = e.message?.takeIf { it.isNotBlank() }
                         ?: getString(R.string.gems_loading_failed)
@@ -311,15 +322,6 @@ class GemsFragment : Fragment() {
         """.trimIndent()
     }
 
-    private fun extractJsonArray(response: String): String {
-        val startIndex = response.indexOf("[")
-        val endIndex = response.lastIndexOf("]")
-        if (startIndex == -1 || endIndex == -1) {
-            throw Exception("Invalid JSON array from Gemini")
-        }
-        return response.substring(startIndex, endIndex + 1)
-    }
-
     private fun resolveSearchCity(address: Address?): String {
         if (address == null) return "this area"
 
@@ -392,6 +394,22 @@ class GemsFragment : Fragment() {
         } catch (_: ActivityNotFoundException) {
             val webUrl = "https://www.google.com/maps/search/?api=1&query=${gem.lat},${gem.lng}"
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)))
+        }
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d(logTag, message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                android.util.Log.e(logTag, message, throwable)
+            } else {
+                android.util.Log.e(logTag, message)
+            }
         }
     }
 }

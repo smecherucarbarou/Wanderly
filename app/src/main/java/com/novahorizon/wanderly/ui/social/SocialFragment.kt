@@ -1,4 +1,4 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly.ui.social
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -20,7 +20,9 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
-import com.novahorizon.wanderly.showSnackbar
+import com.novahorizon.wanderly.ui.common.AvatarLoader
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
+import com.novahorizon.wanderly.ui.common.showSnackbar
 import java.util.Locale
 
 class SocialFragment : Fragment() {

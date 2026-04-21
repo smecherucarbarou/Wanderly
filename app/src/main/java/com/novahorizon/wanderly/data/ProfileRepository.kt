@@ -55,11 +55,12 @@ class ProfileRepository(
     suspend fun getCurrentProfile(): Profile? = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: run {
-                Log.w("ProfileRepository", "Auth session not found after waiting.")
+                logWarn("Auth session not found after waiting.")
                 return@withContext null
             }
 
-            val userId = session.user!!.id
+            val userId = session.user?.id
+                ?: return@withContext null
             val loadedProfile = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
                 .select { filter { eq("id", userId) } }
                 .decodeSingleOrNull<Profile>()
@@ -92,7 +93,7 @@ class ProfileRepository(
             _currentProfile.value = profile
             profile
         } catch (e: Exception) {
-            Log.e("ProfileRepository", "Error getting profile: ${e.message}", e)
+            logError("Error getting profile: ${e.message}", e)
             null
         }
     }
@@ -104,7 +105,7 @@ class ProfileRepository(
             _currentProfile.value = normalizedProfile
             true
         } catch (e: Exception) {
-            Log.e("ProfileRepository", "Update profile failed: ${e.message}", e)
+            logError("Update profile failed: ${e.message}", e)
             false
         }
     }
@@ -121,24 +122,24 @@ class ProfileRepository(
     suspend fun uploadAvatar(uri: Uri, profileId: String): String? = withContext(Dispatchers.IO) {
         val auth = SupabaseClient.client.auth
         val accessToken = auth.currentAccessTokenOrNull() ?: run {
-            Log.e("ProfileRepository", "No access token available for avatar upload")
+            logError("No access token available for avatar upload")
             return@withContext null
         }
-        
-        Log.d("ProfileRepository", "Uploading avatar for profile: $profileId")
-        
+
+        logDebug("Uploading avatar for profile: $profileId")
+
         try {
             val avatarBytes = buildAvatarBytes(uri) ?: run {
-                Log.e("ProfileRepository", "Could not read image bytes from: $uri")
+                logError("Could not read image bytes from: $uri")
                 return@withContext null
             }
-            
+
             val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
             val bucket = Constants.STORAGE_BUCKET_AVATARS
             val filePath = "profiles/$profileId/avatar.jpg"
             val uploadUrl = "$baseUrl/storage/v1/object/$bucket/$filePath"
-            
-            Log.d("ProfileRepository", "Target upload URL: $uploadUrl")
+
+            logDebug("Target upload URL: $uploadUrl")
 
             val request = Request.Builder()
                 .url(uploadUrl)
@@ -151,20 +152,18 @@ class ProfileRepository(
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    Log.e("ProfileRepository", "Avatar upload failed. Code: ${response.code}, Response: $responseBody")
-                    // If we get 401/403 here, we could retry, but user says 401 is fixed.
-                    // 400 usually means bucket issue or path issue.
+                    logError("Avatar upload failed. Code: ${response.code}, Response: $responseBody")
                     return@withContext null
                 }
-                Log.d("ProfileRepository", "Avatar upload successful for $profileId")
+                logDebug("Avatar upload successful for $profileId")
             }
 
             val version = System.currentTimeMillis()
             val finalUrl = "$baseUrl/storage/v1/object/public/$bucket/$filePath?v=$version"
-            Log.d("ProfileRepository", "Generated avatar URL: $finalUrl")
+            logDebug("Generated avatar URL: $finalUrl")
             finalUrl
         } catch (e: Exception) {
-            Log.e("ProfileRepository", "Exception during avatar upload", e)
+            logError("Exception during avatar upload", e)
             null
         }
     }
@@ -254,6 +253,28 @@ class ProfileRepository(
                 streak_count = profile.streak_count,
                 explorer_class = profile.explorer_class
             )
+        }
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d("ProfileRepository", message)
+        }
+    }
+
+    private fun logWarn(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.w("ProfileRepository", message)
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            if (throwable != null) {
+                Log.e("ProfileRepository", message, throwable)
+            } else {
+                Log.e("ProfileRepository", message)
+            }
         }
     }
 }

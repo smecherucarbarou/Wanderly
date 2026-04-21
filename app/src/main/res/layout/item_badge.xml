@@ -34,7 +34,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:gravity="center"
-        android:text="Badge Name"
+        android:text="@string/badge_placeholder_name"
         android:textColor="@color/text_primary"
         android:textSize="12sp"
         android:textStyle="bold"

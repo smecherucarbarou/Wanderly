@@ -2,13 +2,15 @@ package com.novahorizon.wanderly.notifications
 
 import android.content.Context
 import android.util.Log
+import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import com.novahorizon.wanderly.util.DateUtils
+import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.TimeZone
 
 object NotificationCheckCoordinator {
     private const val PREFS_NAME = "notification_check_state"
@@ -49,18 +51,17 @@ object NotificationCheckCoordinator {
 
         if (lastMissionDate.isNotBlank() && lastMissionDate != todayUtc && lastMissionDate != yesterdayUtc) {
             val prefs = prefs(context)
-            val lostSentDate = prefs.getString(KEY_STREAK_LOST_DATE, null)
+            val lostSentDate = prefs.getNotificationCheckString(KEY_STREAK_LOST_DATE)
             if (lostSentDate == todayUtc) {
                 log("streak", source, "Streak lost already announced for $todayUtc.")
                 return
             }
 
             WanderlyNotificationManager.sendStreakLost(context)
-            prefs.edit()
-                .putString(KEY_STREAK_LOST_DATE, todayUtc)
-                .remove(KEY_STREAK_REMINDER_DATE)
-                .remove(KEY_STREAK_EVENING_DATE)
-                .apply()
+            prefs.putNotificationCheckString(KEY_STREAK_LOST_DATE, todayUtc)
+            prefs.removeNotificationCheckKeys(
+                listOf(KEY_STREAK_REMINDER_DATE, KEY_STREAK_EVENING_DATE)
+            )
             log("streak", source, "Sent streak lost alert. Last mission was $lastMissionDate.")
             return
         }
@@ -77,26 +78,26 @@ object NotificationCheckCoordinator {
 
         when {
             localHour in REMINDER_START_HOUR until EVENING_START_HOUR -> {
-                val lastReminderDate = prefs.getString(KEY_STREAK_REMINDER_DATE, null)
+                val lastReminderDate = prefs.getNotificationCheckString(KEY_STREAK_REMINDER_DATE)
                 if (lastReminderDate == localDate) {
                     log("streak", source, "Reminder already sent for $localDate.")
                     return
                 }
 
                 WanderlyNotificationManager.sendDailyReminder(context, streakCount)
-                prefs.edit().putString(KEY_STREAK_REMINDER_DATE, localDate).apply()
+                prefs.putNotificationCheckString(KEY_STREAK_REMINDER_DATE, localDate)
                 log("streak", source, "Sent daily reminder for streak=$streakCount.")
             }
 
             localHour >= EVENING_START_HOUR -> {
-                val lastEveningDate = prefs.getString(KEY_STREAK_EVENING_DATE, null)
+                val lastEveningDate = prefs.getNotificationCheckString(KEY_STREAK_EVENING_DATE)
                 if (lastEveningDate == localDate) {
                     log("streak", source, "Evening alert already sent for $localDate.")
                     return
                 }
 
                 WanderlyNotificationManager.sendEveningAlert(context)
-                prefs.edit().putString(KEY_STREAK_EVENING_DATE, localDate).apply()
+                prefs.putNotificationCheckString(KEY_STREAK_EVENING_DATE, localDate)
                 log("streak", source, "Sent evening alert after $EVENING_START_HOUR:00.")
             }
 
@@ -252,11 +253,13 @@ object NotificationCheckCoordinator {
     }
 
     fun log(category: String, source: String, message: String) {
-        Log.d(LOG_TAG, "[$category][$source] $message")
+        if (BuildConfig.DEBUG) {
+            Log.d(LOG_TAG, "[$category][$source] $message")
+        }
     }
 
     fun clearCheckState(context: Context) {
-        prefs(context).edit().clear().apply()
+        prefs(context).clearNotificationCheckState()
         log("debug", "admin_panel", "Notification check state cleared.")
     }
 
@@ -264,18 +267,18 @@ object NotificationCheckCoordinator {
         context: Context,
         type: WanderlyNotificationManager.NotificationType
     ) {
-        val editor = prefs(context).edit()
+        val preferencesStore = prefs(context)
         when (type) {
             WanderlyNotificationManager.NotificationType.DAILY_REMINDER -> {
-                editor.remove(KEY_STREAK_REMINDER_DATE)
+                preferencesStore.removeNotificationCheckKey(KEY_STREAK_REMINDER_DATE)
             }
 
             WanderlyNotificationManager.NotificationType.EVENING_ALERT -> {
-                editor.remove(KEY_STREAK_EVENING_DATE)
+                preferencesStore.removeNotificationCheckKey(KEY_STREAK_EVENING_DATE)
             }
 
             WanderlyNotificationManager.NotificationType.STREAK_LOST -> {
-                editor.remove(KEY_STREAK_LOST_DATE)
+                preferencesStore.removeNotificationCheckKey(KEY_STREAK_LOST_DATE)
             }
 
             WanderlyNotificationManager.NotificationType.MILESTONE -> {
@@ -283,35 +286,35 @@ object NotificationCheckCoordinator {
             }
 
             WanderlyNotificationManager.NotificationType.RIVAL_ACTIVITY -> {
-                prefs(context).all.keys
+                preferencesStore.getNotificationCheckKeys()
                     .filter { it.startsWith("social.rival.") }
-                    .forEach { editor.remove(it) }
+                    .forEach(preferencesStore::removeNotificationCheckKey)
             }
 
             WanderlyNotificationManager.NotificationType.AGGREGATED_RIVAL_ACTIVITY -> {
-                editor.remove(KEY_SOCIAL_AGGREGATE_DATE)
-                editor.remove(KEY_SOCIAL_AGGREGATE_SIGNATURE)
+                preferencesStore.removeNotificationCheckKeys(
+                    listOf(KEY_SOCIAL_AGGREGATE_DATE, KEY_SOCIAL_AGGREGATE_SIGNATURE)
+                )
             }
 
             WanderlyNotificationManager.NotificationType.OVERTAKEN -> {
-                editor.remove(KEY_SOCIAL_TOP_OVERTAKEN)
+                preferencesStore.removeNotificationCheckKey(KEY_SOCIAL_TOP_OVERTAKEN)
             }
 
             WanderlyNotificationManager.NotificationType.FIGHT_FOR_FIRST -> {
-                editor.remove(KEY_SOCIAL_TOP_THREAT)
+                preferencesStore.removeNotificationCheckKey(KEY_SOCIAL_TOP_THREAT)
             }
         }
-        editor.apply()
         log("debug", "admin_panel", "Notification check state cleared for $type.")
     }
 
     private fun handleOvertakenState(context: Context, topRival: Profile?, source: String) {
         val prefs = prefs(context)
-        val previousId = prefs.getString(KEY_SOCIAL_TOP_OVERTAKEN, null)
+        val previousId = prefs.getNotificationCheckString(KEY_SOCIAL_TOP_OVERTAKEN)
 
         if (topRival == null) {
             if (previousId != null) {
-                prefs.edit().remove(KEY_SOCIAL_TOP_OVERTAKEN).apply()
+                prefs.removeNotificationCheckKey(KEY_SOCIAL_TOP_OVERTAKEN)
             }
             log("social", source, "No rival currently ahead.")
             return
@@ -327,7 +330,7 @@ object NotificationCheckCoordinator {
             topRival.username ?: "Someone"
         )
         if (posted) {
-            prefs.edit().putString(KEY_SOCIAL_TOP_OVERTAKEN, topRival.id).apply()
+            prefs.putNotificationCheckString(KEY_SOCIAL_TOP_OVERTAKEN, topRival.id)
             log("social", source, "Sent overtaken alert for ${topRival.id}.")
         } else {
             log("social", source, "Overtaken alert suppressed for ${topRival.id}.")
@@ -336,11 +339,11 @@ object NotificationCheckCoordinator {
 
     private fun handleThreatState(context: Context, topThreat: Profile?, source: String) {
         val prefs = prefs(context)
-        val previousId = prefs.getString(KEY_SOCIAL_TOP_THREAT, null)
+        val previousId = prefs.getNotificationCheckString(KEY_SOCIAL_TOP_THREAT)
 
         if (topThreat == null) {
             if (previousId != null) {
-                prefs.edit().remove(KEY_SOCIAL_TOP_THREAT).apply()
+                prefs.removeNotificationCheckKey(KEY_SOCIAL_TOP_THREAT)
             }
             log("social", source, "No near-overtake threat right now.")
             return
@@ -356,7 +359,7 @@ object NotificationCheckCoordinator {
             topThreat.username ?: "Someone"
         )
         if (posted) {
-            prefs.edit().putString(KEY_SOCIAL_TOP_THREAT, topThreat.id).apply()
+            prefs.putNotificationCheckString(KEY_SOCIAL_TOP_THREAT, topThreat.id)
             log("social", source, "Sent fight-for-first alert for ${topThreat.id}.")
         } else {
             log("social", source, "Fight-for-first alert suppressed for ${topThreat.id}.")
@@ -366,49 +369,41 @@ object NotificationCheckCoordinator {
     private fun markRivalMissionIfNew(context: Context, day: String, rivalId: String): Boolean {
         val key = "social.rival.$day.$rivalId"
         val prefs = prefs(context)
-        if (prefs.getBoolean(key, false)) {
+        if (prefs.getNotificationCheckBoolean(key)) {
             return false
         }
 
-        prefs.edit().putBoolean(key, true).apply()
+        prefs.putNotificationCheckBoolean(key, true)
         return true
     }
 
     private fun hasAggregateChanged(context: Context, day: String, signature: String): Boolean {
         val prefs = prefs(context)
-        val savedDay = prefs.getString(KEY_SOCIAL_AGGREGATE_DATE, null)
-        val savedSignature = prefs.getString(KEY_SOCIAL_AGGREGATE_SIGNATURE, null)
+        val savedDay = prefs.getNotificationCheckString(KEY_SOCIAL_AGGREGATE_DATE)
+        val savedSignature = prefs.getNotificationCheckString(KEY_SOCIAL_AGGREGATE_SIGNATURE)
         return savedDay != day || savedSignature != signature
     }
 
     private fun persistAggregateState(context: Context, day: String, signature: String) {
-        prefs(context).edit()
-            .putString(KEY_SOCIAL_AGGREGATE_DATE, day)
-            .putString(KEY_SOCIAL_AGGREGATE_SIGNATURE, signature)
-            .apply()
+        prefs(context).putNotificationCheckString(KEY_SOCIAL_AGGREGATE_DATE, day)
+        prefs(context).putNotificationCheckString(KEY_SOCIAL_AGGREGATE_SIGNATURE, signature)
     }
 
     private fun clearTopState(context: Context) {
-        prefs(context).edit()
-            .remove(KEY_SOCIAL_TOP_OVERTAKEN)
-            .remove(KEY_SOCIAL_TOP_THREAT)
-            .apply()
+        prefs(context).removeNotificationCheckKeys(
+            listOf(KEY_SOCIAL_TOP_OVERTAKEN, KEY_SOCIAL_TOP_THREAT)
+        )
     }
 
     private fun clearThreatState(context: Context) {
-        prefs(context).edit().remove(KEY_SOCIAL_TOP_THREAT).apply()
+        prefs(context).removeNotificationCheckKey(KEY_SOCIAL_TOP_THREAT)
     }
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = PreferencesStore(context)
 
-    private fun utcDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }.format(Date())
+    private fun utcDate(): String = DateUtils.formatUtcDate(Date())
 
-    private fun utcDateOffset(days: Int): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+    private fun utcDateOffset(days: Int): String = DateUtils.formatUtcDate(Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
         add(Calendar.DAY_OF_YEAR, days)
     }.time)
 

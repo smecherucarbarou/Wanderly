@@ -1,4 +1,4 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly.ui.auth
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData

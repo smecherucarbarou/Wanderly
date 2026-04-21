@@ -32,12 +32,13 @@ class WanderlyApplication : Application() {
     }
 
     private fun setupBackgroundWorkers() {
-        Log.d("WanderlyApp", "Setting up background workers...")
+        if (BuildConfig.DEBUG) {
+            Log.d("WanderlyApp", "Setting up background workers...")
+        }
         val workManager = WorkManager.getInstance(this)
-        
-        // 1. Streak Worker - Using KEEP to preserve the 15-minute interval across app restarts
+
         val streakWorkRequest = PeriodicWorkRequestBuilder<StreakWorker>(
-            15, TimeUnit.MINUTES 
+            15, TimeUnit.MINUTES
         ).addTag("StreakCheckWork").build()
 
         workManager.enqueueUniquePeriodicWork(
@@ -46,8 +47,6 @@ class WanderlyApplication : Application() {
             streakWorkRequest
         )
 
-        // 2. Social Worker (Rivals/Rankings)
-        // FIX BUG 2: Add backoff policy for retry on Auth race condition
         val socialWorkRequest = PeriodicWorkRequestBuilder<SocialWorker>(
             15, TimeUnit.MINUTES
         ).setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -60,6 +59,8 @@ class WanderlyApplication : Application() {
             socialWorkRequest
         )
         
-        Log.d("WanderlyApp", "Background workers scheduled with KEEP policy.")
+        if (BuildConfig.DEBUG) {
+            Log.d("WanderlyApp", "Background workers scheduled with KEEP policy.")
+        }
     }
 }

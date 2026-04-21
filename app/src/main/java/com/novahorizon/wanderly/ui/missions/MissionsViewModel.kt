@@ -1,4 +1,4 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly.ui.missions
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.api.PlacesGeocoder
@@ -14,14 +15,14 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
-import com.novahorizon.wanderly.ui.missions.GeminiMissionResponse
+import com.novahorizon.wanderly.util.AiResponseParser
+import com.novahorizon.wanderly.util.DateUtils
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Locale
 import java.util.TimeZone
 
 class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel() {
@@ -37,6 +38,11 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
     private val json = Json { ignoreUnknownKeys = true }
     private var missionGenerationInFlight = false
+    private var profileCollectorJob: Job? = null
+
+    init {
+        startProfileCollector()
+    }
 
     sealed class MissionState {
         object Idle : MissionState()
@@ -51,10 +57,8 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
     }
 
     fun loadProfile() {
-        viewModelScope.launch {
-            repository.currentProfile.collectLatest {
-                _profile.postValue(it)
-            }
+        if (profileCollectorJob?.isActive != true) {
+            startProfileCollector()
         }
         viewModelScope.launch {
             repository.getCurrentProfile()
@@ -63,7 +67,9 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
     fun generateMission(lat: Double, lng: Double, city: String?) {
         if (missionGenerationInFlight) {
-            Log.w("MissionsViewModel", "Ignoring duplicate mission generation request.")
+            if (BuildConfig.DEBUG) {
+                Log.w("MissionsViewModel", "Ignoring duplicate mission generation request.")
+            }
             return
         }
         missionGenerationInFlight = true
@@ -117,14 +123,15 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     GeminiClient.generateWithSearch(prompt)
                 }
 
-                val jsonStartIndex = responseText.indexOf("{")
-                val jsonEndIndex = responseText.lastIndexOf("}")
-                if (jsonStartIndex == -1 || jsonEndIndex == -1) {
-                    throw Exception("Invalid JSON response")
+                val finalJson = AiResponseParser.extractFirstJsonObject(responseText)
+                    ?: throw IllegalStateException("Buzzy couldn't understand the mission response. Please try again.")
+                val missionResponse = runCatching {
+                    json.decodeFromString<GeminiMissionResponse>(finalJson)
+                }.onFailure {
+                    logRawResponse("mission", responseText)
+                }.getOrElse {
+                    throw IllegalStateException("Buzzy couldn't understand the mission response. Please try again.")
                 }
-
-                val finalJson = responseText.substring(jsonStartIndex, jsonEndIndex + 1)
-                val missionResponse = json.decodeFromString<GeminiMissionResponse>(finalJson)
                 val resolvedTarget = PlacesGeocoder.resolveCoordinates(
                     placeName = missionResponse.targetName,
                     targetCity = city.orEmpty(),
@@ -150,7 +157,11 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 )
                 _missionState.postValue(MissionState.MissionReceived(verifiedMissionText))
             } catch (e: Exception) {
-                _missionState.postValue(MissionState.Error("Failed to generate objective: ${e.message}"))
+                _missionState.postValue(
+                    MissionState.Error(
+                        e.message ?: "Failed to generate objective. Please try again."
+                    )
+                )
             } finally {
                 missionGenerationInFlight = false
             }
@@ -233,15 +244,12 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
         viewModelScope.launch {
             try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }
                 val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                val today = sdf.format(now.time)
+                val today = DateUtils.formatUtcDate(now.time)
 
                 val yesterdayCal = now.clone() as Calendar
                 yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
-                val yesterday = sdf.format(yesterdayCal.time)
+                val yesterday = DateUtils.formatUtcDate(yesterdayCal.time)
 
                 val lastMissionDate = current.last_mission_date ?: ""
                 var newStreak = current.streak_count ?: 0
@@ -265,9 +273,9 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
                 val success = repository.updateProfile(updatedProfile)
                 if (success) {
-                    val recordedToday = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-                        timeZone = TimeZone.getTimeZone("UTC")
-                    }.format(Calendar.getInstance(TimeZone.getTimeZone("UTC")).time)
+                    val recordedToday = DateUtils.formatUtcDate(
+                        Calendar.getInstance(TimeZone.getTimeZone("UTC")).time
+                    )
                     repository.updateLastVisitDate(recordedToday)
                     repository.clearMissionData()
 
@@ -297,6 +305,21 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                 Log.e("WanderlyStreak", "Error calculating streak", e)
                 _missionState.postValue(MissionState.Error("Error: ${e.message}"))
             }
+        }
+    }
+
+    private fun startProfileCollector() {
+        profileCollectorJob?.cancel()
+        profileCollectorJob = viewModelScope.launch {
+            repository.currentProfile.collectLatest {
+                _profile.postValue(it)
+            }
+        }
+    }
+
+    private fun logRawResponse(label: String, response: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d("MissionsViewModel", "Raw $label response: $response")
         }
     }
 }
