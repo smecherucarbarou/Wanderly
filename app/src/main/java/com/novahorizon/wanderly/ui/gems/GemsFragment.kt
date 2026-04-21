@@ -9,6 +9,7 @@ import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -32,6 +33,7 @@ import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.util.AiResponseParser
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +68,7 @@ class GemsFragment : Fragment() {
         if (isGranted) {
             checkLocationAndLoadGems()
         } else {
-            showSnackbar(getString(R.string.gems_location_permission_required), isError = true)
+            showLocationPermissionFeedback()
         }
     }
 
@@ -102,13 +104,33 @@ class GemsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         refreshBtn.setOnClickListener {
-            checkLocationAndLoadGems(isRefresh = true)
+            requestGemsLoad()
         }
         retryBtn.setOnClickListener {
-            checkLocationAndLoadGems(isRefresh = true)
+            requestGemsLoad()
         }
 
-        checkLocationAndLoadGems()
+        showEmptyStateText(getString(R.string.gems_permission_prompt), showRetry = true)
+    }
+
+    private fun requestGemsLoad() {
+        when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.GRANTED -> checkLocationAndLoadGems(isRefresh = true)
+            LocationPermissionGate.State.REQUEST,
+            LocationPermissionGate.State.RATIONALE -> {
+                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                    showEmptyStateText(getString(R.string.gems_location_permission_rationale), showRetry = true)
+                    showSnackbar(getString(R.string.gems_location_permission_rationale), isError = true)
+                }
+                launchLocationPermissionRequest()
+            }
+
+            LocationPermissionGate.State.SETTINGS -> {
+                showEmptyStateText(getString(R.string.gems_location_permission_settings), showRetry = true)
+                showSnackbar(getString(R.string.gems_location_permission_settings), isError = true)
+                openAppSettings()
+            }
+        }
     }
 
     private fun checkLocationAndLoadGems(isRefresh: Boolean = false) {
@@ -159,6 +181,41 @@ class GemsFragment : Fragment() {
                 showErrorState(getString(R.string.gems_location_failed))
             }
         }
+    }
+
+    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return LocationPermissionGate.resolveState(
+            hasPermission = hasPermission,
+            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
+            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+        )
+    }
+
+    private fun launchLocationPermissionRequest() {
+        LocationPermissionGate.markRequestedBefore(requireContext())
+        requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun showLocationPermissionFeedback() {
+        val messageRes = when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.RATIONALE -> R.string.gems_location_permission_rationale
+            LocationPermissionGate.State.SETTINGS -> R.string.gems_location_permission_settings
+            else -> R.string.gems_location_permission_required
+        }
+        showEmptyStateText(getString(messageRes), showRetry = true)
+        showSnackbar(getString(messageRes), isError = true)
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", requireContext().packageName, null)
+        )
+        startActivity(intent)
     }
 
     private fun loadGemsWithGemini(lat: Double, lng: Double, city: String) {

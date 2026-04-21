@@ -84,7 +84,7 @@ class WanderlyRepository(context: Context) {
 
     fun clearLocalState() = preferencesStore.clearAll()
 
-    suspend fun uploadAvatar(uri: Uri, profileId: String): String? =
+    suspend fun uploadAvatar(uri: Uri, profileId: String): String =
         profileRepository.uploadAvatar(uri, profileId)
 
     fun preferencesStore(): PreferencesStore = preferencesStore

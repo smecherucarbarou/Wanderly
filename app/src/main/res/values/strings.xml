@@ -52,7 +52,10 @@
     <string name="gems_loading_city_format">Buzzy is scouting %1$s...</string>
     <string name="gems_empty_state">No fresh hidden gems nearby yet. Try another refresh in a moment.</string>
     <string name="gems_retry">Try Again</string>
+    <string name="gems_permission_prompt">Tap refresh to let Buzzy scout hidden gems near you.</string>
     <string name="gems_location_permission_required">Buzzy needs location to find gems!</string>
+    <string name="gems_location_permission_rationale">Allow location so Buzzy can scout hidden gems around you.</string>
+    <string name="gems_location_permission_settings">Location is blocked for Hidden Gems. Enable it from app settings.</string>
     <string name="gems_location_failed">Could not get location</string>
     <string name="gems_no_fresh_results">Buzzy couldn\'t curate fresh gems here yet.</string>
     <string name="gems_loading_failed">Buzzy got lost while scouting. Please try again.</string>
@@ -114,6 +117,8 @@
     <string name="photo_read_failed">Buzzy could not read that photo. Please try again.</string>
     <string name="map_my_location">Center on my location</string>
     <string name="map_location_permission_denied">Location permission denied</string>
+    <string name="map_location_permission_rationale">Allow location so the map can center on you.</string>
+    <string name="map_location_permission_settings">Location is blocked for the map. Enable it from app settings.</string>
     <string name="map_preview_default">Ready for a new adventure?</string>
     <string name="map_active_mission_ready">Destination set!</string>
     <string name="map_go_to_missions">Go to Missions</string>
@@ -127,6 +132,8 @@
     <string name="mission_debug_force_generate">Force Gen</string>
     <string name="mission_camera_permission_required">Buzzy needs camera access to see your progress!</string>
     <string name="mission_location_permission_required">Buzzy needs your location to find flowers!</string>
+    <string name="mission_location_permission_rationale">Allow location so Buzzy can generate a mission near you.</string>
+    <string name="mission_location_permission_settings">Location is blocked for Missions. Enable it from app settings.</string>
     <string name="mission_photo_process_failed">Failed to process photo</string>
     <string name="mission_photo_missing">Buzzy did not see a photo. Try again?</string>
     <string name="mission_loading_state">Finding a fresh mission near you...</string>

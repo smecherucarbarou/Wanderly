@@ -1,13 +1,16 @@
 package com.novahorizon.wanderly.ui.map
 
 import android.Manifest
+import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.location.Location
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -24,6 +27,7 @@ import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
+import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.social.SocialViewModel
@@ -55,9 +59,9 @@ class MapFragment : Fragment() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            setupLocation()
+            setupLocation(centerOnLocation = true)
         } else {
-            showSnackbar(getString(R.string.map_location_permission_denied), isError = true)
+            showLocationPermissionFeedback()
         }
     }
 
@@ -96,20 +100,8 @@ class MapFragment : Fragment() {
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
-        if (ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            setupLocation()
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-
         binding.fabMyLocation.setOnClickListener {
-            myLocationOverlay?.myLocation?.let { location ->
-                binding.mapView.controller.animateTo(location)
-            }
+            handleMyLocationAction()
         }
 
         checkActiveMission()
@@ -149,6 +141,13 @@ class MapFragment : Fragment() {
             }
             _binding?.mapView?.invalidate()
         }
+
+        val permissionState = resolveLocationPermissionState()
+        if (permissionState == LocationPermissionGate.State.GRANTED) {
+            setupLocation(centerOnLocation = true)
+        } else if (permissionState == LocationPermissionGate.State.REQUEST) {
+            launchLocationPermissionRequest()
+        }
     }
 
     private fun checkActiveMission() {
@@ -177,29 +176,88 @@ class MapFragment : Fragment() {
         }
     }
 
-    private fun setupLocation() {
+    private fun setupLocation(centerOnLocation: Boolean) {
         if (ContextCompat.checkSelfPermission(
                 requireContext(),
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            val provider = GpsMyLocationProvider(requireContext())
-            myLocationOverlay = MyLocationNewOverlay(provider, binding.mapView).apply {
-                enableMyLocation()
-                enableFollowLocation()
+            if (myLocationOverlay == null) {
+                val provider = GpsMyLocationProvider(requireContext())
+                myLocationOverlay = MyLocationNewOverlay(provider, binding.mapView).apply {
+                    enableMyLocation()
+                    enableFollowLocation()
+                }
+                binding.mapView.overlays.add(myLocationOverlay)
             }
-            binding.mapView.overlays.add(myLocationOverlay)
 
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
                 if (location != null) {
                     val geoPoint = GeoPoint(location.latitude, location.longitude)
-                    if (!WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
+                    if (centerOnLocation || !WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
                         binding.mapView.controller.setCenter(geoPoint)
                     }
                     updateUserLocation(location.latitude, location.longitude)
                 }
             }
         }
+    }
+
+    private fun handleMyLocationAction() {
+        when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.GRANTED -> {
+                myLocationOverlay?.myLocation?.let { location ->
+                    binding.mapView.controller.animateTo(location)
+                } ?: setupLocation(centerOnLocation = true)
+            }
+
+            LocationPermissionGate.State.REQUEST,
+            LocationPermissionGate.State.RATIONALE -> {
+                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                    showSnackbar(getString(R.string.map_location_permission_rationale), isError = true)
+                }
+                launchLocationPermissionRequest()
+            }
+
+            LocationPermissionGate.State.SETTINGS -> {
+                showSnackbar(getString(R.string.map_location_permission_settings), isError = true)
+                openAppSettings()
+            }
+        }
+    }
+
+    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return LocationPermissionGate.resolveState(
+            hasPermission = hasPermission,
+            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
+            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+        )
+    }
+
+    private fun launchLocationPermissionRequest() {
+        LocationPermissionGate.markRequestedBefore(requireContext())
+        requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun showLocationPermissionFeedback() {
+        val messageRes = when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.RATIONALE -> R.string.map_location_permission_rationale
+            LocationPermissionGate.State.SETTINGS -> R.string.map_location_permission_settings
+            else -> R.string.map_location_permission_denied
+        }
+        showSnackbar(getString(messageRes), isError = true)
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", requireContext().packageName, null)
+        )
+        startActivity(intent)
     }
     
     private fun updateUserLocation(lat: Double, lng: Double) {

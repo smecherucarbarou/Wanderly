@@ -1,11 +1,13 @@
 package com.novahorizon.wanderly.ui.missions
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +28,7 @@ import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
+import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +67,7 @@ class MissionsFragment : Fragment() {
         if (isGranted) {
             checkLocationAndGenerate()
         } else {
-            showSnackbar(getString(R.string.mission_location_permission_required), isError = true)
+            showLocationPermissionFeedback()
         }
     }
 
@@ -216,9 +219,22 @@ class MissionsFragment : Fragment() {
 
     private fun checkLocationAndGenerate() {
         if (locationLookupInFlight) return
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            return
+        when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.GRANTED -> Unit
+            LocationPermissionGate.State.REQUEST,
+            LocationPermissionGate.State.RATIONALE -> {
+                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                    showSnackbar(getString(R.string.mission_location_permission_rationale), isError = true)
+                }
+                launchLocationPermissionRequest()
+                return
+            }
+
+            LocationPermissionGate.State.SETTINGS -> {
+                showSnackbar(getString(R.string.mission_location_permission_settings), isError = true)
+                openAppSettings()
+                return
+            }
         }
         locationLookupInFlight = true
         binding.newFlightButton.isEnabled = false
@@ -274,6 +290,40 @@ class MissionsFragment : Fragment() {
             binding.buzzyBubble.text = getString(R.string.mission_location_failed)
             showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
+    }
+
+    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return LocationPermissionGate.resolveState(
+            hasPermission = hasPermission,
+            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
+            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+        )
+    }
+
+    private fun launchLocationPermissionRequest() {
+        LocationPermissionGate.markRequestedBefore(requireContext())
+        requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun showLocationPermissionFeedback() {
+        val messageRes = when (resolveLocationPermissionState()) {
+            LocationPermissionGate.State.RATIONALE -> R.string.mission_location_permission_rationale
+            LocationPermissionGate.State.SETTINGS -> R.string.mission_location_permission_settings
+            else -> R.string.mission_location_permission_required
+        }
+        showSnackbar(getString(messageRes), isError = true)
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", requireContext().packageName, null)
+        )
+        startActivity(intent)
     }
 
     private fun checkCameraPermissionAndStart() {

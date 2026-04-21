@@ -31,6 +31,7 @@ import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ProfileRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
 import com.novahorizon.wanderly.services.HiveRealtimeService
@@ -48,6 +49,9 @@ class ProfileFragment : Fragment() {
     private val binding get() = _binding!!
 
     private var currentProfile: Profile? = null
+    private var pendingAvatarDestinationUri: Uri? = null
+    private var pendingAvatarPreviewSource: String? = null
+    private var pendingAvatarRemotePath: String? = null
     private lateinit var repository: WanderlyRepository
     private var isClassDialogShowing = false
     private val badgesAdapter = BadgesAdapter()
@@ -63,12 +67,19 @@ class ProfileFragment : Fragment() {
             Toast.makeText(requireContext(), R.string.profile_avatar_crop_failed, Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
+        if (!isUsableCropResult(resultUri)) {
+            Log.e("ProfileFragment", "Avatar crop result was empty or unreadable: $resultUri")
+            Toast.makeText(requireContext(), R.string.profile_avatar_crop_failed, Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
         uploadAvatarToSupabase(resultUri)
     }
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            val destinationUri = Uri.fromFile(File(requireContext().cacheDir, "temp_avatar.jpg"))
+            val destinationFile = File.createTempFile("avatar_crop_", ".jpg", requireContext().cacheDir)
+            pendingAvatarDestinationUri = Uri.fromFile(destinationFile)
+            val destinationUri = pendingAvatarDestinationUri ?: return@registerForActivityResult
             val uCropIntent = UCrop.of(uri, destinationUri)
                 .withAspectRatio(1f, 1f)
                 .withMaxResultSize(400, 400)
@@ -206,7 +217,16 @@ class ProfileFragment : Fragment() {
             getString(R.string.profile_max_rank)
         }
 
-        updateAvatarDisplay(profile.avatar_url, profile.username ?: getString(R.string.profile_default_name))
+        val avatarDecision = resolveAvatarPresentation(
+            profileAvatarSource = profile.avatar_url,
+            pendingAvatarPreviewSource = pendingAvatarPreviewSource,
+            pendingAvatarRemotePath = pendingAvatarRemotePath
+        )
+        if (avatarDecision.shouldClearPendingPreview) {
+            pendingAvatarPreviewSource = null
+            pendingAvatarRemotePath = null
+        }
+        updateAvatarDisplay(avatarDecision.displaySource, profile.username ?: getString(R.string.profile_default_name))
 
         val badges = profile.badges.orEmpty()
         if (badges.isEmpty()) {
@@ -223,16 +243,24 @@ class ProfileFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val profile = currentProfile ?: return@launch
+                pendingAvatarPreviewSource = uri.toString()
+                pendingAvatarRemotePath = null
+                updateAvatarDisplay(pendingAvatarPreviewSource, profile.username ?: getString(R.string.profile_default_name))
+
                 val avatarUrl = repository.uploadAvatar(uri, profile.id)
-                    ?: throw IllegalStateException("Avatar upload failed")
+                pendingAvatarRemotePath = avatarUrl
 
                 val updatedProfile = profile.copy(avatar_url = avatarUrl)
-                repository.updateProfile(updatedProfile)
+                if (!repository.updateProfile(updatedProfile)) {
+                    throw IllegalStateException("Avatar uploaded but profile update failed")
+                }
 
                 currentProfile = updatedProfile
-                updateAvatarDisplay(avatarUrl, updatedProfile.username ?: "")
+                updateUI(updatedProfile)
                 showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
             } catch (e: Exception) {
+                pendingAvatarPreviewSource = null
+                pendingAvatarRemotePath = null
                 Log.e("ProfileFragment", "Avatar upload failed", e)
                 showSnackbar(getString(R.string.profile_avatar_upload_failed), isError = true)
             }
@@ -266,6 +294,13 @@ class ProfileFragment : Fragment() {
     private fun updateAvatarDisplay(avatarData: String?, username: String) {
         val binding = _binding ?: return
         AvatarLoader.loadAvatar(binding.buzzyAvatar, binding.avatarInitial, avatarData, username)
+    }
+
+    private fun isUsableCropResult(uri: Uri): Boolean {
+        val localFilePath = ProfileRepository.extractLocalFilePath(uri.scheme, uri.path)
+            ?: return true
+        val file = File(localFilePath)
+        return ProfileRepository.isAvatarFileUsable(file.exists(), file.length())
     }
 
     private fun showEditUsernameDialog() {
@@ -324,6 +359,42 @@ class ProfileFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    internal data class AvatarPresentationDecision(
+        val displaySource: String?,
+        val shouldClearPendingPreview: Boolean
+    )
+
+    companion object {
+        internal fun resolveAvatarPresentation(
+            profileAvatarSource: String?,
+            pendingAvatarPreviewSource: String?,
+            pendingAvatarRemotePath: String?
+        ): AvatarPresentationDecision {
+            if (pendingAvatarPreviewSource.isNullOrBlank()) {
+                return AvatarPresentationDecision(
+                    displaySource = profileAvatarSource,
+                    shouldClearPendingPreview = false
+                )
+            }
+
+            val normalizedProfilePath = profileAvatarSource?.let { AvatarLoader.extractSupabaseStoragePath(it) }
+            val isPendingUploadConfirmed = !pendingAvatarRemotePath.isNullOrBlank() &&
+                normalizedProfilePath == pendingAvatarRemotePath
+
+            return if (isPendingUploadConfirmed) {
+                AvatarPresentationDecision(
+                    displaySource = profileAvatarSource,
+                    shouldClearPendingPreview = true
+                )
+            } else {
+                AvatarPresentationDecision(
+                    displaySource = pendingAvatarPreviewSource,
+                    shouldClearPendingPreview = false
+                )
+            }
+        }
     }
 }
 

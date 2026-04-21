@@ -31,4 +31,24 @@ class AiResponseParserTest {
         assertNull(AiResponseParser.extractFirstJsonObject("plain text"))
         assertNull(AiResponseParser.extractFirstJsonArray("{\"not\":\"an array\"}"))
     }
+
+    @Test
+    fun `extracts only the first json object when multiple objects exist`() {
+        val response = "{\"first\":1}\n\nSome text\n\n{\"second\":2}"
+
+        assertEquals(
+            "{\"first\":1}",
+            AiResponseParser.extractFirstJsonObject(response)
+        )
+    }
+
+    @Test
+    fun `extracts only the first json array when multiple arrays exist`() {
+        val response = "[{\"first\":1}]\n\nSome text\n\n[{\"second\":2}]"
+
+        assertEquals(
+            "[{\"first\":1}]",
+            AiResponseParser.extractFirstJsonArray(response)
+        )
+    }
 }

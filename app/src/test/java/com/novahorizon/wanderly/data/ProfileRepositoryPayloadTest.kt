@@ -2,6 +2,7 @@ package com.novahorizon.wanderly.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProfileRepositoryPayloadTest {
@@ -31,5 +32,30 @@ class ProfileRepositoryPayloadTest {
         assertEquals(120, payload.honey)
         assertEquals(7, payload.streak_count)
         assertFalse(payload.javaClass.declaredFields.any { it.name == "admin_role" })
+    }
+
+    @Test
+    fun `normalizes legacy supabase avatar urls to storage paths for persistence`() {
+        assertEquals(
+            "profiles/user-1/avatar-123.jpg",
+            ProfileRepository.normalizeAvatarUrl(
+                "https://aimparysgwabameqjgsv.supabase.co/storage/v1/object/avatars/profiles/user-1/avatar-123.jpg"
+            )
+        )
+        assertEquals(
+            "profiles/user-1/avatar-123.jpg",
+            ProfileRepository.normalizeAvatarUrl(
+                "https://aimparysgwabameqjgsv.supabase.co/storage/v1/object/public/avatars/profiles/user-1/avatar-123.jpg?download=1"
+            )
+        )
+    }
+
+    @Test
+    fun `keeps unrelated avatar urls untouched when normalizing`() {
+        assertEquals(
+            "https://example.com/avatar.jpg",
+            ProfileRepository.normalizeAvatarUrl("https://example.com/avatar.jpg")
+        )
+        assertNull(ProfileRepository.normalizeAvatarUrl(null))
     }
 }
