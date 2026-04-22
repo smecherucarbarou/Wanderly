@@ -77,6 +77,13 @@ class DataStoreManager(context: Context) {
         putInt(StoreType.MAIN, key, value)
     }
 
+    suspend fun getMainLong(key: String, default: Long = 0L): Long =
+        getLong(StoreType.MAIN, key, default)
+
+    suspend fun putMainLong(key: String, value: Long) {
+        putLong(StoreType.MAIN, key, value)
+    }
+
     suspend fun removeMainKeys(keys: Iterable<String>) {
         removeKeys(StoreType.MAIN, keys)
     }

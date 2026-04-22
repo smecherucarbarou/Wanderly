@@ -16,6 +16,10 @@ object Constants {
     const val KEY_MISSION_TARGET_LNG_TYPED = "mission_target_lng_typed"
     const val KEY_LOCAL_LAST_MISSION_DATE = "local_last_mission_date"
     const val KEY_LOCAL_STREAK_COUNT = "local_streak_count"
+    const val KEY_WIDGET_STREAK_COUNT = "widget_streak_count"
+    const val KEY_WIDGET_LAST_MISSION_DATE = "widget_last_mission_date"
+    const val KEY_WIDGET_STREAK_SAVED_AT_MILLIS = "widget_streak_saved_at_millis"
+    const val KEY_WIDGET_LAST_SYNC_SUCCEEDED = "widget_last_sync_succeeded"
 
     const val AUTH_CALLBACK_SCHEME = "wanderly"
     const val AUTH_CALLBACK_HOST = "auth"

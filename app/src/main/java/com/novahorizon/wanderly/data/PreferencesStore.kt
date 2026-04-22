@@ -187,6 +187,43 @@ class PreferencesStore(context: Context) {
     suspend fun getStoredStreakCount(): Int =
         dataStoreManager.getMainInt(Constants.KEY_LOCAL_STREAK_COUNT, 0)
 
+    suspend fun saveWidgetStreakSnapshot(snapshot: WidgetStreakSnapshot) {
+        dataStoreManager.putMainInt(Constants.KEY_WIDGET_STREAK_COUNT, snapshot.streakCount)
+        dataStoreManager.putMainString(
+            Constants.KEY_WIDGET_LAST_MISSION_DATE,
+            snapshot.lastMissionDate
+        )
+        dataStoreManager.putMainLong(
+            Constants.KEY_WIDGET_STREAK_SAVED_AT_MILLIS,
+            snapshot.savedAtMillis
+        )
+        dataStoreManager.putMainBoolean(
+            Constants.KEY_WIDGET_LAST_SYNC_SUCCEEDED,
+            snapshot.lastSyncSucceeded
+        )
+    }
+
+    suspend fun getWidgetStreakSnapshot(): WidgetStreakSnapshot? {
+        val savedAtMillis = dataStoreManager.getMainLong(
+            Constants.KEY_WIDGET_STREAK_SAVED_AT_MILLIS,
+            default = -1L
+        )
+        if (savedAtMillis < 0L) return null
+
+        return WidgetStreakSnapshot(
+            streakCount = dataStoreManager.getMainInt(Constants.KEY_WIDGET_STREAK_COUNT, 0),
+            lastMissionDate = dataStoreManager.getMainString(
+                Constants.KEY_WIDGET_LAST_MISSION_DATE,
+                null
+            ),
+            savedAtMillis = savedAtMillis,
+            lastSyncSucceeded = dataStoreManager.getMainBoolean(
+                Constants.KEY_WIDGET_LAST_SYNC_SUCCEEDED,
+                false
+            )
+        )
+    }
+
     private suspend fun getMissionCoordinateAsync(typedKey: String, legacyKey: String): Double? {
         dataStoreManager.getMainFloat(typedKey)?.let { return it.toDouble() }
 
