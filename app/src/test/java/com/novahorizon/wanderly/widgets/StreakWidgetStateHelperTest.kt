@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.widgets
 
+import com.novahorizon.wanderly.data.WidgetStreakSnapshot
 import com.novahorizon.wanderly.R
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -7,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 
 class StreakWidgetStateHelperTest {
 
@@ -21,8 +21,10 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals(StreakTier.NONE, state.tier)
+        assertEquals("Broken", state.tier.label)
         assertEquals(WidgetMood.NEUTRAL, state.mood)
+        assertEquals("Start again today.", state.message)
+        assertFalse(state.showStaleIndicator)
     }
 
     @Test
@@ -35,12 +37,14 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals(StreakTier.BLAZE, state.tier)
+        assertEquals("Rising", state.tier.label)
         assertEquals(WidgetMood.PROUD, state.mood)
         assertEquals(R.drawable.bg_widget_streak, state.backgroundRes)
         assertEquals(R.color.accent, state.countColorRes)
         assertEquals(R.color.pollen_white, state.subtitleColorRes)
         assertFalse(state.inDanger)
+        assertFalse(state.showStaleIndicator)
+        assertFalse(state.message?.isNotEmpty() == true)
     }
 
     @Test
@@ -53,9 +57,10 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals(StreakTier.BLAZE, state.tier)
+        assertEquals("Rising", state.tier.label)
         assertEquals(WidgetMood.WATCHFUL, state.mood)
         assertFalse(state.inDanger)
+        assertFalse(state.showStaleIndicator)
     }
 
     @Test
@@ -68,12 +73,13 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals(StreakTier.LEGENDARY, state.tier)
+        assertEquals("Blazing", state.tier.label)
         assertEquals(WidgetMood.STRESSED, state.mood)
         assertEquals(R.drawable.bg_widget_streak_warning, state.backgroundRes)
         assertEquals(R.color.primary, state.countColorRes)
         assertEquals(R.color.accent, state.subtitleColorRes)
         assertTrue(state.inDanger)
+        assertFalse(state.showStaleIndicator)
     }
 
     @Test
@@ -86,9 +92,48 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals(StreakTier.BLAZE, state.tier)
+        assertEquals("Rising", state.tier.label)
         assertEquals(WidgetMood.NEUTRAL, state.mood)
         assertFalse(state.inDanger)
+        assertFalse(state.showStaleIndicator)
+    }
+
+    @Test
+    fun resolveVisualStateShowsStaleIndicatorWhenSnapshotIsOlderThanFiveMinutesAndFetchFails() {
+        val now = LocalDateTime.of(2026, 4, 21, 21, 30)
+        val snapshot = WidgetStreakSnapshot(
+            streakCount = 12,
+            lastMissionDate = now.toLocalDate().minusDays(1).toString(),
+            savedAtMillis = now.minusMinutes(6).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            lastSyncSucceeded = true
+        )
+
+        val state = StreakWidgetStateHelper.resolveVisualState(
+            snapshot = snapshot,
+            currentFetchSucceeded = false,
+            now = now
+        )
+
+        assertTrue(state.showStaleIndicator)
+    }
+
+    @Test
+    fun resolveVisualStateKeepsStaleIndicatorOffWhenSnapshotIsFreshAndFetchFails() {
+        val now = LocalDateTime.of(2026, 4, 21, 21, 30)
+        val snapshot = WidgetStreakSnapshot(
+            streakCount = 12,
+            lastMissionDate = now.toLocalDate().minusDays(1).toString(),
+            savedAtMillis = now.minusMinutes(4).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            lastSyncSucceeded = true
+        )
+
+        val state = StreakWidgetStateHelper.resolveVisualState(
+            snapshot = snapshot,
+            currentFetchSucceeded = false,
+            now = now
+        )
+
+        assertFalse(state.showStaleIndicator)
     }
 
     @Test
@@ -113,5 +158,13 @@ class StreakWidgetStateHelperTest {
         )
 
         assertFalse(result)
+    }
+
+    @Test
+    fun resolveFrameIndexRotatesPredictablyAcrossThreeFrames() {
+        assertEquals(0, StreakWidgetStateHelper.resolveFrameIndex(0L))
+        assertEquals(1, StreakWidgetStateHelper.resolveFrameIndex(15_000L))
+        assertEquals(2, StreakWidgetStateHelper.resolveFrameIndex(30_000L))
+        assertEquals(0, StreakWidgetStateHelper.resolveFrameIndex(45_000L))
     }
 }

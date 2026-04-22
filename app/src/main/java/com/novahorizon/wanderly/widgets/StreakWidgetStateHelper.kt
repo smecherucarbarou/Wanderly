@@ -1,19 +1,14 @@
 package com.novahorizon.wanderly.widgets
 
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.WidgetStreakSnapshot
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
-
-enum class StreakTier {
-    NONE,
-    SPARK,
-    BLAZE,
-    INFERNO,
-    LEGENDARY
-}
 
 enum class WidgetMood {
     NEUTRAL,
@@ -23,7 +18,7 @@ enum class WidgetMood {
 }
 
 data class StreakWidgetVisualState(
-    val tier: StreakTier,
+    val tier: ResolvedStreakTier,
     val mood: WidgetMood,
     val mascotRes: Int,
     val fireRes: Int,
@@ -31,19 +26,63 @@ data class StreakWidgetVisualState(
     val backgroundRes: Int,
     val countColorRes: Int,
     val subtitleColorRes: Int,
-    val inDanger: Boolean
+    val inDanger: Boolean,
+    val showStaleIndicator: Boolean,
+    val message: String?,
+    val frameIndex: Int
 )
 
 object StreakWidgetStateHelper {
 
     private val eveningDangerStartsAt: LocalTime = LocalTime.of(18, 0)
+    private const val STALE_AFTER_MILLIS = 5 * 60 * 1000L
+    private const val FRAME_COUNT = 3
 
     fun resolveVisualState(
         streakCount: Int,
         lastMissionDate: String?,
         now: LocalDateTime = LocalDateTime.now()
+    ): StreakWidgetVisualState = resolveVisualState(
+        streakCount = streakCount,
+        lastMissionDate = lastMissionDate,
+        now = now,
+        showStaleIndicator = false
+    )
+
+    fun resolveVisualState(
+        snapshot: WidgetStreakSnapshot?,
+        currentFetchSucceeded: Boolean,
+        now: LocalDateTime = LocalDateTime.now()
     ): StreakWidgetVisualState {
-        val tier = resolveTier(streakCount)
+        val showStaleIndicator = snapshot != null &&
+            !currentFetchSucceeded &&
+            now.toEpochMillis() - snapshot.savedAtMillis > STALE_AFTER_MILLIS
+
+        return resolveVisualState(
+            streakCount = snapshot?.streakCount ?: 0,
+            lastMissionDate = snapshot?.lastMissionDate,
+            now = now,
+            showStaleIndicator = showStaleIndicator
+        )
+    }
+
+    fun resolveFrameIndex(tickMillis: Long): Int {
+        return ((tickMillis / StreakWidgetAlarmScheduler.REFRESH_INTERVAL_MILLIS) % FRAME_COUNT)
+            .toInt()
+    }
+
+    fun isInDanger(lastMissionDate: String?, today: LocalDate = LocalDate.now()): Boolean {
+        val parsedDate = parseDate(lastMissionDate) ?: return false
+        return ChronoUnit.DAYS.between(parsedDate, today) > 1
+    }
+
+    private fun resolveVisualState(
+        streakCount: Int,
+        lastMissionDate: String?,
+        now: LocalDateTime,
+        showStaleIndicator: Boolean
+    ): StreakWidgetVisualState {
+        val tier = StreakTierHelper.resolve(streakCount)
         val lastMission = parseDate(lastMissionDate)
         val today = now.toLocalDate()
         val mood = resolveMood(
@@ -58,26 +97,20 @@ object StreakWidgetStateHelper {
             tier = tier,
             mood = mood,
             mascotRes = resolveMascotRes(tier, mood),
-            fireRes = resolveFireRes(tier),
+            fireRes = tier.animFile,
             subtitleRes = resolveSubtitleRes(mood),
-            backgroundRes = if (inDanger) R.drawable.bg_widget_streak_warning else R.drawable.bg_widget_streak,
+            backgroundRes = if (inDanger) {
+                R.drawable.bg_widget_streak_warning
+            } else {
+                R.drawable.bg_widget_streak
+            },
             countColorRes = if (inDanger) R.color.primary else R.color.accent,
             subtitleColorRes = if (inDanger) R.color.accent else R.color.pollen_white,
-            inDanger = inDanger
+            inDanger = inDanger,
+            showStaleIndicator = showStaleIndicator,
+            message = resolveMessage(streakCount),
+            frameIndex = resolveFrameIndex(now.toEpochMillis())
         )
-    }
-
-    fun isInDanger(lastMissionDate: String?, today: LocalDate = LocalDate.now()): Boolean {
-        val parsedDate = parseDate(lastMissionDate) ?: return false
-        return ChronoUnit.DAYS.between(parsedDate, today) > 1
-    }
-
-    private fun resolveTier(streakCount: Int): StreakTier = when {
-        streakCount >= 50 -> StreakTier.LEGENDARY
-        streakCount >= 25 -> StreakTier.INFERNO
-        streakCount >= 5 -> StreakTier.BLAZE
-        streakCount >= 1 -> StreakTier.SPARK
-        else -> StreakTier.NONE
     }
 
     private fun resolveMood(
@@ -97,45 +130,49 @@ object StreakWidgetStateHelper {
         }
     }
 
-    private fun resolveFireRes(tier: StreakTier): Int = when (tier) {
-        StreakTier.LEGENDARY -> R.drawable.ic_streak_fire_50
-        StreakTier.INFERNO -> R.drawable.ic_streak_fire_25
-        StreakTier.BLAZE -> R.drawable.ic_streak_fire_5
-        StreakTier.SPARK,
-        StreakTier.NONE -> R.drawable.ic_streak_fire
-    }
-
-    private fun resolveMascotRes(tier: StreakTier, mood: WidgetMood): Int = when (mood) {
-        WidgetMood.NEUTRAL -> when (tier) {
-            StreakTier.NONE -> R.drawable.widget_mascot_neutral
-            StreakTier.SPARK -> R.drawable.widget_mascot_spark
-            StreakTier.BLAZE -> R.drawable.widget_mascot_blaze
-            StreakTier.INFERNO -> R.drawable.widget_mascot_inferno
-            StreakTier.LEGENDARY -> R.drawable.widget_mascot_legendary
+    private fun resolveMascotRes(tier: ResolvedStreakTier, mood: WidgetMood): Int = when (mood) {
+        WidgetMood.NEUTRAL -> when (tier.label) {
+            "Broken" -> R.drawable.widget_mascot_neutral
+            "Starter" -> R.drawable.widget_mascot_spark
+            "Rising",
+            "Blazing" -> R.drawable.widget_mascot_blaze
+            "Legendary",
+            "Epic",
+            "GOD" -> R.drawable.widget_mascot_legendary
+            else -> R.drawable.widget_mascot_neutral
         }
 
-        WidgetMood.PROUD -> when (tier) {
-            StreakTier.NONE -> R.drawable.widget_mascot_neutral
-            StreakTier.SPARK -> R.drawable.widget_mascot_spark_proud
-            StreakTier.BLAZE -> R.drawable.widget_mascot_blaze_proud
-            StreakTier.INFERNO -> R.drawable.widget_mascot_inferno_proud
-            StreakTier.LEGENDARY -> R.drawable.widget_mascot_legendary_proud
+        WidgetMood.PROUD -> when (tier.label) {
+            "Broken" -> R.drawable.widget_mascot_neutral
+            "Starter" -> R.drawable.widget_mascot_spark_proud
+            "Rising",
+            "Blazing" -> R.drawable.widget_mascot_blaze_proud
+            "Legendary",
+            "Epic",
+            "GOD" -> R.drawable.widget_mascot_legendary_proud
+            else -> R.drawable.widget_mascot_neutral
         }
 
-        WidgetMood.WATCHFUL -> when (tier) {
-            StreakTier.NONE -> R.drawable.widget_mascot_neutral
-            StreakTier.SPARK -> R.drawable.widget_mascot_spark_watchful
-            StreakTier.BLAZE -> R.drawable.widget_mascot_blaze_watchful
-            StreakTier.INFERNO -> R.drawable.widget_mascot_inferno_watchful
-            StreakTier.LEGENDARY -> R.drawable.widget_mascot_legendary_watchful
+        WidgetMood.WATCHFUL -> when (tier.label) {
+            "Broken" -> R.drawable.widget_mascot_neutral
+            "Starter" -> R.drawable.widget_mascot_spark_watchful
+            "Rising",
+            "Blazing" -> R.drawable.widget_mascot_blaze_watchful
+            "Legendary",
+            "Epic",
+            "GOD" -> R.drawable.widget_mascot_legendary_watchful
+            else -> R.drawable.widget_mascot_neutral
         }
 
-        WidgetMood.STRESSED -> when (tier) {
-            StreakTier.NONE -> R.drawable.widget_mascot_neutral
-            StreakTier.SPARK -> R.drawable.widget_mascot_spark_stressed
-            StreakTier.BLAZE -> R.drawable.widget_mascot_blaze_stressed
-            StreakTier.INFERNO -> R.drawable.widget_mascot_inferno_stressed
-            StreakTier.LEGENDARY -> R.drawable.widget_mascot_legendary_stressed
+        WidgetMood.STRESSED -> when (tier.label) {
+            "Broken" -> R.drawable.widget_mascot_neutral
+            "Starter" -> R.drawable.widget_mascot_spark_stressed
+            "Rising",
+            "Blazing" -> R.drawable.widget_mascot_blaze_stressed
+            "Legendary",
+            "Epic",
+            "GOD" -> R.drawable.widget_mascot_legendary_stressed
+            else -> R.drawable.widget_mascot_neutral
         }
     }
 
@@ -146,6 +183,10 @@ object StreakWidgetStateHelper {
         WidgetMood.STRESSED -> R.string.widget_streak_subtitle_stressed
     }
 
+    private fun resolveMessage(streakCount: Int): String? {
+        return if (streakCount <= 0) "Start again today." else null
+    }
+
     private fun parseDate(rawDate: String?): LocalDate? {
         if (rawDate.isNullOrBlank()) return null
         return try {
@@ -153,5 +194,9 @@ object StreakWidgetStateHelper {
         } catch (_: DateTimeParseException) {
             null
         }
+    }
+
+    private fun LocalDateTime.toEpochMillis(): Long {
+        return atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 }
