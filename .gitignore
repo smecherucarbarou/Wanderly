@@ -41,8 +41,11 @@ replay_pid*
 
 # Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
 .kotlin/
+/.worktrees/
 codex.md
 context.md
 fixesandimprov.md
 fixesandimprovs.md
 supabase/.temp/
+docs/superpowers/specs/2026-04-22-streak-widget-profile-design.md
+docs/superpowers/plans/2026-04-22-streak-widget-profile-refresh.md

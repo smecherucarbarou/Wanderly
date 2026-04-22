@@ -93,7 +93,11 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                         savedAtMillis = nowMillis,
                         lastSyncSucceeded = true
                     ).also { snapshot ->
-                        preferencesStore.saveWidgetStreakSnapshot(snapshot)
+                        try {
+                            preferencesStore.saveWidgetStreakSnapshot(snapshot)
+                        } catch (_: Exception) {
+                            // Keep the fresh fetch for rendering even if persistence fails.
+                        }
                     }
                 }
             } catch (_: Exception) {
