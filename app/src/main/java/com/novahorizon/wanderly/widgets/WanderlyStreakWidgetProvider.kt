@@ -7,16 +7,18 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.RemoteViews
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.data.WidgetStreakSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 
 class WanderlyStreakWidgetProvider : AppWidgetProvider() {
 
@@ -26,8 +28,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         updateAsync(context) {
-            updateWidgets(context, appWidgetManager, appWidgetIds)
-            scheduleNextUpdate(context)
+            refreshAndRenderWidgets(context, appWidgetManager, appWidgetIds)
         }
     }
 
@@ -40,9 +41,8 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                 val componentName = ComponentName(context, WanderlyStreakWidgetProvider::class.java)
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
                 if (appWidgetIds.isNotEmpty()) {
-                    updateWidgets(context, appWidgetManager, appWidgetIds)
+                    refreshAndRenderWidgets(context, appWidgetManager, appWidgetIds)
                 }
-                scheduleNextUpdate(context)
             }
         }
     }
@@ -71,64 +71,89 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_REFRESH_WIDGET = "com.novahorizon.wanderly.widgets.ACTION_REFRESH_WIDGET"
         private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val fallbackHandler = Handler(Looper.getMainLooper())
+        @Volatile
+        private var fallbackRunnable: Runnable? = null
 
-        private suspend fun updateWidgets(
+        private suspend fun refreshAndRenderWidgets(
             context: Context,
             appWidgetManager: AppWidgetManager,
             appWidgetIds: IntArray
         ) {
-            val preferencesStore = PreferencesStore(context)
-            val streakCount = preferencesStore.getStoredStreakCount()
-            val lastMissionDate = preferencesStore.getStoredLastMissionDate()
+            val appContext = context.applicationContext
+            val preferencesStore = PreferencesStore(appContext)
+            val repository = WanderlyGraph.repository(appContext)
+            val nowMillis = System.currentTimeMillis()
+
+            val fetchedSnapshot = try {
+                repository.getCurrentProfile()?.let { profile ->
+                    WidgetStreakSnapshot(
+                        streakCount = profile.streak_count ?: 0,
+                        lastMissionDate = profile.last_mission_date,
+                        savedAtMillis = nowMillis,
+                        lastSyncSucceeded = true
+                    ).also { snapshot ->
+                        preferencesStore.saveWidgetStreakSnapshot(snapshot)
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+
+            val snapshotToRender = fetchedSnapshot ?: run {
+                try {
+                    preferencesStore.getWidgetStreakSnapshot()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            val currentFetchSucceeded = fetchedSnapshot != null
             val visualState = StreakWidgetStateHelper.resolveVisualState(
-                streakCount = streakCount,
-                lastMissionDate = lastMissionDate
+                snapshot = snapshotToRender,
+                currentFetchSucceeded = currentFetchSucceeded
             )
 
             appWidgetIds.forEach { appWidgetId ->
-                val views = RemoteViews(context.packageName, R.layout.widget_streak).apply {
-                    setTextViewText(R.id.widget_streak_count, streakCount.toString())
-                    setTextViewText(R.id.widget_subtitle, context.getString(visualState.subtitleRes))
+                val views = RemoteViews(appContext.packageName, R.layout.widget_streak).apply {
+                    setTextViewText(R.id.widget_streak_count, (snapshotToRender?.streakCount ?: 0).toString())
+                    setTextViewText(R.id.widget_subtitle, appContext.getString(visualState.subtitleRes))
                     setImageViewResource(R.id.widget_mascot, visualState.mascotRes)
                     setImageViewResource(R.id.widget_fire_icon, visualState.fireRes)
                     setTextColor(
                         R.id.widget_streak_count,
-                        context.getColor(visualState.countColorRes)
+                        appContext.getColor(visualState.countColorRes)
                     )
                     setTextColor(
                         R.id.widget_subtitle,
-                        context.getColor(visualState.subtitleColorRes)
+                        appContext.getColor(visualState.subtitleColorRes)
                     )
                     setInt(
                         R.id.widget_container,
                         "setBackgroundResource",
                         visualState.backgroundRes
                     )
-                    setOnClickPendingIntent(R.id.widget_container, mainActivityPendingIntent(context))
+                    setOnClickPendingIntent(R.id.widget_container, mainActivityPendingIntent(appContext))
                 }
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             }
+
+            scheduleNextUpdate(appContext)
         }
 
         private fun scheduleNextUpdate(context: Context) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val triggerAtMillis = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)
-            val pendingIntent = refreshPendingIntent(context)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-            }
+            val appContext = context.applicationContext
+            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pendingIntent = refreshPendingIntent(appContext)
+            StreakWidgetAlarmScheduler.scheduleNext(alarmManager, pendingIntent)
+            scheduleFallbackTicker(appContext)
         }
 
         private fun cancelScheduledUpdates(context: Context) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.cancel(refreshPendingIntent(context))
+            val appContext = context.applicationContext
+            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            StreakWidgetAlarmScheduler.cancel(alarmManager, refreshPendingIntent(appContext))
+            fallbackRunnable?.let(fallbackHandler::removeCallbacks)
+            fallbackRunnable = null
         }
 
         private fun refreshPendingIntent(context: Context): PendingIntent {
@@ -141,6 +166,21 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+        }
+
+        private fun scheduleFallbackTicker(context: Context) {
+            fallbackRunnable?.let(fallbackHandler::removeCallbacks)
+            val appContext = context.applicationContext
+            val runnable = Runnable {
+                fallbackRunnable = null
+                appContext.sendBroadcast(
+                    Intent(appContext, WanderlyStreakWidgetProvider::class.java).apply {
+                        action = ACTION_REFRESH_WIDGET
+                    }
+                )
+            }
+            fallbackRunnable = runnable
+            fallbackHandler.postDelayed(runnable, StreakWidgetAlarmScheduler.REFRESH_INTERVAL_MILLIS)
         }
 
         private fun mainActivityPendingIntent(context: Context): PendingIntent {
