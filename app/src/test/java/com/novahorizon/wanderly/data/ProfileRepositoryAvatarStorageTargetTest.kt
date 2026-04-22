@@ -10,7 +10,7 @@ import org.junit.Test
 class ProfileRepositoryAvatarStorageTargetTest {
 
     @Test
-    fun `builds versioned avatar path without upsert`() {
+    fun `builds avatar storage target with stable upload path and versioned public url`() {
         val target = ProfileRepository.buildAvatarStorageTarget(
             baseUrl = "https://example.supabase.co",
             bucket = Constants.STORAGE_BUCKET_AVATARS,
@@ -18,17 +18,17 @@ class ProfileRepositoryAvatarStorageTargetTest {
             versionToken = "1713698472000"
         )
 
-        assertEquals("profiles/user-123/avatar-1713698472000.jpg", target.filePath)
+        assertEquals("profiles/user-123/avatar.jpg", target.filePath)
         assertEquals(
-            "https://example.supabase.co/storage/v1/object/avatars/profiles/user-123/avatar-1713698472000.jpg",
+            "https://example.supabase.co/storage/v1/object/avatars/profiles/user-123/avatar.jpg",
             target.uploadUrl
         )
         assertEquals(
-            "https://example.supabase.co/storage/v1/object/public/avatars/profiles/user-123/avatar-1713698472000.jpg",
+            "https://example.supabase.co/storage/v1/object/public/avatars/profiles/user-123/avatar.jpg?v=1713698472000",
             target.publicUrl
         )
-        assertFalse(target.useUpsert)
-        assertTrue(target.publicUrl.endsWith(".jpg"))
+        assertTrue(target.useUpsert)
+        assertTrue(target.publicUrl.endsWith(".jpg?v=1713698472000"))
     }
 
     @Test
