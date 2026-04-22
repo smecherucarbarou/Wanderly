@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -82,6 +83,12 @@ class DataStoreManager(context: Context) {
 
     suspend fun putMainLong(key: String, value: Long) {
         putLong(StoreType.MAIN, key, value)
+    }
+
+    suspend fun editMain(block: MutablePreferences.() -> Unit) {
+        dataStore(StoreType.MAIN).edit { prefs ->
+            prefs.block()
+        }
     }
 
     suspend fun removeMainKeys(keys: Iterable<String>) {

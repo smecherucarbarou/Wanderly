@@ -1,6 +1,10 @@
 package com.novahorizon.wanderly.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.novahorizon.wanderly.Constants
 import kotlinx.coroutines.runBlocking
 
@@ -188,19 +192,20 @@ class PreferencesStore(context: Context) {
         dataStoreManager.getMainInt(Constants.KEY_LOCAL_STREAK_COUNT, 0)
 
     suspend fun saveWidgetStreakSnapshot(snapshot: WidgetStreakSnapshot) {
-        dataStoreManager.putMainInt(Constants.KEY_WIDGET_STREAK_COUNT, snapshot.streakCount)
-        dataStoreManager.putMainString(
-            Constants.KEY_WIDGET_LAST_MISSION_DATE,
-            snapshot.lastMissionDate
-        )
-        dataStoreManager.putMainLong(
-            Constants.KEY_WIDGET_STREAK_SAVED_AT_MILLIS,
-            snapshot.savedAtMillis
-        )
-        dataStoreManager.putMainBoolean(
-            Constants.KEY_WIDGET_LAST_SYNC_SUCCEEDED,
-            snapshot.lastSyncSucceeded
-        )
+        dataStoreManager.editMain {
+            this[intPreferencesKey(Constants.KEY_WIDGET_STREAK_COUNT)] = snapshot.streakCount
+            this[longPreferencesKey(Constants.KEY_WIDGET_STREAK_SAVED_AT_MILLIS)] =
+                snapshot.savedAtMillis
+            this[booleanPreferencesKey(Constants.KEY_WIDGET_LAST_SYNC_SUCCEEDED)] =
+                snapshot.lastSyncSucceeded
+
+            val missionDateKey = stringPreferencesKey(Constants.KEY_WIDGET_LAST_MISSION_DATE)
+            if (snapshot.lastMissionDate == null) {
+                remove(missionDateKey)
+            } else {
+                this[missionDateKey] = snapshot.lastMissionDate
+            }
+        }
     }
 
     suspend fun getWidgetStreakSnapshot(): WidgetStreakSnapshot? {
