@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="widget_padding">14dp</dimen>
-    <dimen name="widget_mascot_size">44dp</dimen>
+    <dimen name="widget_mascot_size">40dp</dimen>
     <dimen name="widget_fire_size">18dp</dimen>
-    <dimen name="widget_streak_text_size">38sp</dimen>
+    <dimen name="widget_streak_text_size">42sp</dimen>
     <dimen name="widget_subtitle_text_size">12sp</dimen>
     <dimen name="widget_spacing_small">10dp</dimen>
     <dimen name="widget_corner_radius">24dp</dimen>
     <dimen name="widget_stroke_width">2dp</dimen>
-    <dimen name="profile_avatar_container_size">196dp</dimen>
-    <dimen name="profile_halo_size">192dp</dimen>
-    <dimen name="profile_avatar_size">132dp</dimen>
-    <dimen name="profile_avatar_radius">66dp</dimen>
+    <dimen name="profile_avatar_container_size">164dp</dimen>
+    <dimen name="profile_halo_size">154dp</dimen>
+    <dimen name="profile_avatar_size">124dp</dimen>
+    <dimen name="profile_avatar_radius">62dp</dimen>
 </resources>

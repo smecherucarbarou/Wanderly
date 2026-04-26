@@ -5,10 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -23,7 +27,9 @@ import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.main.MainViewModel
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -34,6 +40,9 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels {
         WanderlyViewModelFactory(repository)
     }
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,20 +51,34 @@ class MainActivity : AppCompatActivity() {
         applyWindowInsets()
 
         WanderlyNotificationManager.createNotificationChannel(this)
-        requestNotificationPermission()
 
+        lifecycleScope.launch {
+            val onboardingSeen = withContext(Dispatchers.IO) {
+                repository.isOnboardingSeenSuspend()
+            }
+            val hasPendingInvite = withContext(Dispatchers.IO) {
+                !repository.peekPendingInviteCode().isNullOrBlank()
+            }
+            setupNavGraph(onboardingSeen, hasPendingInvite)
+        }
+
+        setupObservers()
+        viewModel.checkDailyStreak()
+    }
+
+    private fun setupNavGraph(onboardingSeen: Boolean, hasPendingInvite: Boolean) {
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
         val navGraph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
             setStartDestination(
                 MainNavigationDestinations.initialStartDestination(
-                    onboardingSeen = repository.isOnboardingSeen(),
+                    onboardingSeen = onboardingSeen,
                     mapDestinationId = R.id.mapFragment,
                     onboardingDestinationId = R.id.onboardingFragment
                 )
             )
         }
-        shouldRoutePendingInvite = !repository.peekPendingInviteCode().isNullOrBlank()
+        shouldRoutePendingInvite = hasPendingInvite
         navController.setGraph(navGraph, null)
         navController.addOnDestinationChangedListener { _, destination, _ ->
             binding.bottomNavigation.visibility =
@@ -79,9 +102,6 @@ class MainActivity : AppCompatActivity() {
             routePendingInviteIfNeeded(navController.currentDestination?.id)
             startHiveService(session != null)
         }
-
-        setupObservers()
-        viewModel.checkDailyStreak()
     }
 
     private fun startHiveService(hasSession: Boolean) {
@@ -147,12 +167,64 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
+    fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            return
         }
+
+        val permissionPrefs = getSharedPreferences(NOTIFICATION_PERMISSION_PREFS, MODE_PRIVATE)
+        val requestedBefore = permissionPrefs.getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+        val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+
+        when {
+            shouldShowRationale -> showNotificationPermissionRationale()
+            requestedBefore -> showNotificationPermissionSettingsDialog()
+            else -> launchNotificationPermissionRequest()
+        }
+    }
+
+    private fun showNotificationPermissionRationale() {
+        AlertDialog.Builder(this, R.style.Wanderly_AlertDialog)
+            .setTitle(R.string.notification_permission_rationale_title)
+            .setMessage(R.string.notification_permission_rationale_message)
+            .setPositiveButton(R.string.notification_permission_rationale_positive) { _, _ ->
+                launchNotificationPermissionRequest()
+            }
+            .setNegativeButton(R.string.notification_permission_negative, null)
+            .show()
+    }
+
+    private fun showNotificationPermissionSettingsDialog() {
+        AlertDialog.Builder(this, R.style.Wanderly_AlertDialog)
+            .setTitle(R.string.notification_permission_settings_title)
+            .setMessage(R.string.notification_permission_settings_message)
+            .setPositiveButton(R.string.notification_permission_settings_positive) { _, _ ->
+                openNotificationSettings()
+            }
+            .setNegativeButton(R.string.notification_permission_negative, null)
+            .show()
+    }
+
+    private fun launchNotificationPermissionRequest() {
+        getSharedPreferences(NOTIFICATION_PERMISSION_PREFS, MODE_PRIVATE)
+            .edit {
+                putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true)
+            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun openNotificationSettings() {
+        startActivity(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            }
+        )
     }
 
     private fun routePendingInviteIfNeeded(destinationId: Int?) {
@@ -172,5 +244,10 @@ class MainActivity : AppCompatActivity() {
             stopHiveService()
         }
         super.onDestroy()
+    }
+
+    private companion object {
+        const val NOTIFICATION_PERMISSION_PREFS = "wanderly_runtime_permissions"
+        const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "post_notifications_requested"
     }
 }

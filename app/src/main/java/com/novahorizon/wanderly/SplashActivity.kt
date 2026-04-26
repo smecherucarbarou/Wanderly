@@ -25,10 +25,10 @@ class SplashActivity : AppCompatActivity() {
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        cachePendingInviteIfPresent()
         startAnimations()
 
         lifecycleScope.launch {
+            cachePendingInviteIfPresent()
             checkAuthAndNavigate()
         }
     }
@@ -73,7 +73,7 @@ class SplashActivity : AppCompatActivity() {
 
     private suspend fun checkAuthAndNavigate() {
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-        val rememberMe = PreferencesStore(this).isRememberMeEnabled()
+        val rememberMe = PreferencesStore(this).isRememberMeEnabledSuspend()
         if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {
             startActivity(
                 Intent(this, MainActivity::class.java).apply {
@@ -90,7 +90,7 @@ class SplashActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun cachePendingInviteIfPresent() {
+    private suspend fun cachePendingInviteIfPresent() {
         val inviteCode = InviteDeepLink.extractFriendCode(intent?.data) ?: return
         WanderlyGraph.repository(this).cachePendingInviteCode(inviteCode)
     }

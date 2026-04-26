@@ -4,34 +4,42 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
+import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.api.PlacesGeocoder
 import com.novahorizon.wanderly.data.HiveRank
+import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.util.AiResponseParser
 import com.novahorizon.wanderly.util.DateUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import java.util.Calendar
 import java.util.TimeZone
 
-class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel() {
+class MissionsViewModel(
+    private val repository: WanderlyRepository,
+    private val savedStateHandle: SavedStateHandle,
+    private val profileStateProvider: ProfileStateProvider,
+    private val missionDetailsRepository: MissionDetailsRepository
+) : ViewModel() {
 
     private val _profile = MutableLiveData<Profile?>()
     val profile: LiveData<Profile?> = _profile
 
-    private val _missionState = MutableLiveData<MissionState>(MissionState.Idle)
+    private val _missionState = MutableLiveData<MissionState>(restoreMissionState())
     val missionState: LiveData<MissionState> = _missionState
 
     private val _streakMessage = MutableLiveData<String?>()
@@ -40,6 +48,20 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
     private val json = Json { ignoreUnknownKeys = true }
     private var missionGenerationInFlight = false
     private var profileCollectorJob: Job? = null
+    private var currentMission: String?
+        get() = savedStateHandle[KEY_CURRENT_MISSION]
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>(KEY_CURRENT_MISSION)
+            } else {
+                savedStateHandle[KEY_CURRENT_MISSION] = value
+            }
+        }
+    private var verificationStep: String
+        get() = savedStateHandle[KEY_VERIFICATION_STEP] ?: VERIFICATION_STEP_IDLE
+        set(value) {
+            savedStateHandle[KEY_VERIFICATION_STEP] = value
+        }
 
     init {
         startProfileCollector()
@@ -62,7 +84,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
             startProfileCollector()
         }
         viewModelScope.launch {
-            repository.getCurrentProfile()
+            profileStateProvider.refreshProfile()
         }
     }
 
@@ -78,7 +100,7 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
 
         viewModelScope.launch {
             try {
-                val currentProfile = repository.getCurrentProfile()
+                val currentProfile = profileStateProvider.refreshProfile()
                 val rank = currentProfile?.derivedHiveRank() ?: 1
                 val radiusMeters = HiveRank.missionRadiusMeters(rank)
 
@@ -156,13 +178,11 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     targetLat = resolvedTarget.lat,
                     targetLng = resolvedTarget.lng
                 )
+                currentMission = verifiedMissionText
+                verificationStep = VERIFICATION_STEP_RECEIVED
                 _missionState.postValue(MissionState.MissionReceived(verifiedMissionText))
             } catch (e: Exception) {
-                _missionState.postValue(
-                    MissionState.Error(
-                        e.message ?: "Failed to generate objective. Please try again."
-                    )
-                )
+                postGenericMissionError("Mission generation failed", e)
             } finally {
                 missionGenerationInFlight = false
             }
@@ -170,12 +190,12 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
     }
 
     fun verifyPhoto(bitmap: Bitmap) {
-        val targetName = repository.getMissionTarget() ?: "this place"
-        val targetCity = repository.getMissionCity() ?: ""
         _missionState.postValue(MissionState.Verifying)
 
         viewModelScope.launch {
             try {
+                val targetName = repository.getMissionTarget() ?: "this place"
+                val targetCity = repository.getMissionCity() ?: ""
                 val prompt = """
                     Objective Validation System:
                     Target: "$targetName" in "$targetCity"
@@ -189,10 +209,12 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     .trim()
                     .uppercase()
                 if (resultText.contains("YES")) {
+                    verificationStep = VERIFICATION_STEP_VERIFIED
                     _missionState.postValue(
                         MissionState.VerificationResult(true, "Location verified successfully.")
                     )
                 } else {
+                    verificationStep = VERIFICATION_STEP_RECEIVED
                     val message = resultText.substringAfter(":")
                         .trim()
                         .lowercase()
@@ -205,34 +227,24 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     )
                 }
             } catch (e: Exception) {
-                _missionState.postValue(MissionState.Error("System error: ${e.message}"))
+                postGenericMissionError("Mission verification failed", e)
             }
         }
     }
 
-    fun getPlaceDetails() {
-        val targetName = repository.getMissionTarget() ?: return
-        val targetCity = repository.getMissionCity() ?: ""
+    fun fetchPlaceDetails() {
         _missionState.postValue(MissionState.FetchingDetails)
 
         viewModelScope.launch {
             try {
-                val prompt = """
-                    STRICT ACCURACY MODE with Google Search.
-                    Place: "$targetName" in the city of "$targetCity".
-                    Task: Provide a 3-sentence summary using real, up-to-date information.
-                    CRITICAL: Use Google Search to verify details about "$targetName" in "$targetCity".
-                    DO NOT mention venues from other cities.
-                    Include one unique fun fact discovered via search.
-                """.trimIndent()
-
-                val info = GeminiClient.generateWithSearchText(
-                    prompt,
-                    systemInstruction = "You are a precise local travel guide. Return normal plain text only. Do not return JSON, markdown, bullet lists, or code fences."
-                )
+                val targetName = repository.getMissionTarget() ?: return@launch
+                val targetCity = repository.getMissionCity() ?: ""
+                val info = missionDetailsRepository.getPlaceDetails(targetName, targetCity)
                 _missionState.postValue(MissionState.DetailsReceived(info))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _missionState.postValue(MissionState.Error("Could not fetch details: ${e.message}"))
+                postGenericMissionError("Mission fetch failed", e)
             }
         }
     }
@@ -282,6 +294,8 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     )
                     repository.updateLastVisitDate(recordedToday)
                     repository.clearMissionData()
+                    currentMission = null
+                    verificationStep = VERIFICATION_STEP_IDLE
 
                     _profile.postValue(updatedProfile)
                     _missionState.postValue(MissionState.Idle)
@@ -306,18 +320,29 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
                     )
                 }
             } catch (e: Exception) {
-                Log.e("WanderlyStreak", "Error calculating streak", e)
-                _missionState.postValue(MissionState.Error("Error: ${e.message}"))
+                postGenericMissionError("Mission completion failed", e)
             }
         }
     }
 
     private fun startProfileCollector() {
         profileCollectorJob?.cancel()
-        profileCollectorJob = viewModelScope.launch {
-            repository.currentProfile.collectLatest {
-                _profile.postValue(it)
-            }
+        profileCollectorJob = profileStateProvider.collectProfile(viewModelScope) { profile ->
+            _profile.postValue(profile)
+        }
+    }
+
+    fun currentMissionText(): String? = currentMission
+
+    private fun restoreMissionState(): MissionState {
+        val mission = currentMission ?: return MissionState.Idle
+        return when (verificationStep) {
+            VERIFICATION_STEP_VERIFIED -> MissionState.VerificationResult(
+                success = true,
+                message = "Location verified successfully."
+            )
+            VERIFICATION_STEP_RECEIVED -> MissionState.MissionReceived(mission)
+            else -> MissionState.Idle
         }
     }
 
@@ -325,5 +350,22 @@ class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel(
         if (BuildConfig.DEBUG) {
             Log.d("MissionsViewModel", "Raw $label response: $response")
         }
+    }
+
+    private fun postGenericMissionError(message: String, e: Exception) {
+        if (BuildConfig.DEBUG) {
+            Log.e("MissionsViewModel", message, e)
+        }
+        _missionState.postValue(
+            MissionState.Error(repository.context.getString(R.string.error_generic_retry))
+        )
+    }
+
+    private companion object {
+        const val KEY_CURRENT_MISSION = "current_mission"
+        const val KEY_VERIFICATION_STEP = "verification_step"
+        const val VERIFICATION_STEP_IDLE = "idle"
+        const val VERIFICATION_STEP_RECEIVED = "received"
+        const val VERIFICATION_STEP_VERIFIED = "verified"
     }
 }

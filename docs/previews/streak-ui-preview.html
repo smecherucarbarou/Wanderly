@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wanderly Streak UI Preview</title>
+  <style>
+    :root {
+      --bg: #1b120d;
+      --bg-soft: #2a1a12;
+      --panel: linear-gradient(315deg, #24140a 0%, #3a2010 100%);
+      --panel-soft: rgba(255, 228, 184, 0.08);
+      --line: #a86a2b;
+      --line-soft: rgba(255, 227, 176, 0.18);
+      --honey: #ffc85a;
+      --amber: #ff8a3d;
+      --ember: #ff6b1a;
+      --cream: #fff1b8;
+      --text: #fff5de;
+      --muted: #d7bc90;
+      --danger: #ff7644;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(255, 164, 52, 0.16), transparent 28%),
+        linear-gradient(180deg, #130c08 0%, #23150d 100%);
+      color: var(--text);
+      font-family: Georgia, "Trebuchet MS", serif;
+    }
+
+    .page {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .hero {
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 200, 90, 0.28);
+      border-radius: 999px;
+      background: rgba(255, 200, 90, 0.08);
+      color: var(--honey);
+      font: 700 12px/1 "Trebuchet MS", sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin-top: 12px;
+      font-size: clamp(34px, 4vw, 56px);
+      line-height: 1;
+    }
+
+    .hero p {
+      max-width: 720px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    .section-card {
+      padding: 22px;
+      border: 1px solid rgba(255, 200, 90, 0.12);
+      border-radius: 28px;
+      background: rgba(255, 248, 238, 0.03);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .section-card h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .section-card > p {
+      color: var(--muted);
+      margin-bottom: 18px;
+      line-height: 1.45;
+    }
+
+    .preview-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .widget {
+      position: relative;
+      overflow: hidden;
+      padding: 14px;
+      border-radius: 26px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 209, 102, 0.16), transparent 32%),
+        linear-gradient(180deg, #2a1a12 0%, #1c110c 100%);
+      border: 1px solid rgba(255, 200, 90, 0.12);
+      min-height: 220px;
+    }
+
+    .widget::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 26px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      pointer-events: none;
+    }
+
+    .widget-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .fire-chip,
+    .label-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      border-radius: 999px;
+      font: 700 11px/1 "Trebuchet MS", sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .fire-chip {
+      width: 28px;
+      border: 1px solid rgba(255, 200, 90, 0.18);
+      background: radial-gradient(circle at 40% 30%, #fff1b8 0%, #ffb347 45%, #ff6b1a 100%);
+      box-shadow: 0 0 18px rgba(255, 138, 61, 0.28);
+    }
+
+    .label-pill {
+      padding: 0 11px;
+      color: #f5d799;
+      border: 1px solid rgba(245, 215, 153, 0.12);
+      background: rgba(255, 200, 90, 0.08);
+    }
+
+    .count-panel {
+      position: relative;
+      padding: 16px 64px 14px 16px;
+      border-radius: 22px;
+      background: var(--panel);
+      border: 1.5px solid var(--line);
+      box-shadow: inset 0 0 0 1px var(--line-soft);
+    }
+
+    .widget[data-state="danger"] .count-panel {
+      border-color: #d96a34;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 229, 184, 0.2),
+        0 0 0 1px rgba(255, 118, 68, 0.2),
+        0 0 24px rgba(255, 118, 68, 0.26);
+    }
+
+    .widget[data-state="broken"] .count-panel {
+      border-color: rgba(168, 106, 43, 0.45);
+      background: linear-gradient(315deg, #1b120d 0%, #281912 100%);
+      box-shadow: inset 0 0 0 1px rgba(255, 227, 176, 0.08);
+    }
+
+    .count {
+      font-size: 58px;
+      font-weight: 700;
+      line-height: 0.95;
+      color: var(--honey);
+    }
+
+    .widget[data-state="broken"] .count {
+      color: #b59163;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .widget[data-state="broken"] .subtitle {
+      color: #d1bc9a;
+    }
+
+    .mascot {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 35%, #fff4c8 0%, #ffcb63 42%, #ff8a3d 75%, #7e3e14 100%);
+      border: 2px solid rgba(255, 241, 184, 0.4);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    .mascot::before,
+    .mascot::after {
+      content: "";
+      position: absolute;
+      top: 11px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #41210f;
+    }
+
+    .mascot::before {
+      left: 11px;
+    }
+
+    .mascot::after {
+      right: 11px;
+    }
+
+    .widget-title {
+      margin-bottom: 8px;
+      color: var(--cream);
+      font: 700 13px/1.3 "Trebuchet MS", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .profile-demo-wrap {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+
+    .profile-demo {
+      padding: 18px 14px 14px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255, 248, 238, 0.03), rgba(255, 248, 238, 0.01));
+      border: 1px solid rgba(255, 200, 90, 0.1);
+      text-align: center;
+    }
+
+    .avatar-shell {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+    }
+
+    .halo {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      opacity: 0.95;
+    }
+
+    .halo::before,
+    .halo::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+    }
+
+    .halo[data-tier="0"] {
+      background:
+        radial-gradient(circle, rgba(255, 176, 87, 0.16) 0 52%, transparent 56%),
+        radial-gradient(circle, rgba(255, 140, 61, 0.18) 66%, transparent 72%);
+      filter: blur(0.4px);
+    }
+
+    .halo[data-tier="5"] {
+      background:
+        radial-gradient(circle, rgba(255, 176, 87, 0.14) 0 50%, transparent 54%),
+        radial-gradient(circle, rgba(255, 122, 31, 0.28) 65%, transparent 72%);
+    }
+
+    .halo[data-tier="5"]::before {
+      inset: 8px;
+      background:
+        conic-gradient(from 0deg,
+          rgba(255, 122, 31, 0.92) 0deg 24deg,
+          transparent 24deg 64deg,
+          rgba(255, 200, 90, 0.88) 64deg 88deg,
+          transparent 88deg 136deg,
+          rgba(255, 122, 31, 0.92) 136deg 160deg,
+          transparent 160deg 204deg,
+          rgba(255, 200, 90, 0.88) 204deg 228deg,
+          transparent 228deg 276deg,
+          rgba(255, 122, 31, 0.92) 276deg 300deg,
+          transparent 300deg 336deg,
+          rgba(255, 200, 90, 0.88) 336deg 360deg);
+      -webkit-mask: radial-gradient(circle, transparent 0 53px, #000 61px, transparent 73px);
+      mask: radial-gradient(circle, transparent 0 53px, #000 61px, transparent 73px);
+      filter: blur(0.6px);
+    }
+
+    .halo[data-tier="25"] {
+      background:
+        radial-gradient(circle, rgba(255, 138, 61, 0.2) 0 50%, transparent 55%),
+        radial-gradient(circle, rgba(255, 122, 31, 0.26) 66%, transparent 73%);
+    }
+
+    .halo[data-tier="25"]::before {
+      inset: 3px;
+      background:
+        conic-gradient(from 0deg,
+          rgba(255, 122, 31, 0.94) 0deg 18deg,
+          transparent 18deg 42deg,
+          rgba(255, 200, 90, 0.94) 42deg 60deg,
+          transparent 60deg 86deg,
+          rgba(255, 122, 31, 0.94) 86deg 104deg,
+          transparent 104deg 132deg,
+          rgba(255, 200, 90, 0.94) 132deg 150deg,
+          transparent 150deg 178deg,
+          rgba(255, 122, 31, 0.94) 178deg 196deg,
+          transparent 196deg 222deg,
+          rgba(255, 200, 90, 0.94) 222deg 240deg,
+          transparent 240deg 268deg,
+          rgba(255, 122, 31, 0.94) 268deg 286deg,
+          transparent 286deg 312deg,
+          rgba(255, 200, 90, 0.94) 312deg 330deg,
+          transparent 330deg 360deg);
+      -webkit-mask: radial-gradient(circle, transparent 0 52px, #000 60px, transparent 76px);
+      mask: radial-gradient(circle, transparent 0 52px, #000 60px, transparent 76px);
+      filter: blur(1px);
+    }
+
+    .halo[data-tier="50"] {
+      background:
+        radial-gradient(circle, rgba(255, 209, 102, 0.18) 0 48%, transparent 54%),
+        radial-gradient(circle, rgba(255, 122, 31, 0.28) 66%, transparent 74%);
+    }
+
+    .halo[data-tier="50"]::before {
+      inset: 0;
+      background:
+        conic-gradient(from 0deg,
+          rgba(255, 122, 31, 0.98) 0deg 14deg,
+          transparent 14deg 34deg,
+          rgba(255, 200, 90, 0.98) 34deg 48deg,
+          transparent 48deg 66deg,
+          rgba(255, 122, 31, 0.98) 66deg 80deg,
+          transparent 80deg 100deg,
+          rgba(255, 200, 90, 0.98) 100deg 114deg,
+          transparent 114deg 132deg,
+          rgba(255, 122, 31, 0.98) 132deg 146deg,
+          transparent 146deg 166deg,
+          rgba(255, 200, 90, 0.98) 166deg 180deg,
+          transparent 180deg 198deg,
+          rgba(255, 122, 31, 0.98) 198deg 212deg,
+          transparent 212deg 232deg,
+          rgba(255, 200, 90, 0.98) 232deg 246deg,
+          transparent 246deg 264deg,
+          rgba(255, 122, 31, 0.98) 264deg 278deg,
+          transparent 278deg 298deg,
+          rgba(255, 200, 90, 0.98) 298deg 312deg,
+          transparent 312deg 330deg,
+          rgba(255, 122, 31, 0.98) 330deg 344deg,
+          transparent 344deg 360deg);
+      -webkit-mask: radial-gradient(circle, transparent 0 50px, #000 58px, transparent 78px);
+      mask: radial-gradient(circle, transparent 0 50px, #000 58px, transparent 78px);
+      filter: blur(1.2px);
+    }
+
+    .avatar {
+      position: relative;
+      width: 104px;
+      height: 104px;
+      border-radius: 32px;
+      background:
+        radial-gradient(circle at 35% 30%, #fff7d1 0%, #ffd36f 42%, #ff9d46 72%, #7e431a 100%);
+      box-shadow:
+        0 16px 28px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 4px rgba(255, 246, 217, 0.26);
+    }
+
+    .avatar::before,
+    .avatar::after {
+      content: "";
+      position: absolute;
+      top: 38px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #402110;
+    }
+
+    .avatar::before {
+      left: 28px;
+    }
+
+    .avatar::after {
+      right: 28px;
+    }
+
+    .avatar-mouth {
+      position: absolute;
+      left: 50%;
+      bottom: 26px;
+      width: 24px;
+      height: 12px;
+      margin-left: -12px;
+      border-bottom: 3px solid #4f2811;
+      border-radius: 0 0 18px 18px;
+    }
+
+    .tier {
+      color: var(--cream);
+      font: 700 13px/1.2 "Trebuchet MS", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .tier-value {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .note {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    code {
+      color: var(--cream);
+      font-family: Consolas, monospace;
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: calc(100vw - 20px);
+        padding-top: 20px;
+      }
+
+      .section-card {
+        padding: 18px;
+      }
+
+      .avatar-shell {
+        width: 146px;
+        height: 146px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <span class="eyebrow">Wanderly Preview</span>
+      <h1>Streak widget + profile halo</h1>
+      <p>
+        Quick HTML mockup for the redesigned Android XML direction: warm honey/ember palette,
+        stronger widget hierarchy, and a tighter aura around the profile avatar.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="section-card">
+        <h2>Widget states</h2>
+        <p>Same composition, different urgency. The warning state gets stronger glow, while the broken state cools down and loses the heat.</p>
+        <div class="preview-stack">
+          <div>
+            <div class="widget-title">Proud / healthy</div>
+            <article class="widget" data-state="proud">
+              <div class="widget-top">
+                <span class="fire-chip"></span>
+                <span class="label-pill">Daily Streak</span>
+              </div>
+              <div class="count-panel">
+                <div class="count">12</div>
+                <div class="subtitle">Still glowing. Keep the hive moving today.</div>
+                <div class="mascot"></div>
+              </div>
+            </article>
+          </div>
+
+          <div>
+            <div class="widget-title">Freeze-eligible danger</div>
+            <article class="widget" data-state="danger">
+              <div class="widget-top">
+                <span class="fire-chip"></span>
+                <span class="label-pill">Daily Streak</span>
+              </div>
+              <div class="count-panel">
+                <div class="count">12</div>
+                <div class="subtitle">One missed day. Freeze can still save this streak.</div>
+                <div class="mascot"></div>
+              </div>
+            </article>
+          </div>
+
+          <div>
+            <div class="widget-title">Hard lost</div>
+            <article class="widget" data-state="broken">
+              <div class="widget-top">
+                <span class="fire-chip"></span>
+                <span class="label-pill">Daily Streak</span>
+              </div>
+              <div class="count-panel">
+                <div class="count">0</div>
+                <div class="subtitle">Lost for good. Freeze no longer applies here.</div>
+                <div class="mascot"></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <h2>Profile halo tiers</h2>
+        <p>The avatar stays clean in the center while the aura intensifies around it instead of exploding into separate floating flames.</p>
+        <div class="profile-demo-wrap">
+          <article class="profile-demo">
+            <div class="avatar-shell">
+              <div class="halo" data-tier="0"></div>
+              <div class="avatar"><div class="avatar-mouth"></div></div>
+            </div>
+            <div class="tier">Base glow</div>
+            <div class="tier-value">0+ streak</div>
+          </article>
+
+          <article class="profile-demo">
+            <div class="avatar-shell">
+              <div class="halo" data-tier="5"></div>
+              <div class="avatar"><div class="avatar-mouth"></div></div>
+            </div>
+            <div class="tier">Warm ring</div>
+            <div class="tier-value">5+ streak</div>
+          </article>
+
+          <article class="profile-demo">
+            <div class="avatar-shell">
+              <div class="halo" data-tier="25"></div>
+              <div class="avatar"><div class="avatar-mouth"></div></div>
+            </div>
+            <div class="tier">Ember halo</div>
+            <div class="tier-value">25+ streak</div>
+          </article>
+
+          <article class="profile-demo">
+            <div class="avatar-shell">
+              <div class="halo" data-tier="50"></div>
+              <div class="avatar"><div class="avatar-mouth"></div></div>
+            </div>
+            <div class="tier">Legend ring</div>
+            <div class="tier-value">50+ streak</div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <p class="note">
+      Source inspiration comes from the Android resources in
+      <code>app/src/main/res/layout/widget_streak.xml</code>,
+      <code>app/src/main/res/layout/fragment_profile.xml</code>,
+      and the streak ring drawables.
+    </p>
+  </main>
+</body>
+</html>

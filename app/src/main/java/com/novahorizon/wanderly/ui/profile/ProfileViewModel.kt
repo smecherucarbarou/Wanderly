@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.ui.profile
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -8,18 +9,24 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel() {
+class ProfileViewModel(
+    private val repository: WanderlyRepository,
+    private val profileStateProvider: ProfileStateProvider
+) : ViewModel() {
     private var hasCheckedBadgesThisSession = false
     private var profileCollectorJob: Job? = null
 
     private val _profile = MutableLiveData<Profile?>()
     val profile: LiveData<Profile?> = _profile
+
+    private val _profileState = MutableLiveData<ProfileUiState>(ProfileUiState.Loading)
+    val profileState: LiveData<ProfileUiState> = _profileState
 
     private val _profileEvent = MutableLiveData<ProfileEvent?>()
     val profileEvent: LiveData<ProfileEvent?> = _profileEvent
@@ -29,22 +36,38 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
     }
 
     sealed class ProfileEvent {
-        data class ShowMessage(val message: String, val isError: Boolean) : ProfileEvent()
+        data class ShowMessage(@param:StringRes val messageRes: Int, val isError: Boolean) : ProfileEvent()
         data class AvatarUpdated(val remotePath: String) : ProfileEvent()
         data class ClassLocked(val className: String) : ProfileEvent()
         object LoggedOut : ProfileEvent()
+    }
+
+    sealed class ProfileUiState {
+        object Loading : ProfileUiState()
+        data class Loaded(val profile: Profile) : ProfileUiState()
+        data class Error(@param:StringRes val messageRes: Int) : ProfileUiState()
     }
 
     fun loadProfile() {
         if (profileCollectorJob?.isActive != true) {
             startProfileCollector()
         }
+        _profileState.value = ProfileUiState.Loading
         viewModelScope.launch {
-            val profile = repository.getCurrentProfile() ?: return@launch
-            _profile.postValue(profile)
-            if (!hasCheckedBadgesThisSession) {
-                hasCheckedBadgesThisSession = true
-                checkAndUnlockBadges(profile)
+            try {
+                val profile = profileStateProvider.refreshProfile()
+                if (profile == null) {
+                    _profileState.postValue(ProfileUiState.Error(R.string.profile_load_failed))
+                    return@launch
+                }
+                _profile.postValue(profile)
+                _profileState.postValue(ProfileUiState.Loaded(profile))
+                if (!hasCheckedBadgesThisSession) {
+                    hasCheckedBadgesThisSession = true
+                    checkAndUnlockBadges(profile)
+                }
+            } catch (_: Exception) {
+                _profileState.postValue(ProfileUiState.Error(R.string.profile_load_failed))
             }
         }
     }
@@ -61,7 +84,7 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        repository.context.getString(R.string.profile_avatar_upload_failed),
+                        R.string.profile_avatar_upload_failed,
                         isError = true
                     )
                 )
@@ -78,14 +101,14 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
                 }
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        repository.context.getString(R.string.profile_username_updated),
+                        R.string.profile_username_updated,
                         isError = false
                     )
                 )
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        repository.context.getString(R.string.profile_username_update_failed),
+                        R.string.profile_username_update_failed,
                         isError = true
                     )
                 )
@@ -102,7 +125,7 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
             } else {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        repository.context.getString(R.string.profile_class_lock_failed),
+                        R.string.profile_class_lock_failed,
                         isError = true
                     )
                 )
@@ -120,7 +143,7 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        repository.context.getString(R.string.profile_logout_failed),
+                        R.string.profile_logout_failed,
                         isError = true
                     )
                 )
@@ -144,9 +167,10 @@ class ProfileViewModel(private val repository: WanderlyRepository) : ViewModel()
 
     private fun startProfileCollector() {
         profileCollectorJob?.cancel()
-        profileCollectorJob = viewModelScope.launch {
-            repository.currentProfile.collectLatest {
-                _profile.postValue(it)
+        profileCollectorJob = profileStateProvider.collectProfile(viewModelScope) { profile ->
+            _profile.postValue(profile)
+            if (profile != null) {
+                _profileState.postValue(ProfileUiState.Loaded(profile))
             }
         }
     }

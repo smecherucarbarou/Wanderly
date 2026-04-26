@@ -77,6 +77,6 @@ class AuthActivity : AppCompatActivity() {
     }
 
     private fun isAuthCallback(uri: Uri?): Boolean {
-        return AuthCallbackMatcher.matches(uri?.scheme, uri?.host, uri?.path)
+        return AuthCallbackMatcher.matchesCallbackUri(uri)
     }
 }

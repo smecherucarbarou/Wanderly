@@ -21,11 +21,11 @@ class StreakTierHelperTest {
         assertTier(29, "Rising", "\uD83D\uDD25", 0xFFEAB308.toInt(), R.drawable.ic_streak_fire)
         assertTier(30, "Blazing", "\uD83D\uDD25", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
         assertTier(59, "Blazing", "\uD83D\uDD25", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
-        assertTier(60, "Legendary", "\uD83D\uDC9C", 0xFFA855F7.toInt(), R.drawable.ic_streak_fire_25)
-        assertTier(99, "Legendary", "\uD83D\uDC9C", 0xFFA855F7.toInt(), R.drawable.ic_streak_fire_25)
-        assertTier(100, "Epic", "\uD83D\uDD25", 0xFF3B82F6.toInt(), R.drawable.ic_streak_fire_50)
-        assertTier(199, "Epic", "\uD83D\uDD25", 0xFF3B82F6.toInt(), R.drawable.ic_streak_fire_50)
-        assertTier(200, "GOD", "\uD83D\uDD25", 0xFFEC4899.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(60, "Legendary", "\uD83D\uDD25", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
+        assertTier(99, "Legendary", "\uD83D\uDD25", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
+        assertTier(100, "Epic", "\uD83D\uDD25", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(199, "Epic", "\uD83D\uDD25", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(200, "GOD", "\uD83D\uDD25", 0xFFFFD166.toInt(), R.drawable.ic_streak_fire_50)
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.novahorizon.wanderly.widgets
 
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.WidgetStreakSnapshot
+import com.novahorizon.wanderly.streak.DailyStreakStatus
+import com.novahorizon.wanderly.streak.DailyStreakStatusEvaluator
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -72,8 +74,11 @@ object StreakWidgetStateHelper {
     }
 
     fun isInDanger(lastMissionDate: String?, today: LocalDate = LocalDate.now()): Boolean {
-        val parsedDate = parseDate(lastMissionDate) ?: return false
-        return ChronoUnit.DAYS.between(parsedDate, today) > 1
+        return DailyStreakStatusEvaluator.evaluate(
+            streakCount = 1,
+            lastMissionDate = lastMissionDate,
+            today = today
+        ) == DailyStreakStatus.FREEZE_ELIGIBLE
     }
 
     private fun resolveVisualState(
@@ -82,13 +87,19 @@ object StreakWidgetStateHelper {
         now: LocalDateTime,
         showStaleIndicator: Boolean
     ): StreakWidgetVisualState {
-        val tier = StreakTierHelper.resolve(streakCount)
-        val lastMission = parseDate(lastMissionDate)
         val today = now.toLocalDate()
-        val mood = resolveMood(
+        val streakStatus = DailyStreakStatusEvaluator.evaluate(
             streakCount = streakCount,
-            lastMission = lastMission,
-            today = today,
+            lastMissionDate = lastMissionDate,
+            today = today
+        )
+        val tier = if (streakStatus == DailyStreakStatus.HARD_LOST) {
+            StreakTierHelper.resolve(0)
+        } else {
+            StreakTierHelper.resolve(streakCount)
+        }
+        val mood = resolveMood(
+            streakStatus = streakStatus,
             currentTime = now.toLocalTime()
         )
         val inDanger = mood == WidgetMood.STRESSED
@@ -114,19 +125,16 @@ object StreakWidgetStateHelper {
     }
 
     private fun resolveMood(
-        streakCount: Int,
-        lastMission: LocalDate?,
-        today: LocalDate,
+        streakStatus: DailyStreakStatus,
         currentTime: LocalTime
     ): WidgetMood {
-        if (streakCount <= 0) return WidgetMood.NEUTRAL
-        if (lastMission == today) return WidgetMood.PROUD
-
-        val yesterday = today.minusDays(1)
-        return when {
-            lastMission == yesterday && currentTime >= eveningDangerStartsAt -> WidgetMood.STRESSED
-            lastMission == yesterday -> WidgetMood.WATCHFUL
-            else -> WidgetMood.NEUTRAL
+        return when (streakStatus) {
+            DailyStreakStatus.ACTIVE_TODAY -> WidgetMood.PROUD
+            DailyStreakStatus.AT_RISK ->
+                if (currentTime >= eveningDangerStartsAt) WidgetMood.STRESSED else WidgetMood.WATCHFUL
+            DailyStreakStatus.FREEZE_ELIGIBLE -> WidgetMood.STRESSED
+            DailyStreakStatus.HARD_LOST,
+            DailyStreakStatus.INACTIVE -> WidgetMood.NEUTRAL
         }
     }
 

@@ -40,7 +40,7 @@ object WanderlyNotificationManager {
     private const val OVERTAKEN_COOLDOWN_MS = 45 * 60 * 1000L
     private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
 
-    private fun isNotificationCooldownActive(context: Context, key: String): Boolean {
+    private suspend fun isNotificationCooldownActive(context: Context, key: String): Boolean {
         val preferencesStore = PreferencesStore(context)
         val lastSent = preferencesStore.getNotificationCooldown(key)
         val now = System.currentTimeMillis()
@@ -55,12 +55,12 @@ object WanderlyNotificationManager {
         return false
     }
 
-    fun clearNotificationCooldowns(context: Context) {
+    suspend fun clearNotificationCooldowns(context: Context) {
         PreferencesStore(context).clearNotificationCooldowns()
         logDebug("Notification cooldown cache cleared.")
     }
 
-    fun clearNotificationCooldown(context: Context, type: NotificationType) {
+    suspend fun clearNotificationCooldown(context: Context, type: NotificationType) {
         val preferencesStore = PreferencesStore(context)
         for (key in preferencesStore.getNotificationCooldownKeys()) {
             if (matchesType(key, type)) {
@@ -89,7 +89,7 @@ object WanderlyNotificationManager {
         }
     }
 
-    fun showNotification(
+    suspend fun showNotification(
         context: Context,
         title: String,
         message: String,
@@ -141,7 +141,7 @@ object WanderlyNotificationManager {
         }
     }
 
-    fun sendDailyReminder(context: Context, streakDays: Int, force: Boolean = false): Boolean {
+    suspend fun sendDailyReminder(context: Context, streakDays: Int, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Do not break the streak",
@@ -152,7 +152,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendEveningAlert(context: Context, force: Boolean = false): Boolean {
+    suspend fun sendEveningAlert(context: Context, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Critical mission",
@@ -163,7 +163,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendMilestoneCelebration(context: Context, streakDays: Int, force: Boolean = false): Boolean {
+    suspend fun sendMilestoneCelebration(context: Context, streakDays: Int, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Milestone reached",
@@ -174,7 +174,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendStreakLost(context: Context, force: Boolean = false): Boolean {
+    suspend fun sendStreakLost(context: Context, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Streak lost",
@@ -185,7 +185,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendRivalActivity(context: Context, name: String, force: Boolean = false): Boolean {
+    suspend fun sendRivalActivity(context: Context, name: String, force: Boolean = false): Boolean {
         val id = 3000 + (name.hashCode() and 0x0FFF)
         return showNotification(
             context,
@@ -197,7 +197,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendAggregatedRivalActivity(context: Context, count: Int, force: Boolean = false): Boolean {
+    suspend fun sendAggregatedRivalActivity(context: Context, count: Int, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Hive activity",
@@ -208,7 +208,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendOvertakenAlert(context: Context, name: String, force: Boolean = false): Boolean {
+    suspend fun sendOvertakenAlert(context: Context, name: String, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Overtaken",
@@ -219,7 +219,7 @@ object WanderlyNotificationManager {
         )
     }
 
-    fun sendFightForFirst(context: Context, name: String, force: Boolean = false): Boolean {
+    suspend fun sendFightForFirst(context: Context, name: String, force: Boolean = false): Boolean {
         return showNotification(
             context,
             "Battle for first",

@@ -92,7 +92,7 @@ class StreakWidgetStateHelperTest {
             now = now
         )
 
-        assertEquals("Rising", state.tier.label)
+        assertEquals("Broken", state.tier.label)
         assertEquals(WidgetMood.NEUTRAL, state.mood)
         assertFalse(state.inDanger)
         assertFalse(state.showStaleIndicator)

@@ -2,7 +2,10 @@ package com.novahorizon.wanderly.widgets
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 
 enum class AlarmDeliveryMode {
     EXACT_ALLOW_WHILE_IDLE,
@@ -39,15 +42,24 @@ object StreakWidgetAlarmScheduler {
     }
 
     fun scheduleNext(
+        context: Context,
         alarmManager: AlarmManager,
         pendingIntent: PendingIntent,
         nowMillis: Long = System.currentTimeMillis(),
         sdkInt: Int = Build.VERSION.SDK_INT
     ) {
-        val canScheduleExactAlarms = if (sdkInt >= Build.VERSION_CODES.S) {
+        val canScheduleExactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager.canScheduleExactAlarms()
         } else {
             true
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !canScheduleExactAlarms) {
+            context.startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            )
+            return
         }
         val plan = resolveSchedulePlan(
             nowMillis = nowMillis,

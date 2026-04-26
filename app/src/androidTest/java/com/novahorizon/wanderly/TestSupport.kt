@@ -43,9 +43,9 @@ class FakeWanderlyRepository(
 
     override suspend fun getFriends(): List<Profile> = emptyList()
 
-    override fun getMissionHistory(): String = missionHistoryValue
+    override suspend fun getMissionHistory(): String = missionHistoryValue
 
-    override fun saveMissionData(
+    override suspend fun saveMissionData(
         text: String,
         target: String,
         history: String,
@@ -59,7 +59,7 @@ class FakeWanderlyRepository(
         missionHistoryValue = history
     }
 
-    override fun isOnboardingSeen(): Boolean = true
+    override suspend fun isOnboardingSeen(): Boolean = true
 
     fun lastSavedMissionText(): String? = missionTextValue
 

@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 object PlacesProxyClient {
@@ -19,10 +21,10 @@ object PlacesProxyClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun searchText(body: JSONObject, fieldMask: String): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun searchText(body: JSONObject, fieldMask: String): NetworkResult<JSONObject> = withContext(Dispatchers.IO) {
         val auth = SupabaseClient.client.auth
         var accessToken = auth.currentAccessTokenOrNull()
-            ?: throw Exception("Authentication required for Places proxy")
+            ?: return@withContext NetworkResult.HttpError(401, "Authentication required for Places proxy")
         
         val finalUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}$API_URL"
         val payload = JSONObject().apply {
@@ -39,30 +41,42 @@ object PlacesProxyClient {
                 .build()
         }
 
-        var response = client.newCall(buildRequest(accessToken)).execute()
+        try {
+            var response = client.newCall(buildRequest(accessToken)).execute()
 
-        if (response.code == 401) {
-            response.close()
-            try {
-                auth.refreshCurrentSession()
-                val newToken = auth.currentAccessTokenOrNull()
-                if (newToken != null && newToken != accessToken) {
-                    accessToken = newToken
-                    response = client.newCall(buildRequest(accessToken)).execute()
-                } else {
-                    throw Exception("Failed to refresh token or token unchanged")
+            if (response.code == 401) {
+                response.close()
+                try {
+                    auth.refreshCurrentSession()
+                    val newToken = auth.currentAccessTokenOrNull()
+                    if (newToken != null && newToken != accessToken) {
+                        accessToken = newToken
+                        response = client.newCall(buildRequest(accessToken)).execute()
+                    } else {
+                        return@withContext NetworkResult.HttpError(401, "Refresh failed")
+                    }
+                } catch (_: Exception) {
+                    return@withContext NetworkResult.HttpError(401, "Refresh failed")
                 }
-            } catch (e: Exception) {
-                throw Exception("Places proxy call failed: 401 (Refresh failed)")
             }
-        }
 
-        response.use { resp ->
-            val responseBody = resp.body?.string() ?: ""
-            if (!resp.isSuccessful) {
-                throw Exception("Places proxy call failed: ${resp.code}")
+            response.use { resp ->
+                val responseBody = resp.body.string()
+                if (!resp.isSuccessful) {
+                    return@withContext NetworkResult.HttpError(resp.code, responseBody)
+                }
+                runCatching { JSONObject(responseBody) }
+                    .fold(
+                        onSuccess = { NetworkResult.Success(it) },
+                        onFailure = { NetworkResult.ParseError(it as? Exception ?: RuntimeException(it)) }
+                    )
             }
-            JSONObject(responseBody)
+        } catch (_: SocketTimeoutException) {
+            NetworkResult.Timeout
+        } catch (e: IOException) {
+            NetworkResult.NetworkError(e)
+        } catch (e: Exception) {
+            NetworkResult.ParseError(e)
         }
     }
 }

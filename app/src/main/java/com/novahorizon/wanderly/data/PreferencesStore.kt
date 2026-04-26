@@ -6,84 +6,78 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.novahorizon.wanderly.Constants
-import kotlinx.coroutines.runBlocking
 
 class PreferencesStore(context: Context) {
     private val dataStoreManager = DataStoreManager(context.applicationContext)
 
-    fun isRememberMeEnabled(): Boolean = blockingRead {
+    suspend fun isRememberMeEnabled(): Boolean =
         dataStoreManager.getMainBoolean(Constants.KEY_REMEMBER_ME, false)
-    }
 
-    fun setRememberMeEnabled(enabled: Boolean) = blockingWrite {
+    suspend fun isRememberMeEnabledSuspend(): Boolean = isRememberMeEnabled()
+
+    suspend fun setRememberMeEnabled(enabled: Boolean) {
         dataStoreManager.putMainBoolean(Constants.KEY_REMEMBER_ME, enabled)
     }
 
-    fun isOnboardingSeen(): Boolean = blockingRead {
+    suspend fun isOnboardingSeen(): Boolean =
         dataStoreManager.getMainBoolean(Constants.KEY_ONBOARDING_SEEN, false)
-    }
 
-    fun setOnboardingSeen(seen: Boolean) = blockingWrite {
+    suspend fun isOnboardingSeenSuspend(): Boolean = isOnboardingSeen()
+
+    suspend fun setOnboardingSeen(seen: Boolean) {
         dataStoreManager.putMainBoolean(Constants.KEY_ONBOARDING_SEEN, seen)
     }
 
-    fun getPendingInviteCode(): String? = blockingRead {
+    suspend fun getPendingInviteCode(): String? =
         dataStoreManager.getMainString(Constants.KEY_PENDING_INVITE_CODE, null)
-    }
 
-    fun setPendingInviteCode(code: String) = blockingWrite {
+    suspend fun setPendingInviteCode(code: String) {
         dataStoreManager.putMainString(Constants.KEY_PENDING_INVITE_CODE, code)
     }
 
-    fun clearPendingInviteCode() = blockingWrite {
+    suspend fun clearPendingInviteCode() {
         dataStoreManager.removeMainKeys(listOf(Constants.KEY_PENDING_INVITE_CODE))
     }
 
-    fun consumePendingInviteCode(): String? {
+    suspend fun consumePendingInviteCode(): String? {
         val code = getPendingInviteCode() ?: return null
         clearPendingInviteCode()
         return code
     }
 
-    fun clearAll() = blockingWrite {
+    suspend fun clearAll() {
         dataStoreManager.clearMainStore()
     }
 
-    fun getCachedUsername(): String? = blockingRead {
+    suspend fun getCachedUsername(): String? =
         dataStoreManager.getMainString(Constants.KEY_USERNAME, null)
-    }
 
-    fun cacheUsername(username: String) = blockingWrite {
+    suspend fun cacheUsername(username: String) {
         dataStoreManager.putMainString(Constants.KEY_USERNAME, username)
     }
 
-    fun getLastVisitDate(): String? = blockingRead {
+    suspend fun getLastVisitDate(): String? =
         dataStoreManager.getMainString(Constants.KEY_LAST_VISIT, "")
-    }
 
-    fun updateLastVisitDate(date: String) = blockingWrite {
+    suspend fun updateLastVisitDate(date: String) {
         dataStoreManager.putMainString(Constants.KEY_LAST_VISIT, date)
     }
 
-    fun getMissionHistory(): String = blockingRead {
+    suspend fun getMissionHistory(): String =
         dataStoreManager.getMainString(Constants.KEY_MISSION_HISTORY, "") ?: ""
-    }
 
-    fun getMissionTarget(): String? = blockingRead {
+    suspend fun getMissionTarget(): String? =
         dataStoreManager.getMainString(Constants.KEY_MISSION_TARGET, null)
-    }
 
-    fun getMissionCity(): String? = blockingRead {
+    suspend fun getMissionCity(): String? =
         dataStoreManager.getMainString(Constants.KEY_MISSION_CITY, null)
-    }
 
-    fun getMissionText(): String? = blockingRead {
+    suspend fun getMissionText(): String? =
         dataStoreManager.getMainString(Constants.KEY_MISSION_TEXT, null)
-    }
 
-    fun hasMissionTargetCoordinates(): Boolean = getMissionTargetCoordinates() != null
+    suspend fun hasMissionTargetCoordinates(): Boolean = getMissionTargetCoordinates() != null
 
-    fun getMissionTargetCoordinates(): Pair<Double, Double>? = blockingRead {
+    suspend fun getMissionTargetCoordinates(): Pair<Double, Double>? {
         val lat = getMissionCoordinateAsync(
             typedKey = Constants.KEY_MISSION_TARGET_LAT_TYPED,
             legacyKey = Constants.KEY_MISSION_TARGET_LAT
@@ -92,17 +86,17 @@ class PreferencesStore(context: Context) {
             typedKey = Constants.KEY_MISSION_TARGET_LNG_TYPED,
             legacyKey = Constants.KEY_MISSION_TARGET_LNG
         )
-        if (lat != null && lng != null) lat to lng else null
+        return if (lat != null && lng != null) lat to lng else null
     }
 
-    fun saveMissionData(
+    suspend fun saveMissionData(
         text: String,
         target: String,
         history: String,
         city: String?,
         targetLat: Double,
         targetLng: Double
-    ) = blockingWrite {
+    ) {
         dataStoreManager.putMainString(Constants.KEY_MISSION_TEXT, text)
         dataStoreManager.putMainString(Constants.KEY_MISSION_TARGET, target)
         dataStoreManager.putMainString(Constants.KEY_MISSION_CITY, city)
@@ -114,7 +108,7 @@ class PreferencesStore(context: Context) {
         )
     }
 
-    fun clearMissionData() = blockingWrite {
+    suspend fun clearMissionData() {
         dataStoreManager.removeMainKeys(
             listOf(
                 Constants.KEY_MISSION_TEXT,
@@ -128,57 +122,62 @@ class PreferencesStore(context: Context) {
         )
     }
 
-    fun getNotificationCooldown(key: String): Long = blockingRead {
+    suspend fun getNotificationCooldown(key: String): Long =
         dataStoreManager.getNotificationCooldown(key)
-    }
 
-    fun setNotificationCooldown(key: String, timestamp: Long) = blockingWrite {
+    suspend fun setNotificationCooldown(key: String, timestamp: Long) {
         dataStoreManager.setNotificationCooldown(key, timestamp)
     }
 
-    fun clearNotificationCooldowns() = blockingWrite {
+    suspend fun clearNotificationCooldowns() {
         dataStoreManager.clearNotificationCooldowns()
     }
 
-    fun getNotificationCooldownKeys(): Set<String> = blockingRead {
+    suspend fun getNotificationCooldownKeys(): Set<String> =
         dataStoreManager.getNotificationCooldownKeys()
-    }
 
-    fun removeNotificationCooldown(key: String) = blockingWrite {
+    suspend fun removeNotificationCooldown(key: String) {
         dataStoreManager.removeNotificationCooldown(key)
     }
 
-    fun getNotificationCheckString(key: String): String? = blockingRead {
-        dataStoreManager.getNotificationCheckString(key)
+    suspend fun pruneStaleCooldowns(maxAgeMs: Long = 7 * 24 * 60 * 60 * 1000L) {
+        val now = System.currentTimeMillis()
+        dataStoreManager.getNotificationCooldownKeys().forEach { key ->
+            val lastSent = dataStoreManager.getNotificationCooldown(key)
+            if (lastSent <= 0L || now - lastSent > maxAgeMs) {
+                dataStoreManager.removeNotificationCooldown(key)
+            }
+        }
     }
 
-    fun putNotificationCheckString(key: String, value: String) = blockingWrite {
+    suspend fun getNotificationCheckString(key: String): String? =
+        dataStoreManager.getNotificationCheckString(key)
+
+    suspend fun putNotificationCheckString(key: String, value: String) {
         dataStoreManager.putNotificationCheckString(key, value)
     }
 
-    fun getNotificationCheckBoolean(key: String): Boolean = blockingRead {
+    suspend fun getNotificationCheckBoolean(key: String): Boolean =
         dataStoreManager.getNotificationCheckBoolean(key)
-    }
 
-    fun putNotificationCheckBoolean(key: String, value: Boolean) = blockingWrite {
+    suspend fun putNotificationCheckBoolean(key: String, value: Boolean) {
         dataStoreManager.putNotificationCheckBoolean(key, value)
     }
 
-    fun removeNotificationCheckKey(key: String) = blockingWrite {
+    suspend fun removeNotificationCheckKey(key: String) {
         dataStoreManager.removeNotificationCheckKeys(listOf(key))
     }
 
-    fun removeNotificationCheckKeys(keys: Iterable<String>) = blockingWrite {
+    suspend fun removeNotificationCheckKeys(keys: Iterable<String>) {
         dataStoreManager.removeNotificationCheckKeys(keys)
     }
 
-    fun clearNotificationCheckState() = blockingWrite {
+    suspend fun clearNotificationCheckState() {
         dataStoreManager.clearNotificationCheckState()
     }
 
-    fun getNotificationCheckKeys(): Set<String> = blockingRead {
+    suspend fun getNotificationCheckKeys(): Set<String> =
         dataStoreManager.getNotificationCheckKeys()
-    }
 
     suspend fun cacheProfileStreakState(lastMissionDate: String?, streakCount: Int?) {
         dataStoreManager.putMainString(Constants.KEY_LOCAL_LAST_MISSION_DATE, lastMissionDate)
@@ -237,16 +236,6 @@ class PreferencesStore(context: Context) {
         dataStoreManager.putMainFloat(typedKey, legacyValue.toFloat())
         dataStoreManager.removeMainKeys(listOf(legacyKey))
         return legacyValue
-    }
-
-    private fun <T> blockingRead(block: suspend () -> T): T {
-        // TODO: Replace remaining synchronous preference callers so DataStore reads stay fully non-blocking.
-        return runBlocking { block() }
-    }
-
-    private fun blockingWrite(block: suspend () -> Unit) {
-        // TODO: Replace remaining synchronous preference callers so DataStore writes stay fully non-blocking.
-        runBlocking { block() }
     }
 
     companion object {

@@ -27,6 +27,10 @@ object Constants {
     const val AUTH_CALLBACK_PATH = "/callback"
     const val INVITE_CALLBACK_SCHEME = "wanderly"
     const val INVITE_CALLBACK_HOST = "invite"
+    const val INVITE_WEB_SCHEME = "https"
+    const val INVITE_WEB_HOST = "wanderly.app"
+    const val INVITE_PATH_SEGMENT = "invite"
+    const val INVITE_QUERY_PARAMETER = "invite"
     const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
 
     const val TABLE_PROFILES = "profiles"

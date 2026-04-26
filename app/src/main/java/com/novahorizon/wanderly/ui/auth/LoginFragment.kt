@@ -96,9 +96,10 @@ class LoginFragment : Fragment() {
                 }
                 is AuthViewModel.AuthState.Success -> {
                     val isRememberMeChecked = binding.rememberMeCheckbox.isChecked
-                    WanderlyGraph.repository(requireContext()).setRememberMeEnabled(isRememberMeChecked)
-
-                    SessionNavigator.openMain(requireActivity())
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        WanderlyGraph.repository(requireContext()).setRememberMeEnabled(isRememberMeChecked)
+                        SessionNavigator.openMain(requireActivity())
+                    }
                 }
                 is AuthViewModel.AuthState.Error -> {
                     binding.loginButton.isEnabled = true

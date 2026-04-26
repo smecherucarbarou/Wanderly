@@ -19,5 +19,5 @@
     <item
         android:id="@+id/devDashboardFragment"
         android:icon="@android:drawable/ic_menu_compass"
-        android:title="God Mode" />
+        android:title="@string/menu_god_mode" />
 </menu>

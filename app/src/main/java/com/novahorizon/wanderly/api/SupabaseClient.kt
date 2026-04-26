@@ -56,6 +56,9 @@ object SupabaseClient {
         if (normalizedUrl.isBlank() || normalizedKey.isBlank()) {
             throw IllegalStateException("Supabase configuration is missing")
         }
+        require(normalizedUrl.startsWith("https://")) {
+            "Supabase URL must use HTTPS. Got: ${normalizedUrl.take(8)}..."
+        }
 
         val usesPlaceholderValues = normalizedUrl.contains("your-supabase-url", ignoreCase = true) ||
             normalizedKey.contains("your-supabase-anon-key", ignoreCase = true)

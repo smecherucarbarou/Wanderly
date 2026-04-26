@@ -1,6 +1,9 @@
 package com.novahorizon.wanderly.ui.common
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 object LocationPermissionGate {
     private const val PREFS_NAME = "wanderly_runtime_permissions"
@@ -31,8 +34,20 @@ object LocationPermissionGate {
     }
 
     fun hasRequestedBefore(context: Context): Boolean {
+        // Non-sensitive: stores only whether the permission rationale was shown
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_FINE_LOCATION_REQUESTED, false)
+    }
+
+    fun hasLocationPermission(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
     }
 
     fun markRequestedBefore(context: Context) {

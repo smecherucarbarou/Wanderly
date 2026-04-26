@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.RemoteViews
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
@@ -95,19 +97,22 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                     ).also { snapshot ->
                         try {
                             preferencesStore.saveWidgetStreakSnapshot(snapshot)
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
+                            logDebugError("Widget snapshot persistence failed", e)
                             // Keep the fresh fetch for rendering even if persistence fails.
                         }
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                logDebugError("Widget profile refresh failed", e)
                 null
             }
 
             val snapshotToRender = fetchedSnapshot ?: run {
                 try {
                     preferencesStore.getWidgetStreakSnapshot()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    logDebugError("Widget snapshot read failed", e)
                     null
                 }
             }
@@ -148,7 +153,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             val appContext = context.applicationContext
             val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = refreshPendingIntent(appContext)
-            StreakWidgetAlarmScheduler.scheduleNext(alarmManager, pendingIntent)
+            StreakWidgetAlarmScheduler.scheduleNext(appContext, alarmManager, pendingIntent)
             scheduleFallbackTicker(appContext)
         }
 
@@ -197,6 +202,12 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+        }
+
+        private fun logDebugError(message: String, throwable: Throwable) {
+            if (BuildConfig.DEBUG) {
+                Log.e("WanderlyStreakWidget", message, throwable)
+            }
         }
     }
 }

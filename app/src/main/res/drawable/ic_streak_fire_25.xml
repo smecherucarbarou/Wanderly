@@ -1,21 +1,28 @@
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:gravity="center"
-        android:width="78dp"
-        android:height="78dp">
-        <shape android:shape="oval">
-            <solid android:color="#35C35BFF" />
-        </shape>
-    </item>
-
-    <item
-        android:gravity="center"
-        android:width="58dp"
-        android:height="58dp">
-        <shape android:shape="oval">
-            <solid android:color="#73EA7BFF" />
-        </shape>
-    </item>
-
-    <item android:drawable="@drawable/ic_streak_fire_core_legendary" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path
+        android:fillAlpha="0.28"
+        android:fillColor="#FFD166"
+        android:pathData="M48,2 C59,14 74,21 80,39 C88,40 92,49 92,61 C92,80 73,93 48,95 C23,93 4,80 4,61 C4,45 15,33 28,35 C32,20 39,10 48,2 Z" />
+    <path
+        android:fillColor="#D93F08"
+        android:pathData="M48,5 C59,15 72,21 77,37 C82,31 89,38 89,50 C89,69 70,84 48,93 C26,84 7,69 7,50 C7,36 17,29 24,38 C28,22 38,13 48,5 Z" />
+    <path
+        android:fillColor="#FF7A1A"
+        android:pathData="M48,14 C58,23 67,32 67,45 C67,57 59,69 48,83 C37,69 29,57 29,45 C29,32 38,23 48,14 Z" />
+    <path
+        android:fillColor="#FFB92E"
+        android:pathData="M48,29 C55,36 60,44 60,54 C60,63 54,71 48,77 C42,71 36,63 36,54 C36,44 41,36 48,29 Z" />
+    <path
+        android:fillColor="#FFF0A8"
+        android:pathData="M48,42 C52,47 56,53 56,59 C56,65 52,69 48,73 C44,69 40,65 40,59 C40,53 44,47 48,42 Z" />
+    <path
+        android:fillColor="#FFF7C6"
+        android:pathData="M17,23 L21,30 L29,33 L21,37 L17,44 L13,37 L5,33 L13,30 Z" />
+    <path
+        android:fillColor="#FFF7C6"
+        android:pathData="M78,18 L82,25 L90,28 L82,31 L78,38 L74,31 L66,28 L74,25 Z" />
+</vector>

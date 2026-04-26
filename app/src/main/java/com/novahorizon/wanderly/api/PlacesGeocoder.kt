@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.api
 
 import android.util.Log
+import com.novahorizon.wanderly.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -48,12 +49,32 @@ object PlacesGeocoder {
                 put("textQuery", textQuery)
             }
 
-            val responseJson = PlacesProxyClient.searchText(
+            val responseJson = when (val result = PlacesProxyClient.searchText(
                 body = jsonBody,
                 fieldMask = "places.location,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.editorialSummary,places.types,places.primaryType,places.businessStatus,places.currentOpeningHours"
-            )
+            )) {
+                is NetworkResult.Success -> result.data
+                is NetworkResult.HttpError -> {
+                    Log.e("PlacesGeocoder", "Google Places proxy failed [${result.code}]")
+                    return@withContext null
+                }
+                is NetworkResult.NetworkError -> {
+                    Log.e("PlacesGeocoder", "Google Places network error", result.cause)
+                    return@withContext null
+                }
+                is NetworkResult.ParseError -> {
+                    Log.e("PlacesGeocoder", "Google Places parse error", result.cause)
+                    return@withContext null
+                }
+                NetworkResult.Timeout -> {
+                    Log.e("PlacesGeocoder", "Google Places request timed out")
+                    return@withContext null
+                }
+            }
 
-            Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")
+            if (BuildConfig.DEBUG) {
+                Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")
+            }
             if (!responseJson.has("places")) {
                 Log.e("PlacesGeocoder", "Google Places returned no candidates for '$placeName'")
                 return@withContext null
@@ -136,7 +157,7 @@ object PlacesGeocoder {
 
             bestCandidate
         } catch (e: Exception) {
-            Log.e("PlacesGeocoder", "Failed to resolve '$placeName' with Google Places", e)
+            Log.e("PlacesGeocoder", "Failed to resolve place", e)
             null
         }
     }

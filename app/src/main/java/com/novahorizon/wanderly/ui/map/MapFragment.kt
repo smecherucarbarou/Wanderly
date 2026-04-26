@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.ui.map
 
 import android.Manifest
-import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -9,14 +8,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.location.Location
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -27,18 +22,19 @@ import com.google.android.gms.location.LocationServices
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.data.Mission
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
+import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.social.SocialViewModel
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
-import org.osmdroid.bonuspack.clustering.RadiusMarkerClusterer
-import org.osmdroid.bonuspack.overlays.Marker
 import org.osmdroid.events.MapListener
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 
@@ -50,24 +46,18 @@ class MapFragment : Fragment() {
     private val viewModel: SocialViewModel by viewModels {
         WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
+    private val mapViewModel: MapViewModel by viewModels {
+        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
+    }
     
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private val friendMarkers = mutableListOf<Marker>()
-    private var friendClusterer: RadiusMarkerClusterer? = null
+    private var friendProfiles: List<com.novahorizon.wanderly.data.Profile> = emptyList()
     private var friendMarkerIcon: BitmapDrawable? = null
-    private var friendClusterIcon: Bitmap? = null
+    private val friendClusterIcons = mutableMapOf<Int, BitmapDrawable>()
     private var mapListener: MapListener? = null
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            setupLocation(centerOnLocation = true)
-        } else {
-            showLocationPermissionFeedback()
-        }
-    }
+    private val locationPermissionController = LocationPermissionController(this)
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -101,7 +91,6 @@ class MapFragment : Fragment() {
         binding.mapView.setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
 
         binding.mapView.controller.setZoom(16.0)
-        friendClusterer = buildFriendClusterer().also { binding.mapView.overlays.add(it) }
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
@@ -109,13 +98,21 @@ class MapFragment : Fragment() {
             handleMyLocationAction()
         }
 
+        mapViewModel.activeMission.observe(viewLifecycleOwner) { mission ->
+            renderActiveMission(mission)
+        }
         checkActiveMission()
         
         binding.mapLoading.visibility = View.VISIBLE
         mapListener = object : MapListener {
-            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean = false
+            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean {
+                renderFriendMarkers()
+                return false
+            }
+
             override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
                 _binding?.mapLoading?.visibility = View.GONE
+                renderFriendMarkers()
                 return false
             }
         }
@@ -128,66 +125,64 @@ class MapFragment : Fragment() {
         
         // Observe friends to display on map
         viewModel.friends.observe(viewLifecycleOwner) { friends ->
-            friendClusterer?.items?.clear()
-            friendMarkers.clear()
-
-            friends.forEach { friend ->
-                if (friend.last_lat != null && friend.last_lng != null) {
-                    val marker = Marker(binding.mapView).apply {
-                        position = GeoPoint(friend.last_lat, friend.last_lng)
-                        title = friend.username
-                        setIcon(getFriendMarkerIcon())
-
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    }
-                    friendMarkers.add(marker)
-                    friendClusterer?.add(marker)
-                }
-            }
-            friendClusterer?.invalidate()
-            _binding?.mapView?.invalidate()
+            friendProfiles = friends.filter { it.last_lat != null && it.last_lng != null }
+            renderFriendMarkers()
         }
 
-        val permissionState = resolveLocationPermissionState()
+        val permissionState = locationPermissionController.resolveState()
         if (permissionState == LocationPermissionGate.State.GRANTED) {
             setupLocation(centerOnLocation = true)
         } else if (permissionState == LocationPermissionGate.State.REQUEST) {
-            launchLocationPermissionRequest()
+            locationPermissionController.requestPermission { granted ->
+                _binding ?: return@requestPermission
+                if (granted) {
+                    setupLocation(centerOnLocation = true)
+                } else {
+                    showLocationPermissionFeedback()
+                }
+            }
         }
     }
 
     private fun checkActiveMission() {
-        val repository = WanderlyGraph.repository(requireContext())
-        val targetCoordinates = repository.getMissionTargetCoordinates()
-        val missionText = repository.getMissionText()
+        mapViewModel.loadActiveMission()
+    }
 
-        if (targetCoordinates != null) {
-            binding.missionPreviewText.text = missionText ?: getString(R.string.map_active_mission_ready)
-            binding.newFlightButton.text = getString(R.string.map_go_to_missions)
+    private fun renderActiveMission(mission: Mission?) {
+        val currentBinding = _binding ?: return
 
-            binding.newFlightButton.setOnClickListener {
+        if (mission != null) {
+            currentBinding.missionPreviewText.text =
+                mission.text.ifBlank { getString(R.string.map_active_mission_ready) }
+            currentBinding.newFlightButton.text = getString(R.string.map_go_to_missions)
+
+            currentBinding.newFlightButton.setOnClickListener {
                 findNavController().navigate(R.id.action_map_to_missions)
             }
 
-            val targetPoint = GeoPoint(targetCoordinates.first, targetCoordinates.second)
-            binding.mapView.controller.animateTo(targetPoint)
-            binding.mapView.invalidate()
+            val targetPoint = GeoPoint(mission.location_lat, mission.location_lng)
+            currentBinding.mapView.controller.animateTo(targetPoint)
+            currentBinding.mapView.invalidate()
             return
         }
-        
-        binding.missionPreviewText.text = getString(R.string.map_preview_default)
-        binding.newFlightButton.text = getString(R.string.generate_mission)
-        binding.newFlightButton.setOnClickListener {
+
+        currentBinding.missionPreviewText.text = getString(R.string.map_preview_default)
+        currentBinding.newFlightButton.text = getString(R.string.generate_mission)
+        currentBinding.newFlightButton.setOnClickListener {
             findNavController().navigate(R.id.action_map_to_missions)
         }
     }
 
     private fun setupLocation(centerOnLocation: Boolean) {
-        if (ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasFineLocation || hasCoarseLocation) {
             if (myLocationOverlay == null) {
                 val provider = GpsMyLocationProvider(requireContext())
                 myLocationOverlay = MyLocationNewOverlay(provider, binding.mapView).apply {
@@ -211,9 +206,13 @@ class MapFragment : Fragment() {
                 location ?: return@addOnSuccessListener
                 currentBinding ?: return@addOnSuccessListener
 
-                val geoPoint = GeoPoint(location.latitude, location.longitude)
-                if (centerOnLocation || !WanderlyGraph.repository(requireContext()).hasMissionTargetCoordinates()) {
-                    currentBinding.mapView.controller.setCenter(geoPoint)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val geoPoint = GeoPoint(location.latitude, location.longitude)
+                    val hasMissionTarget = mapViewModel.activeMission.value != null
+                    val b = _binding ?: return@launch
+                    if (centerOnLocation || !hasMissionTarget) {
+                        b.mapView.controller.setCenter(geoPoint)
+                    }
                 }
                 updateUserLocation(location.latitude, location.longitude)
             }
@@ -221,7 +220,7 @@ class MapFragment : Fragment() {
     }
 
     private fun handleMyLocationAction() {
-        when (resolveLocationPermissionState()) {
+        when (val permissionState = locationPermissionController.resolveState()) {
             LocationPermissionGate.State.GRANTED -> {
                 myLocationOverlay?.myLocation?.let { location ->
                     binding.mapView.controller.animateTo(location)
@@ -230,73 +229,37 @@ class MapFragment : Fragment() {
 
             LocationPermissionGate.State.REQUEST,
             LocationPermissionGate.State.RATIONALE -> {
-                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                if (permissionState == LocationPermissionGate.State.RATIONALE) {
                     showSnackbar(getString(R.string.map_location_permission_rationale), isError = true)
                 }
-                launchLocationPermissionRequest()
+                locationPermissionController.requestPermission { granted ->
+                    _binding ?: return@requestPermission
+                    if (granted) {
+                        setupLocation(centerOnLocation = true)
+                    } else {
+                        showLocationPermissionFeedback()
+                    }
+                }
             }
 
             LocationPermissionGate.State.SETTINGS -> {
                 showSnackbar(getString(R.string.map_location_permission_settings), isError = true)
-                openAppSettings()
+                locationPermissionController.openAppSettings()
             }
         }
     }
 
-    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return LocationPermissionGate.resolveState(
-            hasPermission = hasPermission,
-            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
-            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
-        )
-    }
-
-    private fun launchLocationPermissionRequest() {
-        LocationPermissionGate.markRequestedBefore(requireContext())
-        requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
     private fun showLocationPermissionFeedback() {
-        val messageRes = when (resolveLocationPermissionState()) {
+        val messageRes = when (locationPermissionController.resolveState()) {
             LocationPermissionGate.State.RATIONALE -> R.string.map_location_permission_rationale
             LocationPermissionGate.State.SETTINGS -> R.string.map_location_permission_settings
             else -> R.string.map_location_permission_denied
         }
         showSnackbar(getString(messageRes), isError = true)
     }
-
-    private fun openAppSettings() {
-        val intent = Intent(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.fromParts("package", requireContext().packageName, null)
-        )
-        startActivity(intent)
-    }
     
     private fun updateUserLocation(lat: Double, lng: Double) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val repo = WanderlyGraph.repository(requireContext())
-                val profile = repo.getCurrentProfile() ?: return@launch
-                
-                // Only update if location changed significantly (more than 50 meters approx)
-                val lastLat = profile.last_lat ?: 0.0
-                val lastLng = profile.last_lng ?: 0.0
-                
-                val results = FloatArray(1)
-                Location.distanceBetween(lastLat, lastLng, lat, lng, results)
-                
-                if (results[0] > 50.0 || profile.last_lat == null) {
-                    repo.updateProfile(profile.copy(last_lat = lat, last_lng = lng))
-                }
-            } catch (e: Exception) {
-                Log.e("MapFragment", "Failed to update location", e)
-            }
-        }
+        mapViewModel.updateUserLocation(lat, lng)
     }
 
     private fun getFriendMarkerIcon(): BitmapDrawable? {
@@ -311,23 +274,52 @@ class MapFragment : Fragment() {
         return BitmapDrawable(resources, bitmap).also { friendMarkerIcon = it }
     }
 
-    private fun buildFriendClusterer(): RadiusMarkerClusterer {
-        return WanderlyRadiusMarkerClusterer(requireContext()).apply {
-            setIcon(getFriendClusterIcon())
-            setRadius(120)
-            setMaxClusteringZoomLevel(16)
-            textPaint.apply {
-                color = ContextCompat.getColor(requireContext(), R.color.text_primary)
-                textAlign = Paint.Align.CENTER
-                isFakeBoldText = true
-                textSize = 20f * resources.displayMetrics.density
-                isAntiAlias = true
-            }
+    private fun renderFriendMarkers() {
+        val currentBinding = _binding ?: return
+        friendMarkers.forEach { currentBinding.mapView.overlays.remove(it) }
+        friendMarkers.clear()
+
+        if (friendProfiles.isEmpty()) {
+            currentBinding.mapView.invalidate()
+            return
         }
+
+        val profileById = friendProfiles.associateBy { it.id }
+        val clusters = FriendMapClusterer.cluster(
+            items = friendProfiles.map { friend ->
+                FriendMapPoint(
+                    id = friend.id,
+                    latitude = friend.last_lat ?: 0.0,
+                    longitude = friend.last_lng ?: 0.0
+                )
+            },
+            zoomLevel = currentBinding.mapView.zoomLevelDouble,
+            clusterRadiusPx = 120
+        )
+
+        clusters.forEach { cluster ->
+            val marker = Marker(currentBinding.mapView).apply {
+                position = GeoPoint(cluster.latitude, cluster.longitude)
+                if (cluster.memberIds.size > 1) {
+                    title = "${cluster.memberIds.size} friends"
+                    icon = getFriendClusterIcon(cluster.memberIds.size)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                } else {
+                    val profile = profileById[cluster.memberIds.first()]
+                    title = profile?.username
+                    icon = getFriendMarkerIcon()
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                }
+            }
+            friendMarkers += marker
+            currentBinding.mapView.overlays.add(marker)
+        }
+
+        currentBinding.mapView.invalidate()
     }
 
-    private fun getFriendClusterIcon(): Bitmap {
-        friendClusterIcon?.let { return it }
+    private fun getFriendClusterIcon(memberCount: Int): BitmapDrawable {
+        friendClusterIcons[memberCount]?.let { return it }
 
         val size = (72 * resources.displayMetrics.density).toInt()
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -342,7 +334,15 @@ class MapFragment : Fragment() {
             honeycomb.setBounds(inset, inset, size - inset, size - inset)
             honeycomb.draw(canvas)
         }
-        return bitmap.also { friendClusterIcon = it }
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ContextCompat.getColor(requireContext(), R.color.text_primary)
+            textAlign = Paint.Align.CENTER
+            textSize = 20f * resources.displayMetrics.density
+            isFakeBoldText = true
+            val textY = size / 2f - (descent() + ascent()) / 2f
+            canvas.drawText(memberCount.toString(), size / 2f, textY, this)
+        }
+        return BitmapDrawable(resources, bitmap).also { friendClusterIcons[memberCount] = it }
     }
 
     override fun onResume() {
@@ -362,7 +362,7 @@ class MapFragment : Fragment() {
         val mapView = _binding?.mapView
         if (mapView != null) {
             mapListener?.let { mapView.removeMapListener(it) }
-            friendClusterer?.let { mapView.overlays.remove(it) }
+            friendMarkers.forEach(mapView.overlays::remove)
             myLocationOverlay?.disableFollowLocation()
             myLocationOverlay?.disableMyLocation()
             myLocationOverlay?.let { mapView.overlays.remove(it) }
@@ -372,9 +372,9 @@ class MapFragment : Fragment() {
         }
         mapListener = null
         myLocationOverlay = null
-        friendClusterer = null
+        friendProfiles = emptyList()
         friendMarkerIcon = null
-        friendClusterIcon = null
+        friendClusterIcons.clear()
         super.onDestroyView()
         _binding = null
     }

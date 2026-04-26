@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -12,14 +13,21 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 object GeminiClient {
     private const val TAG = "GeminiClient"
     private const val API_URL = "/functions/v1/gemini-proxy"
     private val client = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val req = chain.request()
+            require(req.url.isHttps) { "Non-HTTPS request blocked: ${req.url.host}" }
+            chain.proceed(req)
+        }
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
@@ -112,43 +120,46 @@ object GeminiClient {
         }
 
         return withContext(Dispatchers.IO) {
-            try {
-                var request = buildRequest(accessToken)
-                var response = client.newCall(request).execute()
+            withRetry {
+                try {
+                    var request = buildRequest(accessToken)
+                    var response = client.newCall(request).await()
 
-                // If 401, try to refresh the session once
-                if (response.code == 401) {
-                    response.close()
-                    Log.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
-                    try {
-                        auth.refreshCurrentSession()
-                        val newToken = auth.currentAccessTokenOrNull()
-                        if (newToken != null && newToken != accessToken) {
-                            accessToken = newToken
-                            request = buildRequest(accessToken)
-                            response = client.newCall(request).execute()
-                        } else {
-                            throw Exception("Failed to refresh token or token unchanged")
+                    // If 401, try to refresh the session once
+                    if (response.code == 401) {
+                        response.close()
+                        Log.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
+                        try {
+                            auth.refreshCurrentSession()
+                            val newToken = auth.currentAccessTokenOrNull()
+                            if (newToken != null && newToken != accessToken) {
+                                accessToken = newToken
+                                request = buildRequest(accessToken)
+                                response = client.newCall(request).await()
+                            } else {
+                                throw Exception("Failed to refresh token or token unchanged")
+                            }
+                        } catch (refreshError: Exception) {
+                            if (BuildConfig.DEBUG) Log.e(TAG, "Session refresh failed: ${refreshError.message}")
+                            else Log.e(TAG, "Session refresh failed [code=${refreshError.javaClass.simpleName}]")
+                            throw GeminiHttpException(401, "Proxy call failed: 401 (Refresh failed)")
                         }
-                    } catch (refreshError: Exception) {
-                        Log.e(TAG, "Failed to refresh session: ${refreshError.message}")
-                        throw Exception("Proxy call failed: 401 (Refresh failed)")
                     }
-                }
 
-                response.use { resp ->
-                    val responseBody = resp.body?.string() ?: ""
-                    if (!resp.isSuccessful) {
-                        Log.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
-                        logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
-                        throw Exception("Proxy call failed: ${resp.code}")
+                    response.use { resp ->
+                        val responseBody = resp.body.string()
+                        if (!resp.isSuccessful) {
+                            Log.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
+                            logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
+                            throw GeminiHttpException(resp.code, "Proxy call failed: ${resp.code}")
+                        }
+                        logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
+                        extractText(responseBody).getOrElse { throw it }
                     }
-                    logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
-                    extractText(responseBody).getOrElse { throw it }
+                } catch (e: Exception) {
+                    logException(e)
+                    throw e
                 }
-            } catch (e: Exception) {
-                logException(e)
-                throw e
             }
         }
     }
@@ -191,4 +202,34 @@ object GeminiClient {
             Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})")
         }
     }
+
+    internal suspend fun <T> withRetry(
+        maxAttempts: Int = 3,
+        initialDelayMs: Long = 500,
+        jitterMs: (Long) -> Long = { delayMs -> Random.nextLong(delayMs / 2) },
+        block: suspend () -> T
+    ): T {
+        var delayMs = initialDelayMs
+        repeat(maxAttempts - 1) {
+            try {
+                return block()
+            } catch (e: Exception) {
+                if (!e.isRetryableGeminiFailure()) {
+                    throw e
+                }
+                delay(delayMs + jitterMs(delayMs))
+                delayMs *= 2
+            }
+        }
+        return block()
+    }
+
+    private fun Exception.isRetryableGeminiFailure(): Boolean {
+        return this is GeminiHttpException && code in setOf(429, 500, 502, 503, 504)
+    }
+
+    internal class GeminiHttpException(
+        val code: Int,
+        message: String
+    ) : Exception(message)
 }

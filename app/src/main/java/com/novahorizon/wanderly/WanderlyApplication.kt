@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.workers.StreakWorker
 import com.novahorizon.wanderly.workers.SocialWorker
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ class WanderlyApplication : Application() {
         Configuration.getInstance().userAgentValue = packageName
 
         appScope.launch {
+            PreferencesStore(this@WanderlyApplication).pruneStaleCooldowns()
             setupBackgroundWorkers()
         }
     }

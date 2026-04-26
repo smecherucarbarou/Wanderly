@@ -14,6 +14,7 @@ open class WanderlyRepository(context: Context) {
     private val profileRepository = ProfileRepository(this.context, preferencesStore)
     private val socialRepository = SocialRepository()
     private val discoveryRepository = DiscoveryRepository()
+    private val gemCurationRepository = GemCurationRepository(this.context)
 
     open val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
 
@@ -21,11 +22,11 @@ open class WanderlyRepository(context: Context) {
 
     open suspend fun updateProfile(profile: Profile): Boolean = profileRepository.updateProfile(profile)
 
-    suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
+    open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
-    suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)
+    open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)
 
-    suspend fun removeFriend(friendId: String): Boolean = socialRepository.removeFriend(friendId)
+    open suspend fun removeFriend(friendId: String): Boolean = socialRepository.removeFriend(friendId)
 
     open suspend fun getFriends(): List<Profile> = socialRepository.getFriends()
 
@@ -35,32 +36,38 @@ open class WanderlyRepository(context: Context) {
     suspend fun fetchHiddenGems(lat: Double, lng: Double, radius: Int): List<String> =
         discoveryRepository.fetchHiddenGems(lat, lng, radius)
 
-    suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> =
+    open suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> =
         discoveryRepository.fetchHiddenGemCandidates(lat, lng, radius, city)
 
-    fun getCachedUsername(): String? = preferencesStore.getCachedUsername()
+    open suspend fun curateHiddenGems(
+        city: String,
+        candidates: List<DiscoveredPlace>,
+        seenGemsHistory: Set<String>
+    ): List<Gem> = gemCurationRepository.curateGems(city, candidates, seenGemsHistory)
 
-    fun cacheUsername(username: String) = preferencesStore.cacheUsername(username)
+    suspend fun getCachedUsername(): String? = preferencesStore.getCachedUsername()
 
-    fun getLastVisitDate(): String? = preferencesStore.getLastVisitDate()
+    suspend fun cacheUsername(username: String) = preferencesStore.cacheUsername(username)
 
-    fun updateLastVisitDate(date: String) = preferencesStore.updateLastVisitDate(date)
+    suspend fun getLastVisitDate(): String? = preferencesStore.getLastVisitDate()
+
+    suspend fun updateLastVisitDate(date: String) = preferencesStore.updateLastVisitDate(date)
 
     suspend fun resetMissionDateForTesting(): Boolean = profileRepository.resetMissionDateForTesting()
 
-    open fun getMissionHistory(): String = preferencesStore.getMissionHistory()
+    open suspend fun getMissionHistory(): String = preferencesStore.getMissionHistory()
 
-    fun getMissionTarget(): String? = preferencesStore.getMissionTarget()
+    open suspend fun getMissionTarget(): String? = preferencesStore.getMissionTarget()
 
-    fun getMissionCity(): String? = preferencesStore.getMissionCity()
+    open suspend fun getMissionCity(): String? = preferencesStore.getMissionCity()
 
-    fun getMissionText(): String? = preferencesStore.getMissionText()
+    suspend fun getMissionText(): String? = preferencesStore.getMissionText()
 
-    fun hasMissionTargetCoordinates(): Boolean = preferencesStore.hasMissionTargetCoordinates()
+    suspend fun hasMissionTargetCoordinates(): Boolean = preferencesStore.hasMissionTargetCoordinates()
 
-    fun getMissionTargetCoordinates(): Pair<Double, Double>? = preferencesStore.getMissionTargetCoordinates()
+    suspend fun getMissionTargetCoordinates(): Pair<Double, Double>? = preferencesStore.getMissionTargetCoordinates()
 
-    open fun saveMissionData(
+    open suspend fun saveMissionData(
         text: String,
         target: String,
         history: String,
@@ -74,27 +81,31 @@ open class WanderlyRepository(context: Context) {
         preferencesStore.saveMissionData(text, target, history, city, targetLat, targetLng)
     }
 
-    fun clearMissionData() = preferencesStore.clearMissionData()
+    suspend fun clearMissionData() = preferencesStore.clearMissionData()
 
-    fun isRememberMeEnabled(): Boolean = preferencesStore.isRememberMeEnabled()
+    suspend fun isRememberMeEnabled(): Boolean = preferencesStore.isRememberMeEnabled()
 
-    fun setRememberMeEnabled(enabled: Boolean) = preferencesStore.setRememberMeEnabled(enabled)
+    suspend fun isRememberMeEnabledSuspend(): Boolean = preferencesStore.isRememberMeEnabledSuspend()
 
-    open fun isOnboardingSeen(): Boolean = preferencesStore.isOnboardingSeen()
+    suspend fun setRememberMeEnabled(enabled: Boolean) = preferencesStore.setRememberMeEnabled(enabled)
 
-    fun setOnboardingSeen(seen: Boolean) = preferencesStore.setOnboardingSeen(seen)
+    open suspend fun isOnboardingSeen(): Boolean = preferencesStore.isOnboardingSeen()
 
-    fun peekPendingInviteCode(): String? = preferencesStore.getPendingInviteCode()
+    open suspend fun isOnboardingSeenSuspend(): Boolean = preferencesStore.isOnboardingSeenSuspend()
 
-    fun cachePendingInviteCode(code: String) = preferencesStore.setPendingInviteCode(code)
+    suspend fun setOnboardingSeen(seen: Boolean) = preferencesStore.setOnboardingSeen(seen)
 
-    fun consumePendingInviteCode(): String? = preferencesStore.consumePendingInviteCode()
+    suspend fun peekPendingInviteCode(): String? = preferencesStore.getPendingInviteCode()
 
-    fun clearRememberMe() = preferencesStore.setRememberMeEnabled(false)
+    suspend fun cachePendingInviteCode(code: String) = preferencesStore.setPendingInviteCode(code)
 
-    fun clearLocalState() = preferencesStore.clearAll()
+    suspend fun consumePendingInviteCode(): String? = preferencesStore.consumePendingInviteCode()
 
-    suspend fun uploadAvatar(uri: Uri, profileId: String): String =
+    suspend fun clearRememberMe() = preferencesStore.setRememberMeEnabled(false)
+
+    suspend fun clearLocalState() = preferencesStore.clearAll()
+
+    open suspend fun uploadAvatar(uri: Uri, profileId: String): String =
         profileRepository.uploadAvatar(uri, profileId)
 
     fun preferencesStore(): PreferencesStore = preferencesStore

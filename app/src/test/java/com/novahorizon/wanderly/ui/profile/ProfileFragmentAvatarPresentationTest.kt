@@ -49,22 +49,41 @@ class ProfileFragmentAvatarPresentationTest {
 
     @Test
     fun `hides profile halo when streak is inactive`() {
-        val haloRes = ProfileFragment.resolveProfileHaloRes(0)
+        val haloStyle = ProfileFragment.resolveProfileHaloStyle(0)
 
-        assertEquals(null, haloRes)
+        assertEquals(null, haloStyle)
     }
 
     @Test
-    fun `uses base halo for any active streak before milestone tiers`() {
-        val haloRes = ProfileFragment.resolveProfileHaloRes(1)
+    fun `uses layered base halo for starter streak tier`() {
+        val haloStyle = ProfileFragment.resolveProfileHaloStyle(1)
 
-        assertEquals(R.drawable.ic_streak_fire, haloRes)
+        assertEquals(R.drawable.ic_profile_streak_glow, haloStyle?.glowRes)
+        assertEquals(R.drawable.ic_profile_streak_ring, haloStyle?.ringRes)
+        assertEquals(R.drawable.ic_profile_streak_sparks, haloStyle?.accentRes)
+
+        assertEquals(R.drawable.ic_profile_streak_glow, ProfileFragment.resolveProfileHaloStyle(6)?.glowRes)
     }
 
     @Test
-    fun `uses tiered halos for higher streak milestones`() {
-        assertEquals(R.drawable.ic_streak_fire_5, ProfileFragment.resolveProfileHaloRes(5))
-        assertEquals(R.drawable.ic_streak_fire_25, ProfileFragment.resolveProfileHaloRes(25))
-        assertEquals(R.drawable.ic_streak_fire_50, ProfileFragment.resolveProfileHaloRes(50))
+    fun `uses tiered halos that match streak tier boundaries`() {
+        assertEquals(R.drawable.ic_profile_streak_glow_5, ProfileFragment.resolveProfileHaloStyle(7)?.glowRes)
+        assertEquals(R.drawable.ic_profile_streak_ring_5, ProfileFragment.resolveProfileHaloStyle(7)?.ringRes)
+        assertEquals(R.drawable.ic_profile_streak_sparks_5, ProfileFragment.resolveProfileHaloStyle(7)?.accentRes)
+
+        assertEquals(R.drawable.ic_profile_streak_glow_25, ProfileFragment.resolveProfileHaloStyle(30)?.glowRes)
+        assertEquals(R.drawable.ic_profile_streak_ring_25, ProfileFragment.resolveProfileHaloStyle(30)?.ringRes)
+        assertEquals(R.drawable.ic_profile_streak_sparks_25, ProfileFragment.resolveProfileHaloStyle(30)?.accentRes)
+
+        assertEquals(R.drawable.ic_profile_streak_glow_50, ProfileFragment.resolveProfileHaloStyle(60)?.glowRes)
+        assertEquals(R.drawable.ic_profile_streak_ring_50, ProfileFragment.resolveProfileHaloStyle(60)?.ringRes)
+        assertEquals(R.drawable.ic_profile_streak_sparks_50, ProfileFragment.resolveProfileHaloStyle(60)?.accentRes)
+    }
+
+    @Test
+    fun `uses streak tier color for profile streak icon accent`() {
+        assertEquals(0xFFF97316.toInt(), ProfileFragment.resolveStreakAccentColor(1))
+        assertEquals(0xFFEAB308.toInt(), ProfileFragment.resolveStreakAccentColor(7))
+        assertEquals(0xFFFFD166.toInt(), ProfileFragment.resolveStreakAccentColor(250))
     }
 }

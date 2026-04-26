@@ -11,25 +11,38 @@ object InviteDeepLink {
         return extractFriendCode(
             scheme = uri?.scheme,
             host = uri?.host,
-            pathSegments = uri?.pathSegments.orEmpty()
+            pathSegments = uri?.pathSegments.orEmpty(),
+            inviteQueryCode = uri?.getQueryParameter(Constants.INVITE_QUERY_PARAMETER)
         )
     }
 
     fun extractFriendCode(
         scheme: String?,
         host: String?,
-        pathSegments: List<String>
+        pathSegments: List<String>,
+        inviteQueryCode: String? = null
     ): String? {
-        if (scheme != Constants.INVITE_CALLBACK_SCHEME || host != Constants.INVITE_CALLBACK_HOST) {
-            return null
-        }
-
         val nonBlankSegments = pathSegments.filter { it.isNotBlank() }
-        if (nonBlankSegments.size != 1) {
-            return null
+        val candidate = when {
+            scheme == Constants.INVITE_CALLBACK_SCHEME &&
+                host == Constants.INVITE_CALLBACK_HOST &&
+                nonBlankSegments.size == 1 -> nonBlankSegments.first()
+
+            scheme == Constants.INVITE_WEB_SCHEME &&
+                host == Constants.INVITE_WEB_HOST &&
+                nonBlankSegments.size == 2 &&
+                nonBlankSegments.first() == Constants.INVITE_PATH_SEGMENT -> nonBlankSegments.last()
+
+            scheme == Constants.INVITE_WEB_SCHEME &&
+                host == Constants.INVITE_WEB_HOST &&
+                nonBlankSegments.isEmpty() &&
+                !inviteQueryCode.isNullOrBlank() -> inviteQueryCode
+
+            else -> return null
         }
 
-        val candidate = nonBlankSegments.first().trim().uppercase(Locale.US)
-        return candidate.takeIf { friendCodePattern.matches(it) }
+        return candidate.trim()
+            .uppercase(Locale.US)
+            .takeIf { friendCodePattern.matches(it) }
     }
 }

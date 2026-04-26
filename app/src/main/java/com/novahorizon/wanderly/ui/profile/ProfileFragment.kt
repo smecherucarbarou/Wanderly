@@ -13,6 +13,8 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
@@ -29,10 +31,12 @@ import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileRepository
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
+import com.novahorizon.wanderly.invites.InviteShareFormatter
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import com.novahorizon.wanderly.widgets.StreakTierHelper
 import com.yalantis.ucrop.UCrop
 import java.io.File
 import java.text.NumberFormat
@@ -54,6 +58,7 @@ class ProfileFragment : Fragment() {
     }
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        _binding ?: return@registerForActivityResult
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
 
         val resultUri = result.data?.let(UCrop::getOutput)
@@ -70,6 +75,7 @@ class ProfileFragment : Fragment() {
     }
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        _binding ?: return@registerForActivityResult
         if (uri != null) {
             val destinationFile = File.createTempFile("avatar_crop_", ".jpg", requireContext().cacheDir)
             pendingAvatarDestinationUri = Uri.fromFile(destinationFile)
@@ -98,10 +104,11 @@ class ProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        viewModel.profile.observe(viewLifecycleOwner) { profile ->
-            profile?.let {
-                currentProfile = it
-                updateUI(it)
+        viewModel.profileState.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                ProfileViewModel.ProfileUiState.Loading -> renderProfileLoading()
+                is ProfileViewModel.ProfileUiState.Loaded -> renderProfileLoaded(state.profile)
+                is ProfileViewModel.ProfileUiState.Error -> renderProfileError(state.messageRes)
             }
         }
 
@@ -112,7 +119,7 @@ class ProfileFragment : Fragment() {
                         pendingAvatarPreviewSource = null
                         pendingAvatarRemotePath = null
                     }
-                    showSnackbar(event.message, isError = event.isError)
+                    showSnackbar(getString(event.messageRes), isError = event.isError)
                     viewModel.clearProfileEvent()
                 }
 
@@ -207,11 +214,15 @@ class ProfileFragment : Fragment() {
         binding.streakCount.text = formatWholeNumber(currentStreak)
         binding.rankBadge.text = getRankName(currentRank)
         binding.missionsCompletedCount.text = formatWholeNumber(flights)
+        val streakAccentColor = resolveStreakAccentColor(currentStreak)
+        binding.streakStatIcon.setTextColor(streakAccentColor)
+        binding.streakCount.setTextColor(streakAccentColor)
+        binding.streakStatCard.strokeColor = streakAccentColor
 
-        val haloDrawable = resolveProfileHaloRes(currentStreak)
-        if (haloDrawable != null) {
+        val haloStyle = resolveProfileHaloStyle(currentStreak)
+        if (haloStyle != null) {
             binding.streakAura.visibility = View.VISIBLE
-            applyProfileHalo(binding, haloDrawable)
+            applyProfileHalo(binding, haloStyle)
         } else {
             binding.streakAura.visibility = View.GONE
         }
@@ -260,6 +271,41 @@ class ProfileFragment : Fragment() {
         }
     }
 
+    private fun renderProfileLoading() {
+        val binding = _binding ?: return
+        binding.avatarContainer.isEnabled = false
+        binding.editUsernameButton.isEnabled = false
+        binding.username.setText(R.string.profile_loading)
+        binding.friendCodeLayout.visibility = View.GONE
+        binding.rankBadge.text = getString(R.string.profile_default_name)
+        binding.honeyTotal.setText(R.string.profile_zero_stat)
+        binding.streakCount.setText(R.string.profile_zero_stat)
+        binding.missionsCompletedCount.setText(R.string.profile_zero_stat)
+        binding.hiveProgress.progress = 0
+        binding.progressText.setText(R.string.profile_loading)
+        binding.badgesRecycler.visibility = View.GONE
+        binding.badgesTitle.setText(R.string.profile_badges_empty)
+    }
+
+    private fun renderProfileLoaded(profile: Profile) {
+        val binding = _binding ?: return
+        binding.avatarContainer.isEnabled = true
+        binding.editUsernameButton.isEnabled = true
+        currentProfile = profile
+        updateUI(profile)
+    }
+
+    private fun renderProfileError(@StringRes messageRes: Int) {
+        val binding = _binding ?: return
+        binding.avatarContainer.isEnabled = true
+        binding.editUsernameButton.isEnabled = false
+        binding.username.setText(R.string.profile_default_name)
+        binding.progressText.setText(messageRes)
+        binding.badgesRecycler.visibility = View.GONE
+        binding.badgesTitle.setText(R.string.profile_badges_empty)
+        showSnackbar(getString(messageRes), isError = true)
+    }
+
     private fun uploadAvatarToSupabase(uri: Uri) {
         val profile = currentProfile ?: return
         pendingAvatarPreviewSource = uri.toString()
@@ -285,7 +331,7 @@ class ProfileFragment : Fragment() {
     }
 
     private fun shareFriendCode(friendCode: String) {
-        val shareMessage = getString(R.string.profile_share_invite_message, friendCode, friendCode)
+        val shareMessage = InviteShareFormatter.format(friendCode)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, shareMessage)
@@ -298,15 +344,10 @@ class ProfileFragment : Fragment() {
         AvatarLoader.loadAvatar(binding.buzzyAvatar, binding.avatarInitial, avatarData, username)
     }
 
-    private fun applyProfileHalo(binding: FragmentProfileBinding, haloDrawable: Int) {
-        binding.streakFlameTop.setImageResource(haloDrawable)
-        binding.streakFlameLeft.setImageResource(haloDrawable)
-        binding.streakFlameRight.setImageResource(haloDrawable)
-        binding.streakFlameBottom.setImageResource(haloDrawable)
-        binding.streakFlameTopStart.setImageResource(haloDrawable)
-        binding.streakFlameTopEnd.setImageResource(haloDrawable)
-        binding.streakFlameBottomStart.setImageResource(haloDrawable)
-        binding.streakFlameBottomEnd.setImageResource(haloDrawable)
+    private fun applyProfileHalo(binding: FragmentProfileBinding, haloStyle: ProfileHaloStyle) {
+        binding.streakGlow.setImageResource(haloStyle.glowRes)
+        binding.streakRing.setImageResource(haloStyle.ringRes)
+        binding.streakAccent.setImageResource(haloStyle.accentRes)
     }
 
     private fun isUsableCropResult(uri: Uri): Boolean {
@@ -371,13 +412,42 @@ class ProfileFragment : Fragment() {
         val shouldClearPendingPreview: Boolean
     )
 
+    internal data class ProfileHaloStyle(
+        @param:DrawableRes @field:DrawableRes val glowRes: Int,
+        @param:DrawableRes @field:DrawableRes val ringRes: Int,
+        @param:DrawableRes @field:DrawableRes val accentRes: Int
+    )
+
     companion object {
-        internal fun resolveProfileHaloRes(streakCount: Int): Int? = when {
-            streakCount >= 50 -> R.drawable.ic_streak_fire_50
-            streakCount >= 25 -> R.drawable.ic_streak_fire_25
-            streakCount >= 5 -> R.drawable.ic_streak_fire_5
-            streakCount >= 1 -> R.drawable.ic_streak_fire
-            else -> null
+        internal fun resolveProfileHaloStyle(streakCount: Int): ProfileHaloStyle? {
+            if (streakCount <= 0) return null
+
+            return when (StreakTierHelper.resolve(streakCount).label) {
+                "Starter" -> ProfileHaloStyle(
+                    glowRes = R.drawable.ic_profile_streak_glow,
+                    ringRes = R.drawable.ic_profile_streak_ring,
+                    accentRes = R.drawable.ic_profile_streak_sparks
+                )
+                "Rising" -> ProfileHaloStyle(
+                    glowRes = R.drawable.ic_profile_streak_glow_5,
+                    ringRes = R.drawable.ic_profile_streak_ring_5,
+                    accentRes = R.drawable.ic_profile_streak_sparks_5
+                )
+                "Blazing" -> ProfileHaloStyle(
+                    glowRes = R.drawable.ic_profile_streak_glow_25,
+                    ringRes = R.drawable.ic_profile_streak_ring_25,
+                    accentRes = R.drawable.ic_profile_streak_sparks_25
+                )
+                else -> ProfileHaloStyle(
+                    glowRes = R.drawable.ic_profile_streak_glow_50,
+                    ringRes = R.drawable.ic_profile_streak_ring_50,
+                    accentRes = R.drawable.ic_profile_streak_sparks_50
+                )
+            }
+        }
+
+        internal fun resolveStreakAccentColor(streakCount: Int): Int {
+            return StreakTierHelper.resolve(streakCount).color
         }
 
         internal fun resolveAvatarPresentation(

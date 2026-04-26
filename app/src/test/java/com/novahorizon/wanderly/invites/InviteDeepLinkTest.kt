@@ -29,6 +29,29 @@ class InviteDeepLinkTest {
     }
 
     @Test
+    fun `extractFriendCode accepts https invite route`() {
+        val code = InviteDeepLink.extractFriendCode(
+            scheme = "https",
+            host = "wanderly.app",
+            pathSegments = listOf("invite", "ABC123")
+        )
+
+        assertEquals("ABC123", code)
+    }
+
+    @Test
+    fun `extractFriendCode accepts https invite query on homepage`() {
+        val code = InviteDeepLink.extractFriendCode(
+            scheme = "https",
+            host = "wanderly.app",
+            pathSegments = emptyList(),
+            inviteQueryCode = "ab12cd"
+        )
+
+        assertEquals("AB12CD", code)
+    }
+
+    @Test
     fun `extractFriendCode rejects wrong host`() {
         val code = InviteDeepLink.extractFriendCode(
             scheme = "wanderly",

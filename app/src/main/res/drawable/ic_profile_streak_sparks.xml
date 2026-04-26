@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="10dp"
+        android:height="10dp"
+        android:top="10dp"
+        android:right="38dp"
+        android:gravity="top|end"
+        android:drawable="@drawable/bg_profile_ember" />
+    <item
+        android:width="8dp"
+        android:height="8dp"
+        android:left="26dp"
+        android:top="58dp"
+        android:gravity="start|top"
+        android:drawable="@drawable/bg_profile_ember" />
+    <item
+        android:width="7dp"
+        android:height="7dp"
+        android:right="24dp"
+        android:bottom="44dp"
+        android:gravity="end|bottom"
+        android:drawable="@drawable/bg_profile_ember" />
+</layer-list>

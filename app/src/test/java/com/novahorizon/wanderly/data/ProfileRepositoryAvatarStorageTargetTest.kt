@@ -79,5 +79,11 @@ class ProfileRepositoryAvatarStorageTargetTest {
         assertTrue(ProfileRepository.isAvatarFileUsable(exists = true, length = 128))
         assertFalse(ProfileRepository.isAvatarFileUsable(exists = true, length = 0))
         assertFalse(ProfileRepository.isAvatarFileUsable(exists = false, length = 128))
+        assertFalse(
+            ProfileRepository.isAvatarFileUsable(
+                exists = true,
+                length = AvatarRepository.MAX_AVATAR_UPLOAD_BYTES + 1L
+            )
+        )
     }
 }

@@ -7,6 +7,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
@@ -16,6 +17,7 @@ import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.databinding.FragmentOnboardingBinding
 import com.novahorizon.wanderly.databinding.ItemOnboardingPageBinding
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
+import kotlinx.coroutines.launch
 
 class OnboardingFragment : Fragment() {
 
@@ -103,12 +105,14 @@ class OnboardingFragment : Fragment() {
     }
 
     private fun completeOnboarding() {
-        WanderlyGraph.repository(requireContext()).setOnboardingSeen(true)
-        val navController = findNavController()
-        navController.graph.setStartDestination(
-            MainNavigationDestinations.destinationAfterOnboarding(R.id.mapFragment)
-        )
-        navController.navigate(R.id.action_onboarding_to_map)
+        viewLifecycleOwner.lifecycleScope.launch {
+            WanderlyGraph.repository(requireContext()).setOnboardingSeen(true)
+            val navController = findNavController()
+            navController.graph.setStartDestination(
+                MainNavigationDestinations.destinationAfterOnboarding(R.id.mapFragment)
+            )
+            navController.navigate(R.id.action_onboarding_to_map)
+        }
     }
 
     override fun onDestroyView() {

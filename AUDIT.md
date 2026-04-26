@@ -1,371 +1,711 @@
 # WANDERLY - FULL PROJECT AUDIT
 
-Audit date: 2026-04-21
+Generated: 2026-04-24
 
-Scope:
-- Read `context.md` and scanned the tracked Android project files matching `*.kt`, `*.java`, `*.xml`, `*.gradle`, `*.gradle.kts`, and `*.properties`.
-- Scan inventory: 129 tracked files.
-- `.json` files: none tracked in the Android project.
-- Also reviewed local-only `local.properties` for security posture without copying secret values.
-- Dependency freshness sanity-check was cross-checked against official Android Developers release pages on 2026-04-21.
+Context read first: `C:\Users\mihai\AndroidStudioProjects\Wanderly\context.md`
 
-Blunt verdict:
-- Wanderly has strong product direction, but the codebase is not release-ready.
-- The biggest risks are security hardening gaps, crash-prone null handling, architecture drift, and very weak automated coverage for the most important user flows.
+Audited working tree: current dirty working tree, including uncommitted files and generated files present under the project root at scan time.
 
-## 1. ARCHITECTURE & CODE QUALITY
+## Scope
 
-- Architecture consistency: partially MVVM, but not consistently. `ui/MissionsViewModel.kt:64-301` contains orchestration, prompt engineering, verification, reward logic, and notification triggering; `ui/gems/GemsFragment.kt:111-395` and `ui/profile/ProfileFragment.kt:91-346` bypass a proper presentation layer and execute business logic directly from fragments.
-- God classes / too many responsibilities:
-  - `app/src/main/java/com/novahorizon/wanderly/ui/MissionsViewModel.kt:64-301` is doing mission generation, place verification, Gemini integration, streak progression, and notification side effects.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/gems/GemsFragment.kt:111-395` handles permission flow, geocoding, discovery orchestration, Gemini prompt construction, parsing, and UI state.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:102-346` handles repository access, avatar upload, logout, badge progression, class selection, and badge adapter content decisions.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/DevDashboardFragment.kt:60-330` is effectively an admin controller, notification test panel, worker trigger, AI prompt runner, and profile editor all in one file.
-  - `app/src/main/java/com/novahorizon/wanderly/auth/AuthSessionCoordinator.kt:11-42` packs `AuthCallbackMatcher`, `AuthRouting`, and `AuthSessionCoordinator` into one file with unrelated responsibilities.
-- Circular dependencies between modules/packages: N/A - the app is a single Android module, so there is no Gradle module cycle. I did not find an explicit Kotlin package import cycle, but most features are tightly coupled through `WanderlyGraph` and the broad `WanderlyRepository` facade (`data/WanderlyRepository.kt:10-85`).
-- Business logic leaking into UI:
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:184-197` performs badge evaluation and remote persistence from the fragment.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/map/MapFragment.kt:206-225` writes user location back to the backend directly from the fragment.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/gems/GemsFragment.kt:251-312` builds ranking prompts in the fragment instead of a domain/service layer.
-- ViewModels doing too much / too little:
-  - Too much: `ui/MissionsViewModel.kt:64-301`.
-  - Too thin: there is no feature ViewModel at all for Gems/Profile/Admin, so fragments absorb the missing presentation logic.
-- Repository pattern quality:
-  - Specialized repositories exist, which is good, but the aggregate `WanderlyRepository` (`data/WanderlyRepository.kt:10-85`) is a catch-all facade mixing profile, social, discovery, mission cache, remember-me state, and app context exposure.
-  - `WanderlyRepository.context` (`data/WanderlyRepository.kt:11`) is an architectural smell because it makes it easier for higher layers to reach back into Android framework APIs.
-- Anti-patterns:
-  - UI layer directly uses `SharedPreferences` in multiple places instead of a single storage abstraction: `AuthActivity.kt:42-43`, `LoginFragment.kt:74-75`, `MapFragment.kt:196-197`, `ProfileFragment.kt:117-120`, `NotificationCheckCoordinator.kt:402-403`, `WanderlyNotificationManager.kt:42-54`.
-  - Raw string parsing for AI JSON results instead of schema-safe parsing: `MissionsViewModel.kt:120-127`, `GemsFragment.kt:177-180`, `DevDashboardFragment.kt:226-233`.
-  - Direct logging from production code throughout the app instead of a structured debug-only logger.
-- Code duplication:
-  - UTC date formatting logic is duplicated in `ui/MainViewModel.kt`, `ui/MissionsViewModel.kt:236-245`, and `notifications/NotificationCheckCoordinator.kt:405-415`.
-  - Session-to-user-id retrieval with `session.user!!.id` is duplicated across `data/ProfileRepository.kt:57-66` and `data/SocialRepository.kt:15-17`, `51-53`, `80-82`, `106-108`.
-  - Preference access patterns are duplicated outside `PreferencesStore`.
+Recursive root scanned: `C:\Users\mihai\AndroidStudioProjects\Wanderly`
 
-## 2. PERFORMANCE
+Requested extensions included with no exceptions: `.kt`, `.java`, `.xml`, `.gradle`, `.kts`, `.json`, `.properties`, `.pro`, `.yml`, `.yaml`, `.toml`.
 
-- Main-thread work that should be off the UI thread:
-  - I did not find a clear large blocking network/database operation running directly on the main thread.
-  - However, UI callbacks are doing too much orchestration before handing off work, especially in `GemsFragment.kt:123-159` and `MissionsFragment.kt:224-270`.
-- Coroutines / Flows correctness:
-  - `app/src/main/java/com/novahorizon/wanderly/ui/MissionsViewModel.kt:53-61` starts a new `collectLatest` every time `loadProfile()` is called and never cancels prior collectors. That is a duplicate-collector bug waiting to happen.
-  - `app/src/main/java/com/novahorizon/wanderly/services/HiveRealtimeService.kt:87-98` launches a realtime status collector inside `serviceScope`, but subscription state is manually tracked and easy to desynchronize.
-- Memory leak / lifecycle risk:
-  - `app/src/main/java/com/novahorizon/wanderly/services/HiveRealtimeService.kt:139-151` does async cleanup in `onDestroy()` and immediately calls `super.onDestroy()`. The service can be torn down before unsubscribe finishes.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/gems/GemsFragment.kt:124-159` and `ui/missions/MissionsFragment.kt:225-270` rely on callback-style location/geocoder APIs that can outlive the screen; there are guard checks, but cancellation is not first-class.
-- RecyclerView reuse:
-  - Good: `BadgesAdapter`, `GemsAdapter`, and list adapters use `DiffUtil`.
-  - Risk: `ProfileFragment` keeps badge presentation logic in the adapter (`ProfileFragment.kt:370-408`) with hardcoded badge names; maintainability is poor, but reuse itself is fine.
-- Image loading:
-  - Good: `AvatarLoader.kt:43-71` uses Glide with disk cache; `ProfileRepository.kt:200-218` downsamples avatar uploads before compression.
-  - Risk: `AvatarLoader.kt:29-31` will fetch arbitrary `http://` URLs, which is a security issue more than a performance one.
-- Unnecessary Compose recompositions: N/A - this app uses XML/ViewBinding, not Jetpack Compose.
-- Database query optimization / N+1: N/A - there is no Room/SQLite layer. Supabase fetch patterns are simple but chatty.
-- Network fan-out pressure:
-  - `app/src/main/java/com/novahorizon/wanderly/data/DiscoveryRepository.kt:151-174` fires 15 Google Places queries in parallel with no throttling or backpressure. This is likely to amplify latency, quota burn, and transient failure rates.
-- Large files / asset optimization:
-  - No severe asset bloat found in `res/`; the largest tracked drawable is `app/src/main/res/drawable/ic_launcher_foreground.png` at about 106 KB, which is acceptable.
+Important distinction: the recursive scan includes generated/cache/worktree files under `.gradle`, `.idea`, `build`, `app/build`, and `.worktrees` because the request said no exceptions. Findings focus on source-owned files because generated/cache files are not actionable app source.
 
-## 3. SECURITY
+## Internal Index
 
-- API keys / secrets hardcoded:
-  - No tracked source file contains raw secret values.
-  - But `app/build.gradle.kts:27-33` injects `SUPABASE_URL` and `SUPABASE_ANON_KEY` into `BuildConfig`, meaning they are recoverable from the APK.
-  - `local.properties` contains real local credentials in plaintext on the developer machine. That is normal for local setup, but still sensitive and easy to mishandle.
-- Sensitive data storage:
-  - `app/src/main/java/com/novahorizon/wanderly/data/PreferencesStore.kt:8-74` uses plain `SharedPreferences`, not encrypted storage.
-  - The same applies to notification state in `notifications/NotificationCheckCoordinator.kt:402-403` and cooldown state in `notifications/WanderlyNotificationManager.kt:42-71`.
-  - This does not look like auth-token storage, but it still stores behavioral data and app state in plaintext.
-- HTTPS / transport security:
-  - Most network endpoints are HTTPS.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/AvatarLoader.kt:29-31` explicitly allows `http://` avatar URLs. That is a release blocker.
-  - No `app/src/main/res/xml/network_security_config.xml` exists, and the manifest does not reference one. There is no app-level transport hardening policy.
-- WebView security: N/A - no WebView usage found.
-- Input validation / sanitization:
-  - Basic validation exists in `ui/auth/SignupFragment.kt:45-63` and friend-code normalization exists in `data/SocialRepository.kt:143-145`.
-  - Validation is inconsistent, and several user-facing errors still echo raw backend text (`SocialRepository.kt:73`, `DevDashboardFragment.kt:250-252`).
-- Exported components:
-  - `app/src/main/AndroidManifest.xml:55-69` exports `AuthActivity` with browsable deep links using a custom scheme. That is normal for auth callbacks, but it is less trustworthy than verified App Links and deserves stricter URI validation and threat-modeling.
-  - `MainActivity` is not exported (`AndroidManifest.xml:78-80`), and `HiveRealtimeService` is not exported (`72-76`), which is good.
-- Auth token storage / refresh handling:
-  - Supabase SDK auto-refresh is enabled (`api/SupabaseClient.kt:41-47`).
-  - Proxy clients retry once on 401 (`GeminiClient.kt:119-137`, `PlacesProxyClient.kt:44-57`), which is good.
-  - App-layer code still manually depends on current tokens and throws generic exceptions when auth state is missing.
-- SQL injection risks: N/A - no raw SQLite SQL queries found.
-- Obfuscation / R8:
-  - Release minification is enabled (`app/build.gradle.kts:36-44`), which is good.
-  - But `app/proguard-rules.pro:30-44` keeps entire app data classes and third-party packages, which weakens obfuscation more than necessary.
-- Sensitive information in logs:
-  - `app/src/main/java/com/novahorizon/wanderly/api/SupabaseClient.kt:26` logs the Supabase base URL.
-  - `app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt:141-164` logs avatar upload targets, storage responses, and the generated public avatar URL.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/DevDashboardFragment.kt:153-161` can display live profile JSON on-device.
+```text
+All files under root:                 12,188
+Requested-extension files scanned:     1,456
+Requested-extension lines scanned:   190,764
+Source-owned requested files:            236
+Source-owned requested lines:         15,361
+Kotlin source-owned files:                96
+XML source-owned files:                  131
+Test source-owned files:                  28
+```
 
-## 4. CRASH RISKS & STABILITY
+Extension breakdown, full recursive requested set:
 
-- Unhandled exceptions / swallowed errors:
-  - `app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt:112-118` swallows exceptions in `resetMissionDateForTesting()`.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:121-123`, `163-165`, `177-180` reduce failures to generic snackbars and make troubleshooting harder.
-  - `app/src/main/java/com/novahorizon/wanderly/api/PlacesProxyClient.kt:55-63` and `api/GeminiClient.kt:133-145` collapse rich failures into generic `Exception`.
-- Nullability / NPE risks:
-  - `app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt:62`
-  - `app/src/main/java/com/novahorizon/wanderly/data/SocialRepository.kt:16`, `52`, `81`, `107`
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:56`, `278`
-  - `app/src/main/java/com/novahorizon/wanderly/ui/missions/MissionsFragment.kt:75`
-  - All of those `!!` uses can crash on auth races, malformed results, or inconsistent backend state.
-- Lifecycle-aware usage:
-  - Fragment binding cleanup is generally correct.
-  - Callback APIs are the weak point; `MissionsFragment.kt:225-270` and `GemsFragment.kt:124-159` still depend on manual `isAdded` / `_binding` checks.
-- Fragment transactions:
-  - N/A - navigation is handled through `NavController`; I did not find unsafe manual fragment transaction code.
-- Async cancellation:
-  - Fragment coroutines mostly use `viewLifecycleOwner.lifecycleScope`, which is good.
-  - `HiveRealtimeService.kt:139-151` cleanup is not lifecycle-safe enough for deterministic teardown.
-- Error / loading / empty states:
-  - Better than average on missions/gems/social, but inconsistent.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/missions/MissionsFragment.kt:190-204` resets some UI on error but does not fully normalize all controls.
-  - `ProfileFragment.kt:169-180` has only a snackbar for load failure; there is no dedicated error state in the profile screen.
-- Hidden repeated-write risk:
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:184-197` unlocks badges during profile load and immediately writes back to the backend. That can create noisy write churn and hard-to-debug loops if server/client normalization diverges.
+```text
+.kt:          185
+.java:        274
+.xml:         695
+.gradle:        0
+.kts:           6
+.json:        270
+.properties:   22
+.pro:           2
+.yml/.yaml:     0
+.toml:          2
+```
 
-## 5. NETWORK & API
+Source-owned breakdown:
 
-- API error handling completeness:
-  - Incomplete. `GeminiClient.kt:139-148` and `PlacesProxyClient.kt:60-66` do not preserve structured error bodies for the UI layer.
-  - `MissionsViewModel.kt:152-153`, `193-194`, `219-220`, `297-298` surfaces raw exception strings to users.
-- Loading / error / success state consistency:
-  - Missions and Gems both try to model states, but not consistently. `GemsFragment.kt:218-249` manages UI state manually inside the fragment; `MissionsFragment.kt:124-208` does the same from observer branches.
-- Retry logic:
-  - Only one 401-refresh retry exists in `GeminiClient.kt:119-137` and `PlacesProxyClient.kt:44-57`.
-  - No retry/backoff exists for transient 5xx, timeouts, or overloaded upstream services.
-- Caching:
-  - Minimal. Active mission state is cached locally, but remote discovery / detail calls are not cached.
-  - `GemsFragment.kt:59` uses in-memory `seenGemsHistory`, which is lost on process death and configuration changes.
-- Request cancellation on navigation:
-  - Suspend calls tied to fragment scopes are okay.
-  - Callback-based location/geocoder requests are not truly cancelable from the feature layer.
-- Timeouts:
-  - Present and reasonable:
-    - `api/SupabaseClient.kt:32-38`
-    - `api/GeminiClient.kt:22-26`
-    - `api/PlacesProxyClient.kt:16-20`
-    - `data/ProfileRepository.kt:49-53`
-- Pagination:
-  - N/A - no paginated list/API flow exists in the current app.
-- Parsing brittleness:
-  - `app/src/main/java/com/novahorizon/wanderly/api/GeminiClient.kt:156-174` assumes a very specific response shape and can throw if `candidates[0]` or `parts` is absent.
-  - `MissionsViewModel.kt:120-127` and `GemsFragment.kt:314-320` parse AI JSON by substring, which is brittle by definition.
+```text
+.kt:           96 files / 10,401 lines
+.xml:         131 files /  4,672 lines
+.kts:           3 files /    141 lines
+.properties:    4 files /     52 lines
+.pro:           1 file  /     35 lines
+.toml:          1 file  /     60 lines
+```
 
-## 6. DATABASE & LOCAL STORAGE
+## Package Structure Map
 
-- Room schema versioning / migrations: N/A - no Room database exists.
-- Missing indexes: N/A - no local SQL schema exists in the Android app.
-- Transactions: N/A - no local DB writes to batch transactionally.
-- Local storage design quality:
-  - `app/src/main/java/com/novahorizon/wanderly/data/PreferencesStore.kt:47-63` stores mission coordinates as strings instead of typed doubles.
-  - `PreferencesStore.kt:65-72` clears the active mission but intentionally leaves mission history behind; that may become stale over time.
-  - `data/WanderlyRepository.kt:61-73` updates `last_visit_date` when mission data is merely saved, which couples visit tracking to mission generation, not mission completion.
-- Data cleanup:
-  - Temporary avatar file is cleaned up in `ui/missions/MissionsFragment.kt:318-321` and overwritten in `ProfileFragment.kt:65`, which is okay.
-  - There is no persistent cleanup strategy for mission history, notification state, or stale social preference keys.
-- Large objects stored in DB: N/A - no local DB, and avatar binary is not stored locally long-term.
+```text
+com.novahorizon.wanderly                         11
+com.novahorizon.wanderly.api                      6
+com.novahorizon.wanderly.auth                     6
+com.novahorizon.wanderly.data                    17
+com.novahorizon.wanderly.invites                  4
+com.novahorizon.wanderly.notifications            2
+com.novahorizon.wanderly.services                 1
+com.novahorizon.wanderly.streak                   2
+com.novahorizon.wanderly.ui                       5
+com.novahorizon.wanderly.ui.auth                  3
+com.novahorizon.wanderly.ui.common                4
+com.novahorizon.wanderly.ui.gems                  4
+com.novahorizon.wanderly.ui.main                  1
+com.novahorizon.wanderly.ui.map                   5
+com.novahorizon.wanderly.ui.missions              3
+com.novahorizon.wanderly.ui.onboarding            1
+com.novahorizon.wanderly.ui.profile               6
+com.novahorizon.wanderly.ui.social                2
+com.novahorizon.wanderly.util                     4
+com.novahorizon.wanderly.widgets                  7
+com.novahorizon.wanderly.workers                  2
+```
 
-## 7. UI & USER EXPERIENCE
+## Dependency Graph
 
-- Configuration changes:
-  - Acceptable in some areas, but not robust everywhere.
-  - `app/src/main/java/com/novahorizon/wanderly/ui/gems/GemsFragment.kt:59` keeps seen-history only in memory, so refresh behavior changes after rotation/process death.
-  - `ProfileFragment.kt:51` tracks dialog state in a plain field; it is not saved across configuration changes.
-- Dark mode:
-  - Supported via `res/values-night/themes.xml` and `res/values-night/colors.xml`.
-  - I did not find a major dark-mode breakage.
-- Touch targets below 48dp:
-  - `app/src/main/res/layout/fragment_profile.xml:85-96` camera icon is `36dp`.
-  - `app/src/main/res/layout/fragment_profile.xml:119-127` username edit button is `32dp`.
-  - `app/src/main/res/layout/item_social_profile.xml:123-135` remove-friend control is `40dp`.
-- Keyboard handling:
-  - `app/src/main/res/layout/fragment_login.xml:2-109` and `fragment_signup.xml:2-135` are full-screen `ConstraintLayout`s with no scroll container. On smaller devices / large font sizes, keyboard overlap is likely.
-  - I did not find explicit IME actions, focus-next handling, or inset-aware keyboard behavior for auth/admin forms.
-- Loading states:
-  - Missions/Gems handle loading states explicitly.
-  - Profile/admin/logout flows rely mostly on snackbars and immediate button actions, with no loading indicator.
-- Error messages:
-  - Some are friendly (`strings.xml`-backed), but many are hardcoded or raw:
-    - `SignupFragment.kt:46`, `51`, `56`, `61`, `80`
-    - `ProfileFragment.kt:179`
-    - `DevDashboardFragment.kt:163`, `175-178`, `249-252`, `298-329`
-- Back navigation:
-  - Mostly okay through `NavController`.
-  - No major navigation bug stood out in the scanned code.
-- Hardcoded strings:
-  - `app/src/main/res/layout/dialog_edit_username.xml:12`, `20`, `31`
-  - `app/src/main/res/layout/fragment_dev_dashboard.xml:13`, `26`, `61`, `69`, `77`, `85`, `94`, `114`, `122`, `131`, `139`, `146`, `153`, `160`, `167`, `174`, `181`, `188`, `195`, `202`, `209`, `216`, `223`, `239`, `260`, `268`, `277`, `285`, `317`, `327`, `336`
-  - `app/src/main/res/layout/fragment_signup.xml:28`, `50`, `72`, `96`
-  - `app/src/main/res/layout/activity_splash.xml:39`
-  - `app/src/main/res/layout/item_badge.xml:37`
-  - `app/src/main/java/com/novahorizon/wanderly/ui/auth/SignupFragment.kt:46`, `51`, `56`, `61`, `80`
-  - `app/src/main/java/com/novahorizon/wanderly/ui/profile/DevDashboardFragment.kt:68`, `79`, `91`, `102`, `114`, `126`, `138`, `150`, `158`, `160`, `163`, `175-178`, `195`, `201-204`, `232-235`, `249-252`, `299`, `304`, `309`, `324`, `328`
-- Accessibility:
-  - Decorative images correctly use `@null` in several places.
-  - The undersized tap targets above are accessibility failures.
-  - `fragment_profile.xml:130-140` friend code is a `TextView` acting like a control; it is not obviously button-like.
+Module graph:
 
-## 8. DEPENDENCIES & BUILD
+```mermaid
+graph TD
+    root["Wanderly root"] --> app[":app"]
+    app --> external["External Maven dependencies"]
+```
 
-- Outdated dependencies with known vulnerabilities:
-  - I did not find an obvious red-flag version mismatch in the Android stack.
-  - `gradle/wrapper/gradle-wrapper.properties:4` already uses Gradle `9.3.1`.
-  - `gradle/libs.versions.toml:2`, `4`, `11`, `14`, `22` aligns AGP/core/navigation/lifecycle/work with current stable Android releases checked on 2026-04-21.
-- Duplicate/conflicting dependency versions:
-  - None found. The version catalog is centralized in `gradle/libs.versions.toml`.
-- Unused dependencies:
-  - No clearly unused dependency jumped out from the scan; most declared libraries are referenced in code.
-- minSdk / targetSdk / compileSdk:
-  - `app/build.gradle.kts:16`, `20-21` uses `compileSdk 36`, `minSdk 26`, `targetSdk 36`, which is appropriate.
-- Debug-only tools:
-  - N/A - no LeakCanary, Flipper, or similar tooling is present.
-- ProGuard / R8:
-  - Enabled in release (`app/build.gradle.kts:36-44`).
-  - Keep rules are too broad (`app/proguard-rules.pro:30-44`), weakening release hardening.
-- Build variants:
-  - Only `debug` and `release` exist. No staging/internal flavor exists, which makes it harder to isolate dev/admin behavior from production.
-- Deprecated APIs:
-  - `app/src/main/java/com/novahorizon/wanderly/ui/gems/GemsFragment.kt:130-135` and `ui/missions/MissionsFragment.kt:242-246` still use the deprecated pre-Tiramisu `Geocoder.getFromLocation` path for older devices. That is acceptable as compatibility code, but it is still technical debt.
+Module cycle result: none. Only one Gradle module exists.
 
-## 9. TESTING
+Package dependency graph:
 
-- Current test coverage:
-  - Unit tests present: 7 focused files under `app/src/test`.
-  - Instrumentation tests present: 1 generated smoke test under `app/src/androidTest`.
-  - Effective coverage for critical flows is very low.
-- ViewModel tests:
-  - Missing for `MainViewModel`, `MissionsViewModel`, `SocialViewModel`, and `AuthViewModel`.
-- Repository tests:
-  - Only light helper/payload tests exist (`ProfileRepositoryPayloadTest`, `SocialRepositoryFriendCodeTest`).
-  - There are no meaningful repository integration tests for profile fetch/update, discovery, avatar upload, or social flows.
-- UI tests:
-  - None for login, signup, mission generation, mission verification, gems, profile, map, or social flows.
-- Room integration tests: N/A - no Room layer exists.
-- False-positive / trivial tests:
-  - `app/src/androidTest/java/com/novahorizon/wanderly/ExampleInstrumentedTest.kt:17-23` is boilerplate and adds almost no confidence.
-- Critical flows with zero automated coverage:
-  - Auth deep link callback import
-  - Mission generation + verification
-  - Gemini/Places proxy error handling
-  - Avatar upload
-  - Badge unlock + class selection
-  - Realtime service behavior
-  - Notification rule evaluation
+```mermaid
+graph TD
+    ui["ui / feature screens"] --> data["data"]
+    ui --> api["api"]
+    ui --> notifications["notifications"]
+    ui --> services["services/workers"]
+    data --> api
+    data --> auth
+    services --> data
+    services --> api
+    services --> notifications
+    workers --> auth
+    workers --> notifications
+    appRoot["root app classes"] --> ui
+    appRoot --> data
+    appRoot --> services
+```
 
-## 10. PERMISSIONS
-
-- Unused permissions:
-  - `app/src/main/AndroidManifest.xml:7` declares `ACCESS_COARSE_LOCATION`, but current code requests and depends on fine location paths.
-  - `AndroidManifest.xml:12` declares `FOREGROUND_SERVICE_SPECIAL_USE`, but no matching special-use foreground service type exists.
-- Dangerous permission timing / rationale:
-  - `MainActivity.kt:120-125` requests notification permission without rationale or fallback explanation.
-  - `MissionsFragment.kt:213-215` and `GemsFragment.kt:113-115` request location permission just-in-time, which is correct, but denial handling is only a snackbar.
-  - `MissionsFragment.kt:273-278` requests camera permission just-in-time, which is correct.
-- Fallback behavior when denied:
-  - Present, but weak. Most denials produce a snackbar and dead-end the feature instead of providing alternate actions.
-- Android 13+ granular media permissions:
-  - Good: avatar picking uses the photo picker (`ProfileFragment.kt:63-75`) instead of broad storage/media permissions.
-
-## 11. MANIFEST & CONFIGURATION
-
-- Activities / services / providers declared correctly:
-  - Mostly yes.
-  - `FileProvider` is configured correctly in `AndroidManifest.xml:29-37`.
-- Intent restrictions:
-  - `AuthActivity` deep links are implicit and browsable by design (`AndroidManifest.xml:55-69`).
-  - `MainActivity` is explicit-only (`78-80`), which is good.
-- Backup configuration:
-  - `android:allowBackup="false"` in `AndroidManifest.xml:18-27` is conservative and safe.
-  - `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml` are still default/sample files and currently dead configuration because backup is disabled.
-- Deep links / app links:
-  - Custom-scheme deep links exist, but there are no verified HTTPS App Links.
-  - Security is acceptable for a prototype, not ideal for release-grade auth callback handling.
-- Launch mode:
-  - No suspicious launchMode usage found.
-- Orientation constraint:
-  - `AndroidManifest.xml:39-43` forces `UCropActivity` to portrait. That is not a bug, but it is a UX/configuration limitation.
-
-## 12. LOGGING & DEBUGGING
-
-- Production `Log.d` / `Log.v` noise:
-  - Present in many release-path files:
-    - `api/SupabaseClient.kt:26`
-    - `data/ProfileRepository.kt:128`, `141`, `159`, `164`
-    - `ui/gems/GemsFragment.kt:83`, `112`, `138`
-    - `ui/missions/MissionsFragment.kt:237`, `248`, `264`
-    - `notifications/NotificationCheckCoordinator.kt:255`
-    - `notifications/WanderlyNotificationManager.kt:49`, `59`, `71`, `106-109`, `140`
-    - `services/HiveRealtimeService.kt:80`, `88`, `91`, `123`, `144`
-    - `WanderlyApplication.kt:35`, `63`
-- Timber / release trees: N/A - Timber is not used.
-- Sensitive data printed in logs:
-  - Yes. See `ProfileRepository.kt:141-164` and `SupabaseClient.kt:26`.
-- TODO / FIXME / HACK comments:
-  - `app/src/main/java/com/novahorizon/wanderly/WanderlyApplication.kt:50`
-  - `app/src/main/res/xml/data_extraction_rules.xml` contains the default TODO template comment.
+Package cycle result: no hard import cycle was detected, but layering is leaky because `ui` imports `api`, `notifications`, `services`, and repository internals directly.
 
 ---
 
-## AUDIT SUMMARY
+# 1. ARCHITECTURE AND CODE QUALITY
 
-### Critical Issues (must fix before release)
+Verdict: MVVM-ish with repositories and manual dependency injection. The intent is MVVM/repository. The actual code mixes ViewModel orchestration, direct API client calls, direct repository calls from Fragments, notification triggering, and persistence reads in UI classes.
 
-1. `app/src/main/java/com/novahorizon/wanderly/ui/AvatarLoader.kt:29-31` - avatar loading accepts `http://` URLs, allowing insecure transport for user media. Suggested fix: reject non-HTTPS URLs and add a `network_security_config` that blocks cleartext traffic.
-2. `app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt:141-164` - production logs expose storage endpoints, response bodies, and final public avatar URLs. Suggested fix: remove these logs from release builds and never log storage responses containing user data.
-3. `app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt:62` and `app/src/main/java/com/novahorizon/wanderly/data/SocialRepository.kt:16`, `52`, `81`, `107` - `session.user!!` can crash core profile/social flows during auth race conditions. Suggested fix: replace force unwraps with guarded early returns and domain-specific auth errors.
-4. `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:56`, `278` and `app/src/main/java/com/novahorizon/wanderly/ui/missions/MissionsFragment.kt:75` - UI force unwraps can crash on malformed activity results, null mission images, or backend badge nullability drift. Suggested fix: remove `!!`, validate inputs defensively, and keep UI state resilient to missing data.
-5. `app/src/main/java/com/novahorizon/wanderly/ui/MissionsViewModel.kt:64-301`, `ui/gems/GemsFragment.kt:111-395`, `ui/profile/ProfileFragment.kt:91-346` - major business logic is living in View/UI code, making bugs harder to test and easier to regress. Suggested fix: move mission/gems/profile workflows into dedicated use cases / feature ViewModels and keep fragments thin.
-6. `app/proguard-rules.pro:30-44` - broad keep rules sharply reduce release obfuscation. Suggested fix: tighten keep rules to only the serializer/model shapes genuinely required by reflection/serialization.
+## Findings
 
-### Major Issues (should fix soon)
+| ID | Severity | File:line | Snippet | What actually happens | Concrete fix |
+|---|---|---|---|---|---|
+| MAJ-01 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsViewModel.kt:229` | `val info = GeminiClient.generateWithSearchText(` | `MissionsViewModel` directly calls the Gemini API client instead of a repository/use case. | Move place details generation behind `WanderlyRepository` or `MissionDetailsRepository`. |
+| MAJ-02 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\gems\GemsViewModel.kt:70` | `val response = GeminiClient.generateWithSearch(prompt)` | `GemsViewModel` owns AI curation and parsing, not just UI state. | Move ranking/AI parsing into `DiscoveryRepository` or `GemCurationRepository`. |
+| MAJ-03 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:270` | `val repo = WanderlyGraph.repository(requireContext())` | `MapFragment` writes remote user location through the repository. | Add `MapViewModel.updateUserLocation(lat,lng)`. |
+| MAJ-04 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:147` | `val repository = WanderlyGraph.repository(requireContext())` | Active mission persistence is read directly by the Fragment. | Expose active mission preview state from a ViewModel. |
+| MAJ-05 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\DevDashboardFragment.kt:249` | `val rawResponse = GeminiClient.generateText(prompt)` | Admin Fragment calls AI, parses JSON, and shows notifications directly. | Move to `AdminToolsViewModel` or `NotificationPreviewUseCase`. |
+| MIN-01 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileViewModel.kt:64` | `repository.context.getString(R.string.profile_avatar_upload_failed)` | ViewModel resolves Android resources through repository context. | Emit resource IDs/events; resolve strings in Fragment. |
+| MIN-02 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileFragment.kt:464` | `when (badge) {` | Badge display logic is hardcoded inside RecyclerView adapter. | Submit `BadgeUiModel(nameRes, iconRes, backgroundRes)`. |
+| MIN-03 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsViewModel.kt:213` | `fun getPlaceDetails() {` | Function name says `get`, but it performs network-backed AI fetch. | Rename to `fetchPlaceDetails()` or `loadPlaceDetails()`. |
 
-1. `app/src/main/java/com/novahorizon/wanderly/data/PreferencesStore.kt:8-74`, `notifications/NotificationCheckCoordinator.kt:402-403`, `notifications/WanderlyNotificationManager.kt:42-71` - plaintext `SharedPreferences` used for behavioral state and mission data. Suggested fix: centralize state storage and move sensitive local data to encrypted storage or at least DataStore with stricter boundaries.
-2. `app/src/main/java/com/novahorizon/wanderly/ui/MissionsViewModel.kt:53-61` - `loadProfile()` adds duplicate collectors. Suggested fix: collect once in init or hold a single job and cancel/restart explicitly.
-3. `app/src/main/java/com/novahorizon/wanderly/data/DiscoveryRepository.kt:151-174` - 15 parallel Google Places queries without throttling can hammer quotas and increase failure rates. Suggested fix: batch, limit concurrency, and cache results by city/radius.
-4. `app/src/main/java/com/novahorizon/wanderly/ui/profile/ProfileFragment.kt:184-197` - badge unlock logic writes back during profile rendering, risking repeated remote writes and noisy state churn. Suggested fix: move badge normalization server-side or into a repository/domain step with idempotent comparison.
-5. `app/src/main/java/com/novahorizon/wanderly/services/HiveRealtimeService.kt:139-151` - async unsubscribe in `onDestroy()` is not deterministic. Suggested fix: cancel collector first, use `runBlocking` only if truly required for teardown, or restructure ownership so cleanup completes before service death.
-6. `app/src/main/java/com/novahorizon/wanderly/api/GeminiClient.kt:156-174`, `ui/MissionsViewModel.kt:120-127`, `ui/gems/GemsFragment.kt:314-320` - AI response parsing is brittle and will crash/fail on small response-shape drift. Suggested fix: use validated DTOs and strict schema extraction with safer fallback handling.
-7. `app/src/main/AndroidManifest.xml:55-69` - auth relies on custom-scheme deep links only, without verified App Links. Suggested fix: migrate auth callback handling to verified HTTPS App Links if the auth stack permits it.
-8. `app/src/main/res/layout/fragment_profile.xml:85-96`, `119-127`, `app/src/main/res/layout/item_social_profile.xml:123-135` - key controls miss the 48dp accessibility minimum. Suggested fix: enlarge tap targets or wrap them in larger clickable containers.
-9. `app/src/main/res/layout/fragment_login.xml:2-109` and `fragment_signup.xml:2-135` - auth screens are not scrollable, making keyboard overlap likely on small devices. Suggested fix: move forms into `NestedScrollView`/inset-aware containers and define IME actions.
-10. `app/src/androidTest/java/com/novahorizon/wanderly/ExampleInstrumentedTest.kt:17-23` plus missing feature tests elsewhere - automated confidence is far too low for a release. Suggested fix: add ViewModel, repository, and UI tests for auth, missions, profile, and social.
+## God Classes
 
-### Minor Issues (nice to have)
+| Severity | File:line | Snippet | Lines | Responsibilities | Fix |
+|---|---|---|---:|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\notifications\NotificationCheckCoordinator.kt:15` | `object NotificationCheckCoordinator {` | 397 | streak rules, social rules, cooldown state, aggregate notification state, dedup cleanup | Split into `StreakNotificationRules`, `SocialNotificationRules`, `NotificationStateStore`. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:44` | `class MapFragment : Fragment() {` | 362 | permissions, OSMDroid lifecycle, current location, friend markers, active mission preview, remote location write | Extract renderer, permission controller, and ViewModel write path. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsFragment.kt:35` | `class MissionsFragment : Fragment() {` | 347 | location, city lookup, camera permission, photo capture, bitmap decode, state rendering, rank UI | Extract photo/location controllers. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileFragment.kt:43` | `class ProfileFragment : Fragment() {` | 328 before nested adapter; file is 506 | avatar pick/crop/upload, profile UI, username dialog, sharing, badges, class selection, halo styling | Move adapter/helper classes out and add presenter helpers. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\ProfileRepository.kt:29` | `class ProfileRepository(` | 327 | profile CRUD, rank normalization, local streak cache, avatar decode, storage upload, URL handling | Split `AvatarRepository` from profile CRUD. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\DiscoveryRepository.kt:20` | `class DiscoveryRepository {` | 306 | Overpass, Google Places, category mapping, filtering, ranking, distance math | Split data sources and ranker. |
 
-1. `app/src/main/java/com/novahorizon/wanderly/auth/AuthSessionCoordinator.kt` - three unrelated auth utilities share one file. Suggested fix: split them into dedicated files.
-2. `app/src/main/java/com/novahorizon/wanderly/data/WanderlyRepository.kt` - broad facade mixes concerns and exposes `Context`. Suggested fix: split mission cache/profile/social/discovery concerns and stop exposing app context from the repository.
-3. `app/src/main/res/layout/activity_splash.xml:39`, `dialog_edit_username.xml:12`, `20`, `31`, `fragment_signup.xml:28`, `50`, `72`, `96`, `item_badge.xml:37`, and many strings in `fragment_dev_dashboard.xml` / `DevDashboardFragment.kt` - localization debt. Suggested fix: move all user-facing text into `strings.xml`.
-4. `app/src/main/AndroidManifest.xml:7`, `12` - unused or mismatched permissions declared. Suggested fix: remove `ACCESS_COARSE_LOCATION` and `FOREGROUND_SERVICE_SPECIAL_USE` unless a real use case is added.
-5. `app/src/main/res/layout/fragment_missions.xml:177-222` - hidden debug panel exists in layout but is not wired into the feature. Suggested fix: remove dead debug UI or gate it cleanly behind a debug build flag.
-6. `app/src/main/java/com/novahorizon/wanderly/WanderlyApplication.kt:50` and `res/xml/data_extraction_rules.xml` - stale TODO/FIXME noise. Suggested fix: clean up resolved comments and sample config files.
+## ViewModel Audit
 
-### Overall Score
-
-| Category | Score (1-10) | Notes |
+| ViewModel | Lines | Verdict |
 |---|---:|---|
-| Architecture & Code Quality | 4 | Clear intent, inconsistent execution, too much feature logic in UI |
-| Performance | 6 | Not disastrous, but concurrency and callback orchestration need tightening |
-| Security | 3 | Cleartext avatar allowance, verbose logging, weak local hardening |
-| Crash Risks & Stability | 4 | Several `!!` crash points and brittle parsing paths |
-| Network & API | 5 | Timeouts exist, retries/caching/state handling are incomplete |
-| Database & Local Storage | 4 | No DB complexity, but local persistence is simplistic and loosely typed |
-| UI & User Experience | 5 | Strong theme, but accessibility/localization/keyboard polish lag behind |
-| Dependencies & Build | 7 | Current Android stack is in decent shape; release hardening rules need work |
-| Testing | 2 | Critical flows have almost no automated safety net |
-| Permissions | 5 | Timing is mostly okay; denial UX and manifest cleanup are weak |
-| Manifest & Configuration | 5 | Mostly sane, but auth/deep-link hardening is incomplete |
-| Logging & Debugging | 3 | Too much release-path logging, including sensitive details |
+| `AuthViewModel` | 84 | Reasonable size, but hardcoded auth messages should be resources. |
+| `GemsViewModel` | 211 | Bloated; owns AI prompt/parsing. |
+| `MainViewModel` | 139 | Reasonable but hardcoded streak messages. |
+| `MissionsViewModel` | 329 | Bloated; owns prompt generation, AI parsing, place verification, streak logic, notification trigger. |
+| `ProfileViewModel` | 153 | Moderate; uses repository context for strings. |
+| `SocialViewModel` | 74 | Anemic/thin pass-through and missing error state. |
 
-Overall project health score: 4.4 / 10
+Repository pattern: no DAO or Retrofit is used. Room is absent. The repository boundary is still violated by direct `GeminiClient` calls from ViewModels and direct repository calls from Fragments.
 
-### Top 5 Priority Actions
+Anti-pattern checklist:
 
-1. Lock down transport and logging: reject `http://`, add `network_security_config`, and strip sensitive release logs.
-2. Remove all crash-prone `!!` usages in auth/profile/social/mission paths and replace them with explicit guarded failure handling.
-3. Refactor mission, gems, and profile workflows out of fragments / oversized ViewModels into dedicated presentation/domain layers.
-4. Replace ad-hoc preference access with one storage strategy, and harden local state handling for mission, notification, and profile flows.
-5. Add real automated coverage for auth, mission generation/verification, avatar upload, profile progression, and notification logic before any release candidate.
+```text
+[x] context stored in ViewModel indirectly via repository.context
+[x] hardcoded logic in RecyclerView Adapters
+[ ] LiveData mutated from background threads with .value: not found
+[ ] object singletons holding Activity/Fragment refs: not found
+[x] runBlocking called on main-thread reachable paths
+```
+
+Code duplication >=10 lines:
+
+| Severity | File:line | Duplicate location | Snippet | Fix |
+|---|---|---|---|---|
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\gems\GemsFragment.kt:205` | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:233`, `...\MissionsFragment.kt:279` | `private fun resolveLocationPermissionState(): LocationPermissionGate.State {` | Extract shared location permission controller. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsViewModel.kt:315` | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileViewModel.kt:145` | `private fun startProfileCollector() {` | Expose `currentProfile.asLiveData()` or shared collector helper. |
+
+---
+
+# 2. PERFORMANCE
+
+| ID | Severity | File:line | Snippet | What actually happens | Concrete fix |
+|---|---|---|---|---|---|
+| MAJ-06 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\PreferencesStore.kt:244` | `return runBlocking { block() }` | DataStore reads block the calling thread. | Make preference API suspend/Flow-based. |
+| MAJ-07 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\SplashActivity.kt:76` | `val rememberMe = PreferencesStore(this).isRememberMeEnabled()` | Splash calls the blocking wrapper from main-lifecycle coroutine. | Read in `withContext(Dispatchers.IO)` or pre-load state. |
+| MAJ-08 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\MainActivity.kt:52` | `onboardingSeen = repository.isOnboardingSeen(),` | Main navigation setup blocks on DataStore. | Resolve startup state asynchronously before `setGraph`. |
+| MAJ-09 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\GeminiClient.kt:117` | `var response = client.newCall(request).execute()` | Blocking OkHttp call is not tied to coroutine cancellation. | Use cancellable OkHttp wrapper and cancel `Call` on coroutine cancellation. |
+| MAJ-10 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\DiscoveryRepository.kt:98` | `client.newCall(request).execute().use { response ->` | Overpass request can continue after screen cancellation until timeout. | Same cancellable `Call` wrapper. |
+| MIN-04 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileFragment.kt:77` | `val destinationFile = File.createTempFile("avatar_crop_", ".jpg", requireContext().cacheDir)` | Small file IO runs in activity-result callback on main. | Create destination off main or pre-create before launching picker. |
+| MIN-05 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\common\AvatarLoader.kt:52` | `else -> Glide.with(imageView).load(trimmedSource).error(R.drawable.ic_buzzy)` | Avatar loads have `circleCrop` and cache, but no explicit size override. | Add `.override(160, 160)` or resource dimension override. |
+| MIN-06 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\common\AvatarLoader.kt:148` | `return Glide.with(imageView)` | Supabase avatar fallback request also lacks explicit size. | Apply size override to primary and fallback requests. |
+
+Coroutines/Flow:
+
+```text
+GlobalScope usage: not found
+launch without lifecycle/service/viewmodel scope: not found
+collect without cancellation: not found; ViewModel/service scopes are used
+flowOn gaps: no CPU-heavy custom flows found
+Hot flows emitting with no subscribers: no continuous hot producer found
+```
+
+Memory leak audit:
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\WanderlyGraph.kt:7` | `@Volatile` | Lint flags static repository/context. Actual repository uses `applicationContext`, but test override can hold arbitrary repository. | Keep production singleton app-context only; move overrides to test/debug DI. |
+
+Listeners/callbacks:
+
+```text
+MapFragment map listener is unregistered at C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:388
+Snippet: mapListener?.let { mapView.removeMapListener(it) }
+```
+
+RecyclerView: `ListAdapter` + `DiffUtil` used. Compose/LazyColumn: N/A — Compose is not used.
+
+Room performance: N/A — Room is not used.
+
+Asset audit:
+
+| Severity | File | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\drawable\ic_launcher_foreground.png:1` | `106.3 KB PNG in res/drawable` | Densityless bitmap over 100KB; lint also flags it. | Move to density folder or convert to WebP/vector. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\profile_check4.png:1` | `2,281.9 KB tracked screenshot` | Large root screenshot is tracked in git. | Move QA screenshots out of repo or document them under `docs/previews`. |
+
+Other >100KB assets found: `profile_current.png` 470KB, `screenshot.png` 470KB, `profile_check.png` 379KB, `profile_check2.png` 376KB, `docs/previews/memory-shot-2.png` 389KB, `docs/previews/device-current.png` 198KB, `docs/previews/device-current-2.png` 111KB, `profile_after_streak.png` 102KB.
+
+---
+
+# 3. SECURITY
+
+| ID | Severity | File:line | Snippet | What actually happens | Concrete fix |
+|---|---|---|---|---|---|
+| MAJ-11 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\local.properties:13` | `SUPABASE_ANON_KEY=eyJhbG***` | Real-looking Supabase anon JWT exists locally. File is gitignored, but it is injected into `BuildConfig`. | Keep untracked, rotate if shared, never store service-role keys here. |
+| MIN-07 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\local.properties:12` | `SUPABASE_URL=https://aimpar***.supabase.co` | Backend URL is local config, not secret, but should not be logged broadly. | Keep local and redact logs. |
+| MAJ-12 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\xml\network_security_config.xml:3` | `<base-config cleartextTrafficPermitted="false" />` | Cleartext is disabled, but no certificate pinning is configured. | Add `pin-set` if the threat model requires pinning, or document why platform trust is accepted. |
+| MAJ-13 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\SupabaseClient.kt:53` | `internal fun validateConfig(supabaseUrl: String, supabaseAnonKey: String) {` | Config validation checks blank/placeholders but does not reject non-HTTPS URLs. | Parse URL and require `https`. |
+| MAJ-14 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\GeminiClient.kt:22` | `private val client = OkHttpClient.Builder()` | OkHttp clients do not enforce HTTPS-only at client/interceptor level. | Use shared OkHttp client with `request.url.isHttps` interceptor. |
+| MAJ-15 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\common\AvatarLoader.kt:81` | `Log.e(TAG, "Avatar load failed for model=$model", e)` | Avatar model/path can leak in release logs. | Redact model or log only in debug. |
+| MAJ-16 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\GeminiClient.kt:134` | `Log.e(TAG, "Failed to refresh session: ${refreshError.message}")` | Release log includes auth refresh exception message. | Use stable release error code; details only in debug/crash redaction. |
+| MIN-08 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\common\LocationPermissionGate.kt:34` | `return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)` | Plain SharedPreferences stores only permission-request flag. Not sensitive, but inconsistent with DataStore migration. | Move to DataStore or document as non-sensitive. |
+| MIN-09 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\proguard-rules.pro:23` | `-keep @kotlinx.serialization.Serializable class * { *; }` | Broad keep rule preserves all serializable classes. | Narrow to DTOs that need stable names. |
+
+Secrets grep result: high-signal secret-like hits are local `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The raw regex `[A-Za-z0-9]{20,}` also matches many identifiers/resource names, so only key-bearing lines are reported as secrets.
+
+Data storage:
+
+```text
+Explicit token/password plaintext writes: not found
+Supabase SDK auto-load storage: enabled at C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\SupabaseClient.kt:47
+Snippet: autoLoadFromStorage = true
+```
+
+WebView audit: N/A — no WebView, `javaScriptEnabled`, `setAllowFileAccess`, or `addJavascriptInterface` found in source.
+
+Input validation:
+
+| Field | Validation evidence |
+|---|---|
+| Login email | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\auth\LoginFragment.kt:54` - `showSnackbar(getString(R.string.auth_invalid_email), isError = true)` |
+| Login password | `...\LoginFragment.kt:59` - `showSnackbar(getString(R.string.auth_password_required), isError = true)` |
+| Signup email/password/confirm/username | `...\SignupFragment.kt:46`, `51`, `56`, `61` |
+| Friend code | UI non-empty check at `...\SocialFragment.kt:112`; regex normalization at `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\SocialRepository.kt:143` |
+| Profile username | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileFragment.kt:326` - `if (newUsername.length >= 3) {` |
+| Dev numeric fields | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\DevDashboardFragment.kt:322` - `val editHoney = honeyInput.takeIf { it.isNotEmpty() }?.toIntOrNull()` |
+
+SQL injection: N/A — no `rawQuery()` found and no local SQL layer exists.
+
+Manifest exported components:
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:45` | `android:exported="true"` | `SplashActivity` is exported for launcher/invite links. Invite parsing is regex-validated, but HTTPS App Links are not auto-verified. | Add `android:autoVerify="true"` and host `assetlinks.json`, or keep custom scheme only. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:74` | `android:exported="true"` | `AuthActivity` is exported for auth callbacks. Code validates scheme/host/path, but repo has no tests for malformed query/fragment payloads. | Add malformed callback tests and document Supabase PKCE/state validation. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:95` | `android:exported="true"` | Widget receiver is exported, expected for app widgets, no custom permission. | Keep exported but validate custom actions in `onReceive`. |
+
+---
+
+# 4. CRASH RISKS AND STABILITY
+
+`.\gradlew.bat :app:lintDebug --console=plain` failed with 5 errors and 138 warnings.
+
+## Critical Lint Errors
+
+| ID | Severity | File:line | Snippet | Actual risk | Concrete fix |
+|---|---|---|---|---|---|
+| CRIT-01 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\WanderlyServices.kt:89` | `fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)` | Missing permission check can throw `SecurityException`. | Check fine/coarse permission immediately before call and catch `SecurityException`. |
+| CRIT-02 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:6` | `<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />` | Fine location without coarse violates Android 12+ lint rule. | Add `ACCESS_COARSE_LOCATION` and handle approximate grant. |
+| CRIT-03 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\widgets\StreakWidgetAlarmScheduler.kt:48` | `alarmManager.canScheduleExactAlarms()` | API 31 call not lint-provably guarded for minSdk 26. | Use direct `Build.VERSION.SDK_INT >= S` guard or `@RequiresApi` helper. |
+| CRIT-04 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\item_onboarding_page.xml:71` | `android:tint="@color/text_primary" />` | AppCompat lint error; build fails under lint. | Replace with `app:tint`. |
+| CRIT-05 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\item_social_profile.xml:131` | `android:tint="@color/error"` | AppCompat lint error; build fails under lint. | Replace with `app:tint`. |
+
+## Exception Handling
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\ProfileRepository.kt:134` | `} catch (_: Exception) {` | Test helper swallows exception and returns false. | Log debug or return failure reason. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\widgets\WanderlyStreakWidgetProvider.kt:103` | `} catch (_: Exception) {` | Widget fetch failure is swallowed to null. | Add redacted debug/telemetry log. |
+
+## Null Safety
+
+All `!!` occurrences:
+
+```text
+SAFE-ish binding getter: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\auth\LoginFragment.kt:26 - private val binding get() = _binding!!
+SAFE-ish binding getter: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\auth\SignupFragment.kt:20 - private val binding get() = _binding!!
+RISKY after onDestroyView: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:47 - private val binding get() = _binding!!
+RISKY after onDestroyView: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsFragment.kt:38 - private val binding get() = _binding!!
+SAFE-ish binding getter: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\onboarding\OnboardingFragment.kt:23 - private val binding get() = _binding!!
+RISKY async callback: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\DevDashboardFragment.kt:35 - private val binding get() = _binding!!
+RISKY activity result callback: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileFragment.kt:46 - private val binding get() = _binding!!
+SAFE test fixture: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\test\java\com\novahorizon\wanderly\util\DateUtilsTest.kt:17 - val localLateNight = parser.parse("2026-04-22 01:30")!!
+```
+
+Fix for risky binding getters: use `_binding ?: return` inside async callbacks and keep work tied to `viewLifecycleOwner`.
+
+Lifecycle:
+
+```text
+Map listener unregister: C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\MapFragment.kt:388
+Snippet: mapListener?.let { mapView.removeMapListener(it) }
+Fragment transactions: N/A — no direct commit() calls found.
+```
+
+Crash-prone patterns:
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\map\FriendMapClusterer.kt:56` | `return 156543.03392 * cos(clampedLatitude * PI / 180.0) / (1 shl zoomLevel.toInt())` | Shift assumes safe zoom integer range. | `zoomLevel.toInt().coerceIn(0, 22)`. |
+
+`indexOf()` check: safe in `DevDashboardFragment` because lines 250-253 check `-1` before substring.
+
+---
+
+# 5. NETWORK AND API
+
+Retrofit: N/A — no Retrofit dependency or annotations.
+
+Ktor: present as Supabase engine. Direct app calls use OkHttp.
+
+Client timeouts:
+
+```text
+GeminiClient: connect 60s, read 120s, write 60s - C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\GeminiClient.kt:23
+PlacesProxyClient: connect/read/write 30s - C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\PlacesProxyClient.kt:17
+DiscoveryRepository: connect/read/write 30s - C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\DiscoveryRepository.kt:22
+ProfileRepository: connect/read/write 30s - C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\ProfileRepository.kt:59
+```
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MAJ-17 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\PlacesProxyClient.kt:62` | `if (!resp.isSuccessful) {` | 4xx/5xx/timeouts/parse failures collapse into generic exceptions. | Return sealed `NetworkResult`. |
+| MAJ-18 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\GeminiClient.kt:144` | `throw Exception("Proxy call failed: ${resp.code}")` | Only 401 is retried; no exponential backoff for 429/5xx/timeouts. | Add bounded backoff with jitter. |
+| MAJ-19 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsViewModel.kt:208` | `_missionState.postValue(MissionState.Error("System error: ${e.message}"))` | Raw exception message can reach users. | Map errors to string resources; log internals separately. |
+| MAJ-20 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\social\SocialViewModel.kt:19` | `private val _isLoading = MutableLiveData<Boolean>(false)` | Social state is scattered booleans/nullables, not a single state machine. | Use `SocialUiState.Loading/Loaded/Empty/Error`. |
+| MIN-10 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\gems\GemsLoadGate.kt:4` | `internal fun shouldAutoLoad(currentState: GemsViewModel.GemsState?): Boolean {` | Only auto-load is gated; manual refresh has no throttle. | Add per-location cooldown/debounce. |
+
+Caching/offline:
+
+```text
+Cache-Control: not implemented for direct OkHttp calls.
+Offline-first: not implemented.
+Pagination: no Paging 3; most lists are bounded by friend count or take(40)/take(12).
+Logging interceptor: not found.
+```
+
+---
+
+# 6. DATABASE AND LOCAL STORAGE
+
+Room/SQLite: N/A — no Room dependency, `@Database`, `@Entity`, `@Dao`, or `@Query`.
+
+Remote DB: Supabase tables are inferred from code (`profiles`, `friendships`). No SQL migrations or schema files are present.
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MAJ-21 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\SocialRepository.kt:57` | `.select { filter { eq("friend_code", normalizedCode) } }` | No committed migration proves `profiles.friend_code` is unique/indexed. | Add Supabase migration with unique index. |
+| MAJ-22 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\SocialRepository.kt:18` | `val friendships = SupabaseClient.client.postgrest["friendships"]` | Queries filter by `user_id` OR `friend_id`; no committed indexes prove this is efficient. | Add indexes on `friendships(user_id)` and `friendships(friend_id)`. |
+| MIN-11 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\PreferencesStore.kt:149` | `fun removeNotificationCooldown(key: String) = blockingWrite {` | Cooldown state has clear/remove APIs but no age-based cleanup. | Prune stale notification keys periodically. |
+
+Transactions: N/A for local DB. Remote multi-step operations are not transactionally wrapped in client code.
+
+Large objects: no local DB BLOBs. Avatars go to Supabase Storage.
+
+TypeConverters/WAL: N/A — Room is not used.
+
+---
+
+# 7. UI AND USER EXPERIENCE
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MAJ-23 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\missions\MissionsViewModel.kt:29` | `class MissionsViewModel(private val repository: WanderlyRepository) : ViewModel() {` | No `SavedStateHandle`; transient mission verification/details/loading state can be lost on process death. | Add `SavedStateHandle` for multi-step state. |
+| MAJ-24 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\fragment_profile.xml:174` | `<ImageButton` | Share friend-code touch target is 40dp x 40dp. | Make it 48dp or wrap in 48dp touch container. |
+| MAJ-25 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\profile\ProfileViewModel.kt:38` | `fun loadProfile() {` | Profile load silently returns if profile is null; no loading/error state. | Expose `ProfileUiState.Loading/Loaded/Error`. |
+| MAJ-26 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\activity_splash.xml:15` | `<ImageView` | Missing `contentDescription` or decorative accessibility flag. | Add content description or `importantForAccessibility="no"`. |
+| MAJ-27 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\item_social_profile.xml:57` | `<ImageView` | Social avatar image lacks accessibility description. | Bind username description or mark decorative. |
+| MIN-12 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\values\colors.xml:4` | `<color name="primary">#F5A623</color>` | Primary color is used as text in multiple layouts and has weak contrast on light backgrounds. | Add darker `primary_text` color. |
+| MIN-13 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\values\colors.xml:6` | `<color name="accent">#FFD166</color>` | Accent text use is low contrast on light backgrounds. | Use dark text over accent or darker accent variant. |
+| MIN-14 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\fragment_social.xml:118` | `<com.google.android.material.textfield.TextInputEditText` | Friend-code input lacks `imeOptions`. | Add `actionDone` and editor action. |
+| MIN-15 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\fragment_dev_dashboard.xml:126` | `<EditText` | Lint flags missing `inputType`. | Add `inputType` or mark not autofillable. |
+| MIN-16 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\ui\social\SocialFragment.kt:228` | `holder.rankNumber.text = "#${position + 1}"` | Hardcoded/interpolated UI string. | Use string resource placeholder. |
+| MIN-17 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\menu\bottom_nav_menu_dev.xml:22` | `android:title="God Mode" />` | Hardcoded menu title. | Extract to `strings.xml`. |
+
+Keyboard handling: `AuthActivity` uses `windowSoftInputMode="adjustResize"` at manifest line 74. Login/signup fields have IME actions. Social/dev fields need polish as above.
+
+Back navigation: Navigation Component handles normal back stack. No custom `OnBackPressedCallback` found.
+
+Edge-to-edge: present in `MainActivity`:
+
+```text
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\MainActivity.kt:103
+Snippet: ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+```
+
+Compose recomposition: N/A — Compose is not used.
+
+---
+
+# 8. DEPENDENCIES AND BUILD
+
+Verification:
+
+```text
+.\gradlew.bat :app:testDebugUnitTest --stacktrace
+Result: PASS, 98 tests, 0 failures, 0 errors
+
+.\gradlew.bat :app:dependencies --configuration debugRuntimeClasspath
+Result: PASS, no FAILED resolution lines found
+
+.\gradlew.bat :app:lintDebug --console=plain
+Result: FAIL, 5 errors, 138 warnings
+```
+
+OSS Index check: attempted `https://ossindex.sonatype.org/api/v3/component-report`; response was `401 Unauthorized` without credentials. OSV fallback query returned 28 dependency results and no direct vulnerabilities for declared direct dependencies.
+
+Reference links used: [OSS Index REST API](https://ossindex.sonatype.org/doc/rest), [OSS Index coordinates](https://ossindex.sonatype.org/doc/coordinates), [Maven Central OkHttp](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp/), [Maven Central kotlinx serialization](https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-serialization-json-io-jvm/).
+
+Outdated dependencies reported by lint:
+
+| Severity | File:line | Snippet | Latest reported | Fix |
+|---|---|---|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:2` | `agp = "9.1.0"` | 9.2.0 | Upgrade AGP after Gradle/Studio compatibility check. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:3` | `kotlin = "2.2.10"` | 2.3.21 | Upgrade Kotlin plugins together. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:13` | `serialization = "1.7.3"` | 1.11.0 | Upgrade with Kotlin alignment. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:14` | `coroutines = "1.9.0"` | 1.10.2 | Upgrade and run coroutine tests. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:17` | `glide = "4.16.0"` | 5.0.7 | Evaluate Glide 5 migration. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:18` | `osmdroid = "6.1.18"` | 6.1.20 | Upgrade and smoke test map. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:21` | `ktor = "3.0.1"` | 3.4.3 | Verify Supabase compatibility. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:23` | `okhttp = "4.12.0"` | 5.3.2 | Plan OkHttp 5 migration. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:24` | `work = "2.10.4"` | 2.11.2 | Upgrade and test widget/workers. |
+
+Other lint-reported updates: Material 1.13.0, ConstraintLayout 2.2.1, Navigation 2.9.8, DataStore 1.2.1, AndroidX test JUnit 1.3.0, Espresso 3.7.0.
+
+Version conflicts/drift:
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle\libs.versions.toml:3` | `kotlin = "2.2.10"` | Dependency tree upgrades Kotlin stdlib transitively to 2.3.20 while plugin catalog is 2.2.10. | Align Kotlin plugin/stdlib/kotlinx versions. |
+
+SDK levels:
+
+```text
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:14 - compileSdk = 36
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:17 - minSdk = 26
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:18 - targetSdk = 36
+```
+
+Release R8:
+
+```text
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:36 - isMinifyEnabled = true
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:37 - isShrinkResources = true
+```
+
+Build findings:
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle.properties:18` | `android.builtInKotlin=false` | Deprecated; AGP says removal in 10.0. | Remove and validate build. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\gradle.properties:19` | `android.newDsl=false` | Deprecated; AGP says removal in 10.0. | Remove and update scripts if needed. |
+| MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:91` | `kapt(libs.glide.compiler)` | Lint recommends KSP for supported processors. | Move Glide compiler to KSP after compatibility check. |
+
+Unused dependencies: no direct declared dependency with zero source references was confidently identified.
+
+Debug-only tools: LeakCanary/Flipper/Chucker not found. OkHttp logging interceptor not found.
+
+Build variants: debug/release only. N/A — no staging flavor exists to audit.
+
+---
+
+# 9. TESTING
+
+Test classes found:
+
+```text
+androidTest: ExampleInstrumentedTest, LoginFlowInstrumentedTest, MissionGenerationInstrumentedTest
+unit: PlacesGeocoderNameMatchTest, SupabaseClientConfigTest, AuthCallbackMatcherTest, AuthRoutingTest, HiveRankTest,
+      ProfileRepositoryAvatarStorageTargetTest, ProfileRepositoryPayloadTest, SocialRepositoryFriendCodeTest,
+      InviteDeepLinkTest, InviteShareFormatterTest, DailyStreakStatusEvaluatorTest, AvatarLoaderUrlPolicyTest,
+      GemsLoadGateTest, LocationPermissionGateTest, MainNavigationDestinationsTest, FriendMapClustererTest,
+      MapLocationCallbackGuardTest, ProfileFragmentAvatarPresentationTest, AiResponseParserTest, DateUtilsTest,
+      StreakTierHelperTest, StreakWidgetAlarmSchedulerTest, StreakWidgetStateHelperTest
+```
+
+| Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\test\java\com\novahorizon\wanderly\ui\map\FriendMapClustererTest.kt:1` | `package com.novahorizon.wanderly.ui.map` | Good map unit coverage exists, but equivalent ViewModel/network error coverage is missing. | Add tests for Missions/Gems/Social/Profile ViewModels with fake repositories/API clients. |
+| MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\androidTest\java\com\novahorizon\wanderly\MissionGenerationInstrumentedTest.kt:71` | `Intents.init()` | Instrumented tests exist but were not run by unit-test command. | Add CI/emulator step for `connectedDebugAndroidTest`. |
+
+Coverage estimate: no JaCoCo/Kover report. Static estimate is about 25% of critical behavior, lower for network/UI error states.
+
+Critical uncovered flows:
+
+```text
+1. Supabase auth offline/failure login
+2. Gemini/Places token refresh failure
+3. HTTP 429/5xx retry UX
+4. Avatar upload failures and large image memory path
+5. Social add/remove friend failures
+6. Streak crisis restore/reset UI
+7. Location permanently-denied flow
+8. Notification permission denied/permanently denied
+9. Exact alarm behavior by API level
+10. Malformed auth/invite deep links
+```
+
+Thread.sleep usage: not found. MockK/Mockito: not used; manual fakes are used.
+
+---
+
+# 10. PERMISSIONS
+
+Declared permissions:
+
+```text
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:5  INTERNET
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:6  ACCESS_FINE_LOCATION
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:7  CAMERA
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:8  POST_NOTIFICATIONS
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:9  FOREGROUND_SERVICE
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:10 FOREGROUND_SERVICE_DATA_SYNC
+C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:11 SCHEDULE_EXACT_ALARM
+```
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| CRIT-06 | CRITICAL | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:6` | `<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />` | `ACCESS_COARSE_LOCATION` missing. | Add coarse permission and support approximate grants. |
+| MAJ-28 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\MainActivity.kt:153` | `ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)` | Notification permission requested at main startup with no rationale/fallback handling. | Ask at point of value and handle denial/permanent denial. |
+| MAJ-29 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:11` | `<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />` | Exact alarm permission declared, but no settings request flow was found. | Add `ACTION_REQUEST_SCHEDULE_EXACT_ALARM` flow or remove permission and use inexact alarms. |
+
+Unused permissions: no fully orphaned dangerous permission was confirmed. `SCHEDULE_EXACT_ALARM` is used conceptually but lacks runtime/user-management flow.
+
+Android 13 media permissions: N/A — `READ_EXTERNAL_STORAGE` not found.
+
+Background location: N/A — `ACCESS_BACKGROUND_LOCATION` not found.
+
+---
+
+# 11. MANIFEST AND CONFIGURATION
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MIN-18 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:57` | `<data android:scheme="wanderly" android:host="invite" />` | Lint warns data tags combine in non-obvious ways. | Split intent filters for each link shape. |
+| MAJ-30 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:19` | `android:allowBackup="false"` | Lint warns this is deprecated on Android 12+ without `dataExtractionRules`. | Add `android:dataExtractionRules="@xml/data_extraction_rules"` or remove sample rules. |
+| MAJ-31 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\xml\data_extraction_rules.xml:3` | `<cloud-backup />` | Sample extraction rules allow backup/transfer and are unused. | Customize exclusions and reference from manifest, or delete. |
+| MIN-19 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\xml\file_paths.xml:3` | `<cache-path name="my_images" path="." />` | FileProvider exposes whole cache directory under grants. | Scope to `images/` subdirectory. |
+
+Component declarations: all Activities/Service/Receiver/Provider used by source are declared.
+
+Launch modes: no `singleTask` or `singleInstance`.
+
+`android:debuggable="true"`: not found.
+
+Deep/App links: no `autoVerify="true"` found for HTTPS links.
+
+---
+
+# 12. LOGGING AND DEBUGGING
+
+Static scan found 62 `Log.*`/print occurrences in source-owned files.
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MAJ-32 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\PlacesGeocoder.kt:56` | `Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")` | Production log can expose place/city search context. | Guard with `BuildConfig.DEBUG` or redact. |
+| MAJ-33 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\PlacesGeocoder.kt:139` | `Log.e("PlacesGeocoder", "Failed to resolve '$placeName' with Google Places", e)` | Failure log includes searched place name. | Redact place name in release logs. |
+| MAJ-34 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\DiscoveryRepository.kt:243` | `Log.e("DiscoveryRepository", "Google Places fallback error for query '$query': ${e.message}")` | Logs raw Google Places query and error message. | Log query type/status only. |
+| MAJ-35 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\api\SupabaseClient.kt:27` | `Log.d(TAG, "Initializing Supabase with URL: ${BuildConfig.SUPABASE_URL}")` | Debug log prints backend URL. | Redact project ref/host; keep only debug. |
+| MIN-20 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\data\PreferencesStore.kt:243` | `// TODO: Replace remaining synchronous preference callers so DataStore reads stay fully non-blocking.` | Known performance TODO remains. | Finish async preference migration. |
+| MIN-21 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\xml\backup_rules.xml:2` | `Sample backup rules file; uncomment and customize as necessary.` | Sample backup file is unused/noisy. | Customize or remove. |
+
+Timber: not used. Crash reporting release tree/service: not found.
+
+Commented-out code blocks >5 runtime lines: no significant runtime block found; sample XML comments should be cleaned.
+
+---
+
+# 13. CI/CD AND PROJECT HYGIENE
+
+CI: N/A — no `.github/`, Bitrise, CircleCI, GitLab CI, or Azure pipeline file found.
+
+Lint baseline: N/A — no lint baseline or `lint.xml` found. Current lint fails; baseline should not be added before fixing the 5 errors.
+
+Pre-commit hooks: N/A — no `.pre-commit-config.yaml`, ktlint, or detekt config found.
+
+CHANGELOG: N/A — no `CHANGELOG.md` found.
+
+Keystore/google-services: no `.jks`, `.keystore`, or `google-services.json` found.
+
+| ID | Severity | File:line | Snippet | Finding | Fix |
+|---|---|---|---|---|---|
+| MAJ-36 | MAJOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\build.gradle.kts:36` | `isMinifyEnabled = true` | Release build is configured, but no CI enforces tests/lint/release assemble. | Add CI running unit tests, lint, and release assemble. |
+| MIN-22 | MINOR | `C:\Users\mihai\AndroidStudioProjects\Wanderly\.gitignore:20` | `local.properties` | `local.properties` is ignored twice. | Remove duplicate ignore entry. |
+
+`.gitignore` correctly ignores `/local.properties`, `.gradle`, `.kotlin`, `.worktrees`, and Supabase temp files.
+
+---
+
+# AUDIT SUMMARY
+
+## Scan Statistics
+
+```text
+Files scanned:        1,456 requested-extension files
+Total files under root: 12,188
+Total lines of code:  190,764 requested-extension lines including generated/cache files
+Source-owned LOC:      15,361
+Kotlin files:              96 source-owned / 185 recursive
+XML files:                131 source-owned / 695 recursive
+Test files:                28 source-owned
+Test coverage (est.):     25% (no JaCoCo/Kover report configured)
+```
+
+## CRITICAL Issues - Must Fix Before Any Release
+
+| ID | Category | File:line | Snippet | Fix |
+|---|---|---|---|---|
+| CRIT-01 | Stability | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\WanderlyServices.kt:89` | `fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)` | Add immediate permission check/catch. |
+| CRIT-02 | Manifest | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:6` | `<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />` | Add coarse permission. |
+| CRIT-03 | API Level | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\java\com\novahorizon\wanderly\widgets\StreakWidgetAlarmScheduler.kt:48` | `alarmManager.canScheduleExactAlarms()` | Direct SDK guard or `@RequiresApi`. |
+| CRIT-04 | Build/Lint | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\item_onboarding_page.xml:71` | `android:tint="@color/text_primary"` | Use `app:tint`. |
+| CRIT-05 | Build/Lint | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\res\layout\item_social_profile.xml:131` | `android:tint="@color/error"` | Use `app:tint`. |
+| CRIT-06 | Permissions | `C:\Users\mihai\AndroidStudioProjects\Wanderly\app\src\main\AndroidManifest.xml:6` | `<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />` | Same root cause as CRIT-02; support approximate location. |
+
+## MAJOR Issues - Fix Within Current Sprint
+
+```text
+MAJ-01..05  Architecture boundary leaks
+MAJ-06..10  Main-thread blocking and non-cancellable HTTP
+MAJ-11..16  Security/config/log redaction
+MAJ-17..20  Network error/state handling
+MAJ-21..22  Missing remote schema/index evidence
+MAJ-23..31  UI/config/permission gaps
+MAJ-32..36  Production logs and missing CI
+```
+
+## MINOR Issues - Backlog / Nice to Have
+
+```text
+Adapter hardcoded display logic, duplicated permission/profile collector blocks,
+naming consistency, small IO on main, image sizing, asset hygiene,
+contrast/keyboard polish, backup sample cleanup, duplicate .gitignore entry.
+```
+
+## Category Scorecard
+
+| # | Category | Score /10 | Verdict |
+|---|---|---:|---|
+| 1 | Architecture & Code Quality | 5 | MVVM-ish, but boundaries leak |
+| 2 | Performance | 5 | DataStore blocking and blocking HTTP need work |
+| 3 | Security | 6 | Cleartext disabled, pinning/HTTPS enforcement/log redaction missing |
+| 4 | Crash Risks & Stability | 4 | Lint has release-blocking errors |
+| 5 | Network & API | 5 | Basic timeouts, weak error taxonomy/retry/cancellation |
+| 6 | Database & Storage | 5 | No local DB risk, but no Supabase schema/index migrations |
+| 7 | UI & UX | 6 | Good mission/gems states, accessibility/touch/rotation gaps |
+| 8 | Dependencies & Build | 5 | Tests pass, lint fails, dependencies drift |
+| 9 | Testing | 6 | Useful unit tests, weak ViewModel/network/UI error coverage |
+|10 | Permissions | 4 | Coarse location missing, notification/exact alarm flows incomplete |
+|11 | Manifest & Config | 6 | Mostly sane, links/backups need tightening |
+|12 | Logging & Debugging | 4 | Too many production logs with place/query context |
+|13 | CI/CD & Hygiene | 3 | No CI, no lint gate, screenshot hygiene issues |
+|   | **OVERALL HEALTH** | **5/10** | Promising app, not release-clean yet |
+
+## Top 5 Priority Actions
+
+1. **[CRIT-01/02/03/04/05]** - Fix all 5 lint errors first because lint currently fails.
+2. **[MAJ-06/07/08]** - Remove `runBlocking` DataStore reads from startup.
+3. **[MAJ-09/10]** - Make OkHttp calls cancellable and lifecycle-friendly.
+4. **[MAJ-01/02/03/04]** - Move direct API/repository work out of ViewModels/Fragments.
+5. **[MAJ-17/18/20]** - Replace generic network exceptions/scattered booleans with typed result/state handling.
+
+## Estimated Remediation Effort
+
+```text
+Critical fixes:  ~6 hours
+Major fixes:     ~45 hours
+Minor fixes:     ~22 hours
+Total:           ~73 hours / 9 developer-days
+```
+
+## Verification Evidence
+
+```text
+Unit tests:       PASS - .\gradlew.bat :app:testDebugUnitTest --stacktrace
+                 98 tests, 0 failures, 0 errors
+Dependency tree:  PASS - .\gradlew.bat :app:dependencies --configuration debugRuntimeClasspath
+                 no FAILED resolutions found
+Lint:             FAIL - .\gradlew.bat :app:lintDebug --console=plain
+                 5 errors, 138 warnings
+OSS Index:        attempted component-report; server returned 401 Unauthorized without credentials
+OSV fallback:     querybatch returned 28 direct dependency results; no direct vulnerabilities reported
+```

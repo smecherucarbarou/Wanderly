@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.work.OneTimeWorkRequestBuilder
@@ -14,20 +15,17 @@ import androidx.work.WorkManager
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.workers.SocialWorker
 import com.novahorizon.wanderly.workers.StreakWorker
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import org.json.JSONObject
 
 class DevDashboardFragment : Fragment() {
 
@@ -35,6 +33,9 @@ class DevDashboardFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var repository: WanderlyRepository
     private val prettyJson = Json { prettyPrint = true }
+    private val adminToolsViewModel: AdminToolsViewModel by viewModels {
+        WanderlyViewModelFactory(repository)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentDevDashboardBinding.inflate(inflater, container, false)
@@ -53,7 +54,9 @@ class DevDashboardFragment : Fragment() {
                 findNavController().navigateUp()
                 return@launch
             }
-            binding.root.visibility = View.VISIBLE
+            val currentBinding = _binding ?: return@launch
+            currentBinding.root.visibility = View.VISIBLE
+            observeAdminTools()
             setupAdminTools()
         }
     }
@@ -65,8 +68,10 @@ class DevDashboardFragment : Fragment() {
 
         binding.btnNotifyStreak.setOnClickListener {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 7
-            WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_daily_reminder, streak))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_daily_reminder, streak))
+            }
         }
         binding.btnResetDailyCooldown.setOnClickListener {
             resetNotificationType(
@@ -76,8 +81,10 @@ class DevDashboardFragment : Fragment() {
         }
 
         binding.btnNotifyEvening.setOnClickListener {
-            WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_evening_alert))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_evening_alert))
+            }
         }
         binding.btnResetEveningCooldown.setOnClickListener {
             resetNotificationType(
@@ -88,8 +95,10 @@ class DevDashboardFragment : Fragment() {
 
         binding.btnNotifyMilestone.setOnClickListener {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10
-            WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_milestone, streak))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_milestone, streak))
+            }
         }
         binding.btnResetMilestoneCooldown.setOnClickListener {
             resetNotificationType(
@@ -99,8 +108,10 @@ class DevDashboardFragment : Fragment() {
         }
 
         binding.btnNotifyLost.setOnClickListener {
-            WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_streak_lost))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_streak_lost))
+            }
         }
         binding.btnResetLostCooldown.setOnClickListener {
             resetNotificationType(
@@ -111,8 +122,10 @@ class DevDashboardFragment : Fragment() {
 
         binding.btnNotifyRival.setOnClickListener {
             val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_one))
-            WanderlyNotificationManager.sendRivalActivity(requireContext(), name, force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_rival_activity, name))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendRivalActivity(requireContext(), name, force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_rival_activity, name))
+            }
         }
         binding.btnResetRivalCooldown.setOnClickListener {
             resetNotificationType(
@@ -123,8 +136,10 @@ class DevDashboardFragment : Fragment() {
 
         binding.btnNotifyOvertaken.setOnClickListener {
             val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_two))
-            WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name, force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_overtaken, name))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendOvertakenAlert(requireContext(), name, force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_overtaken, name))
+            }
         }
         binding.btnResetOvertakenCooldown.setOnClickListener {
             resetNotificationType(
@@ -135,8 +150,10 @@ class DevDashboardFragment : Fragment() {
 
         binding.btnNotifyFight.setOnClickListener {
             val name = rivalName(default = getString(R.string.dev_dashboard_default_rival_three))
-            WanderlyNotificationManager.sendFightForFirst(requireContext(), name, force = true)
-            announceTrigger(getString(R.string.dev_dashboard_forced_fight, name))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.sendFightForFirst(requireContext(), name, force = true)
+                announceTrigger(getString(R.string.dev_dashboard_forced_fight, name))
+            }
         }
         binding.btnResetFightCooldown.setOnClickListener {
             resetNotificationType(
@@ -146,14 +163,17 @@ class DevDashboardFragment : Fragment() {
         }
 
         binding.btnClearNotifCooldowns.setOnClickListener {
-            WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
-            NotificationCheckCoordinator.clearCheckState(requireContext())
-            announceTrigger(getString(R.string.dev_dashboard_cleared_notification_state))
+            viewLifecycleOwner.lifecycleScope.launch {
+                WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
+                NotificationCheckCoordinator.clearCheckState(requireContext())
+                announceTrigger(getString(R.string.dev_dashboard_cleared_notification_state))
+            }
         }
 
         binding.btnRawLogs.setOnClickListener {
             viewLifecycleOwner.lifecycleScope.launch {
                 val profile = repository.getCurrentProfile()
+                _binding ?: return@launch
                 if (profile != null) {
                     AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
                         .setTitle(getString(R.string.dev_dashboard_live_profile_title))
@@ -166,12 +186,13 @@ class DevDashboardFragment : Fragment() {
             }
         }
 
-        binding.btnTestAiNotif.setOnClickListener { runAiNotificationTest() }
+        binding.btnTestAiNotif.setOnClickListener { adminToolsViewModel.runAiNotificationTest() }
 
         binding.btnResetVisit.setOnClickListener {
             viewLifecycleOwner.lifecycleScope.launch {
                 repository.updateLastVisitDate("2000-01-01")
                 val success = repository.resetMissionDateForTesting()
+                _binding ?: return@launch
                 if (success) {
                     showSnackbar(getString(R.string.dev_dashboard_reset_visit_success), isError = false)
                 } else {
@@ -180,13 +201,15 @@ class DevDashboardFragment : Fragment() {
             }
         }
         binding.btnReplayOnboarding.setOnClickListener {
-            repository.setOnboardingSeen(false)
-            startActivity(
-                android.content.Intent(requireContext(), MainActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                }
-            )
-            requireActivity().finish()
+            viewLifecycleOwner.lifecycleScope.launch {
+                repository.setOnboardingSeen(false)
+                startActivity(
+                    android.content.Intent(requireContext(), MainActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+                )
+                requireActivity().finish()
+            }
         }
 
         binding.btnRunWorkers.setOnClickListener {
@@ -200,100 +223,33 @@ class DevDashboardFragment : Fragment() {
         }
     }
 
-    private fun runAiNotificationTest() {
-        binding.btnTestAiNotif.isEnabled = false
-        binding.tvAiLogs.text = getString(R.string.dev_dashboard_ai_preview_started) + "\n\n"
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val profile = repository.getCurrentProfile()
-                    ?: throw Exception(getString(R.string.dev_dashboard_no_live_profile))
-                val payload = buildJsonObject {
-                    put("trigger", getString(R.string.dev_dashboard_ai_trigger_daily))
-                    put("current_streak", profile.streak_count ?: 0)
-                    put("user_name", profile.username ?: getString(R.string.dev_dashboard_default_explorer))
-                    put("honey_balance", profile.honey ?: 0)
-                    put("hive_rank", profile.hive_rank ?: 1)
-                }
-
-                logToUi(
-                    getString(
-                        R.string.dev_dashboard_using_live_profile,
-                        profile.username ?: getString(R.string.dev_dashboard_default_explorer)
-                    )
-                )
-                logToUi(
-                    getString(
-                        R.string.dev_dashboard_live_profile_stats,
-                        profile.streak_count ?: 0,
-                        profile.honey ?: 0,
-                        profile.hive_rank ?: 1
-                    )
-                )
-
-                val prompt = """
-                    Write one polished mobile push notification for Wanderly.
-                    Context: $payload
-
-                    Rules:
-                    - Bee-themed, playful, but not cringe.
-                    - Sound like a real production push notification.
-                    - Title max 32 characters.
-                    - Message max 110 characters.
-                    - No hashtags, no emojis, no quotation marks.
-
-                    Return ONLY raw JSON:
-                    {"title":"Short title","message":"Short message"}
-                """.trimIndent()
-
-                val rawResponse = GeminiClient.generateText(prompt)
-                val jsonStart = rawResponse.indexOf("{")
-                val jsonEnd = rawResponse.lastIndexOf("}")
-                if (jsonStart == -1 || jsonEnd == -1) {
-                    throw Exception(getString(R.string.dev_dashboard_ai_invalid_json))
-                }
-
-                val parsed = JSONObject(rawResponse.substring(jsonStart, jsonEnd + 1))
-                val title = parsed.optString("title").trim()
-                    .ifBlank { getString(R.string.dev_dashboard_ai_default_title) }
-                    .take(32)
-                val message = parsed.optString("message").trim().ifBlank {
-                    getString(R.string.dev_dashboard_ai_default_message)
-                }.take(110)
-
-                WanderlyNotificationManager.showNotification(
-                    context = requireContext(),
-                    title = title,
-                    message = message,
-                    notificationId = 3999,
-                    dedupKey = "dev_ai_preview",
-                    bypassCooldown = true
-                )
-
-                logToUi(getString(R.string.dev_dashboard_ai_final_title, title))
-                logToUi(getString(R.string.dev_dashboard_ai_final_message, message))
-                logToUi(getString(R.string.dev_dashboard_ai_sent_notice))
-                showSnackbar(getString(R.string.dev_dashboard_ai_sent_success), isError = false)
-            } catch (e: Exception) {
-                val errorMessage = e.message ?: getString(R.string.error_network)
-                logToUi(getString(R.string.dev_dashboard_ai_failed, errorMessage))
-                showSnackbar(getString(R.string.dev_dashboard_ai_failed, errorMessage), isError = true)
-            } finally {
-                binding.btnTestAiNotif.isEnabled = true
+    private fun observeAdminTools() {
+        adminToolsViewModel.aiNotificationState.observe(viewLifecycleOwner) { state ->
+            val currentBinding = _binding ?: return@observe
+            currentBinding.btnTestAiNotif.isEnabled = !state.isRunning
+            if (state.logs.isNotEmpty()) {
+                currentBinding.tvAiLogs.text = state.logs.joinToString(separator = "\n\n", postfix = "\n\n")
+            }
+            state.snackbarMessage?.let { message ->
+                showSnackbar(message, isError = state.isError)
+                adminToolsViewModel.clearSnackbarMessage()
             }
         }
     }
 
     private fun logToUi(message: String) {
-        binding.tvAiLogs.append("$message\n\n")
-        binding.tvAiLogs.post {
-            val layout = binding.tvAiLogs.layout ?: return@post
-            val scrollAmount = layout.getLineTop(binding.tvAiLogs.lineCount) - binding.tvAiLogs.height
-            binding.tvAiLogs.scrollTo(0, scrollAmount.coerceAtLeast(0))
+        val currentBinding = _binding ?: return
+        currentBinding.tvAiLogs.append("$message\n\n")
+        currentBinding.tvAiLogs.post {
+            val postedBinding = _binding ?: return@post
+            val layout = postedBinding.tvAiLogs.layout ?: return@post
+            val scrollAmount = layout.getLineTop(postedBinding.tvAiLogs.lineCount) - postedBinding.tvAiLogs.height
+            postedBinding.tvAiLogs.scrollTo(0, scrollAmount.coerceAtLeast(0))
         }
     }
 
     private fun announceTrigger(message: String) {
+        _binding ?: return
         logToUi(message)
         showSnackbar(message, isError = false)
     }
@@ -302,9 +258,11 @@ class DevDashboardFragment : Fragment() {
         type: WanderlyNotificationManager.NotificationType,
         label: String
     ) {
-        WanderlyNotificationManager.clearNotificationCooldown(requireContext(), type)
-        NotificationCheckCoordinator.clearCheckStateForType(requireContext(), type)
-        announceTrigger(getString(R.string.dev_dashboard_cooldown_reset, label))
+        viewLifecycleOwner.lifecycleScope.launch {
+            WanderlyNotificationManager.clearNotificationCooldown(requireContext(), type)
+            NotificationCheckCoordinator.clearCheckStateForType(requireContext(), type)
+            announceTrigger(getString(R.string.dev_dashboard_cooldown_reset, label))
+        }
     }
 
     private fun rivalName(default: String): String {
@@ -314,10 +272,11 @@ class DevDashboardFragment : Fragment() {
     private fun updateReality() {
         viewLifecycleOwner.lifecycleScope.launch {
             val profile = repository.getCurrentProfile() ?: return@launch
+            val currentBinding = _binding ?: return@launch
 
-            val honeyInput = binding.editHoney.text.toString().trim()
-            val flightsInput = binding.editFlights.text.toString().trim()
-            val streakInput = binding.editStreak.text.toString().trim()
+            val honeyInput = currentBinding.editHoney.text.toString().trim()
+            val flightsInput = currentBinding.editFlights.text.toString().trim()
+            val streakInput = currentBinding.editStreak.text.toString().trim()
 
             val editHoney = honeyInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
             val editFlights = flightsInput.takeIf { it.isNotEmpty() }?.toIntOrNull()
@@ -348,6 +307,7 @@ class DevDashboardFragment : Fragment() {
 
             if (repository.updateProfile(updated)) {
                 val refreshed = repository.getCurrentProfile() ?: updated
+                _binding ?: return@launch
                 showSnackbar(
                     getString(
                         R.string.dev_dashboard_reality_updated,
@@ -357,6 +317,7 @@ class DevDashboardFragment : Fragment() {
                     isError = false
                 )
             } else {
+                _binding ?: return@launch
                 showSnackbar(getString(R.string.dev_dashboard_reality_update_failed), isError = true)
             }
         }

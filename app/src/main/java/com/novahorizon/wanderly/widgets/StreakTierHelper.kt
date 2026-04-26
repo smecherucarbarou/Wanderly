@@ -38,19 +38,19 @@ object StreakTierHelper {
         animFile = R.drawable.ic_streak_fire_5
     )
     private val legendary = tier(
-        color = 0xFFA855F7.toInt(),
+        color = 0xFFFF8A3D.toInt(),
         label = "Legendary",
-        emoji = "\uD83D\uDC9C",
+        emoji = "\uD83D\uDD25",
         animFile = R.drawable.ic_streak_fire_25
     )
     private val epic = tier(
-        color = 0xFF3B82F6.toInt(),
+        color = 0xFFFFB347.toInt(),
         label = "Epic",
         emoji = "\uD83D\uDD25",
         animFile = R.drawable.ic_streak_fire_50
     )
     private val god = tier(
-        color = 0xFFEC4899.toInt(),
+        color = 0xFFFFD166.toInt(),
         label = "GOD",
         emoji = "\uD83D\uDD25",
         animFile = R.drawable.ic_streak_fire_50

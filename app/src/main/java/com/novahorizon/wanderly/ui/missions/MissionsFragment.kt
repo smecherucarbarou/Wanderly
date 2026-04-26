@@ -1,11 +1,9 @@
 package com.novahorizon.wanderly.ui.missions
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -18,12 +16,14 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
+import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
@@ -45,10 +45,12 @@ class MissionsFragment : Fragment() {
     private var tempImageFile: File? = null
     private var locationLookupInFlight = false
     private val logTag = "MissionsFragment"
+    private val locationPermissionController = LocationPermissionController(this)
 
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
+        _binding ?: return@registerForActivityResult
         if (isGranted) {
             startCamera()
         } else {
@@ -56,17 +58,8 @@ class MissionsFragment : Fragment() {
         }
     }
 
-    private val requestLocationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            checkLocationAndGenerate()
-        } else {
-            showLocationPermissionFeedback()
-        }
-    }
-
     private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        _binding ?: return@registerForActivityResult
         if (success) {
             val imageUri = tempImageUri
             if (imageUri == null) {
@@ -81,11 +74,14 @@ class MissionsFragment : Fragment() {
                         }
                     }
                     if (bitmap == null) {
+                        _binding ?: return@launch
                         showSnackbar(getString(R.string.photo_read_failed), isError = true)
                         return@launch
                     }
+                    _binding ?: return@launch
                     viewModel.verifyPhoto(bitmap)
                 } catch (_: Exception) {
+                    _binding ?: return@launch
                     showSnackbar(getString(R.string.mission_photo_process_failed), isError = true)
                 }
             }
@@ -111,7 +107,7 @@ class MissionsFragment : Fragment() {
         binding.newFlightButton.setOnClickListener { checkLocationAndGenerate() }
         binding.verifyButton.setOnClickListener { checkCameraPermissionAndStart() }
         binding.completeButton.setOnClickListener { viewModel.completeMission() }
-        binding.learnMoreButton.setOnClickListener { viewModel.getPlaceDetails() }
+        binding.learnMoreButton.setOnClickListener { viewModel.fetchPlaceDetails() }
     }
 
     private fun setupObservers() {
@@ -122,6 +118,7 @@ class MissionsFragment : Fragment() {
         viewModel.streakMessage.observe(viewLifecycleOwner) { message ->
             message?.let {
                 showSnackbar(it, isError = false)
+                (activity as? MainActivity)?.requestNotificationPermissionIfNeeded()
             }
         }
 
@@ -157,6 +154,10 @@ class MissionsFragment : Fragment() {
 
                 is MissionsViewModel.MissionState.VerificationResult -> {
                     if (state.success) {
+                        viewModel.currentMissionText()?.let {
+                            binding.missionText.text = it
+                            binding.missionText.visibility = View.VISIBLE
+                        }
                         binding.verifyButton.visibility = View.GONE
                         binding.completeButton.visibility = View.VISIBLE
                         binding.learnMoreButton.visibility = View.VISIBLE
@@ -214,20 +215,27 @@ class MissionsFragment : Fragment() {
 
     private fun checkLocationAndGenerate() {
         if (locationLookupInFlight) return
-        when (resolveLocationPermissionState()) {
+        when (val permissionState = locationPermissionController.resolveState()) {
             LocationPermissionGate.State.GRANTED -> Unit
             LocationPermissionGate.State.REQUEST,
             LocationPermissionGate.State.RATIONALE -> {
-                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                if (permissionState == LocationPermissionGate.State.RATIONALE) {
                     showSnackbar(getString(R.string.mission_location_permission_rationale), isError = true)
                 }
-                launchLocationPermissionRequest()
+                locationPermissionController.requestPermission { granted ->
+                    _binding ?: return@requestPermission
+                    if (granted) {
+                        checkLocationAndGenerate()
+                    } else {
+                        showLocationPermissionFeedback()
+                    }
+                }
                 return
             }
 
             LocationPermissionGate.State.SETTINGS -> {
                 showSnackbar(getString(R.string.mission_location_permission_settings), isError = true)
-                openAppSettings()
+                locationPermissionController.openAppSettings()
                 return
             }
         }
@@ -240,7 +248,8 @@ class MissionsFragment : Fragment() {
 
         WanderlyGraph.missionLocationProvider().requestCurrentLocation(
             fragment = this,
-            onSuccess = { location ->
+            onSuccess = onSuccess@{ location ->
+            val currentBinding = _binding ?: return@onSuccess
             if (location != null) {
                 val lifecycleOwner = viewLifecycleOwner
                 lifecycleOwner.lifecycleScope.launch {
@@ -259,55 +268,31 @@ class MissionsFragment : Fragment() {
                 }
             } else {
                 locationLookupInFlight = false
-                binding.loadingIndicator.visibility = View.GONE
-                binding.newFlightButton.isEnabled = true
-                binding.buzzyBubble.text = getString(R.string.mission_location_failed)
+                currentBinding.loadingIndicator.visibility = View.GONE
+                currentBinding.newFlightButton.isEnabled = true
+                currentBinding.buzzyBubble.text = getString(R.string.mission_location_failed)
                 showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
         },
-            onFailure = { error ->
+            onFailure = onFailure@{ error ->
+            val currentBinding = _binding ?: return@onFailure
             logError("Error getting precise location", error)
             locationLookupInFlight = false
-            binding.loadingIndicator.visibility = View.GONE
-            binding.newFlightButton.isEnabled = true
-            binding.buzzyBubble.text = getString(R.string.mission_location_failed)
+            currentBinding.loadingIndicator.visibility = View.GONE
+            currentBinding.newFlightButton.isEnabled = true
+            currentBinding.buzzyBubble.text = getString(R.string.mission_location_failed)
             showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
         )
     }
 
-    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return LocationPermissionGate.resolveState(
-            hasPermission = hasPermission,
-            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
-            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
-        )
-    }
-
-    private fun launchLocationPermissionRequest() {
-        LocationPermissionGate.markRequestedBefore(requireContext())
-        requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
     private fun showLocationPermissionFeedback() {
-        val messageRes = when (resolveLocationPermissionState()) {
+        val messageRes = when (locationPermissionController.resolveState()) {
             LocationPermissionGate.State.RATIONALE -> R.string.mission_location_permission_rationale
             LocationPermissionGate.State.SETTINGS -> R.string.mission_location_permission_settings
             else -> R.string.mission_location_permission_required
         }
         showSnackbar(getString(messageRes), isError = true)
-    }
-
-    private fun openAppSettings() {
-        val intent = Intent(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.fromParts("package", requireContext().packageName, null)
-        )
-        startActivity(intent)
     }
 
     private fun checkCameraPermissionAndStart() {

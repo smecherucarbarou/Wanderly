@@ -24,7 +24,7 @@
 -keep class com.bumptech.glide.GeneratedAppGlideModuleImpl
 
 -keep @androidx.annotation.Keep class * { *; }
--keep @kotlinx.serialization.Serializable class * { *; }
+-keep @kotlinx.serialization.Serializable class com.novahorizon.wanderly.** { *; }
 -keepclassmembers class **$$serializer { *; }
 -keepclassmembers class **$Companion {
     kotlinx.serialization.KSerializer serializer(...);

@@ -11,6 +11,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -23,6 +26,8 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 class SocialFragment : Fragment() {
@@ -115,16 +120,26 @@ class SocialFragment : Fragment() {
             }
         }
 
-        val pendingInviteCode = repository.peekPendingInviteCode()
-        if (pendingInviteCode.isNullOrBlank()) {
-            viewModel.loadLeaderboard()
-        } else {
-            socialTabs.getTabAt(1)?.select()
-            applyPendingInviteCode()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val pendingInviteCode = repository.peekPendingInviteCode()
+            if (pendingInviteCode.isNullOrBlank()) {
+                viewModel.loadLeaderboard()
+            } else {
+                socialTabs.getTabAt(1)?.select()
+                applyPendingInviteCode()
+            }
         }
     }
 
     private fun setupObservers() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.state.collect { state ->
+                    renderSocialState(state)
+                }
+            }
+        }
+
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
             loadingIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
             if (isLoading) {
@@ -162,6 +177,44 @@ class SocialFragment : Fragment() {
         }
     }
 
+    private fun renderSocialState(state: SocialViewModel.SocialUiState) {
+        when (state) {
+            SocialViewModel.SocialUiState.Loading -> {
+                loadingIndicator.visibility = View.VISIBLE
+                emptyStateText.visibility = View.GONE
+                socialRecycler.visibility = View.VISIBLE
+            }
+
+            is SocialViewModel.SocialUiState.Loaded -> {
+                loadingIndicator.visibility = View.GONE
+                if (socialTabs.selectedTabPosition == 0) {
+                    socialAdapter.submitProfiles(state.leaderboard, showRank = true, canRemove = false)
+                    renderEmptyState(state.leaderboard, R.string.social_empty_leaderboard)
+                } else {
+                    socialAdapter.submitProfiles(state.friends, showRank = false, canRemove = true)
+                    renderEmptyState(state.friends, R.string.social_empty_friends)
+                }
+            }
+
+            SocialViewModel.SocialUiState.Empty -> {
+                loadingIndicator.visibility = View.GONE
+                renderEmptyState(
+                    profiles = emptyList(),
+                    emptyMessage = selectedEmptyMessage()
+                )
+            }
+
+            is SocialViewModel.SocialUiState.Error -> {
+                loadingIndicator.visibility = View.GONE
+                showSnackbar(getString(state.messageRes), isError = true)
+                renderEmptyState(
+                    profiles = emptyList(),
+                    emptyMessage = selectedEmptyMessage()
+                )
+            }
+        }
+    }
+
     private fun showRemoveFriendDialog(profile: Profile) {
         AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
             .setTitle(R.string.social_remove_friend_title)
@@ -184,7 +237,15 @@ class SocialFragment : Fragment() {
         }
     }
 
-    private fun applyPendingInviteCode() {
+    private fun selectedEmptyMessage(): Int {
+        return if (socialTabs.selectedTabPosition == 1) {
+            R.string.social_empty_friends
+        } else {
+            R.string.social_empty_leaderboard
+        }
+    }
+
+    private suspend fun applyPendingInviteCode() {
         val pendingCode = repository.consumePendingInviteCode() ?: return
         friendCodeInput.setText(pendingCode)
         friendCodeInput.setSelection(pendingCode.length)
@@ -225,7 +286,7 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
         val profile = getItem(position)
 
         holder.rankNumber.visibility = if (showRank) View.VISIBLE else View.GONE
-        holder.rankNumber.text = "#${position + 1}"
+        holder.rankNumber.text = holder.itemView.context.getString(R.string.rank_number_format, position + 1)
 
         holder.username.text = profile.username ?: holder.itemView.context.getString(R.string.unknown_explorer)
         holder.honeyAmount.text = (profile.honey ?: 0).toString()

@@ -9,14 +9,12 @@ import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -31,6 +29,7 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
@@ -57,15 +56,7 @@ class GemsFragment : Fragment() {
         openInMaps(gem)
     }
 
-    private val requestLocationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            checkLocationAndLoadGems()
-        } else {
-            showLocationPermissionFeedback()
-        }
-    }
+    private val locationPermissionController = LocationPermissionController(this)
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -121,39 +112,63 @@ class GemsFragment : Fragment() {
         }
 
         refreshBtn.setOnClickListener {
-            requestGemsLoad()
+            requestGemsLoad(isUserInitiated = true)
         }
         retryBtn.setOnClickListener {
             requestGemsLoad()
         }
 
-        showEmptyStateText(getString(R.string.gems_permission_prompt), showRetry = true)
+        if (GemsLoadGate.shouldAutoLoad(viewModel.gemsState.value)) {
+            requestGemsLoad()
+        }
     }
 
-    private fun requestGemsLoad() {
-        when (resolveLocationPermissionState()) {
-            LocationPermissionGate.State.GRANTED -> checkLocationAndLoadGems(isRefresh = true)
+    private fun requestGemsLoad(isUserInitiated: Boolean = false) {
+        when (val permissionState = locationPermissionController.resolveState()) {
+            LocationPermissionGate.State.GRANTED -> checkLocationAndLoadGems(isRefresh = isUserInitiated)
             LocationPermissionGate.State.REQUEST,
             LocationPermissionGate.State.RATIONALE -> {
-                if (resolveLocationPermissionState() == LocationPermissionGate.State.RATIONALE) {
+                if (permissionState == LocationPermissionGate.State.RATIONALE) {
                     showEmptyStateText(getString(R.string.gems_location_permission_rationale), showRetry = true)
                     showSnackbar(getString(R.string.gems_location_permission_rationale), isError = true)
                 }
-                launchLocationPermissionRequest()
+                locationPermissionController.requestPermission { granted ->
+                    if (!isAdded || view == null) return@requestPermission
+                    if (granted) {
+                        checkLocationAndLoadGems(isRefresh = isUserInitiated)
+                    } else {
+                        showLocationPermissionFeedback()
+                    }
+                }
             }
 
             LocationPermissionGate.State.SETTINGS -> {
                 showEmptyStateText(getString(R.string.gems_location_permission_settings), showRetry = true)
                 showSnackbar(getString(R.string.gems_location_permission_settings), isError = true)
-                openAppSettings()
+                locationPermissionController.openAppSettings()
             }
         }
     }
 
     private fun checkLocationAndLoadGems(isRefresh: Boolean = false) {
         logDebug("checkLocationAndLoadGems called, isRefresh=$isRefresh")
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFineLocation && !hasCoarseLocation) {
+            locationPermissionController.requestPermission { granted ->
+                if (!isAdded || view == null) return@requestPermission
+                if (granted) {
+                    checkLocationAndLoadGems(isRefresh)
+                } else {
+                    showLocationPermissionFeedback()
+                }
+            }
             return
         }
 
@@ -200,39 +215,14 @@ class GemsFragment : Fragment() {
         }
     }
 
-    private fun resolveLocationPermissionState(): LocationPermissionGate.State {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return LocationPermissionGate.resolveState(
-            hasPermission = hasPermission,
-            hasRequestedBefore = LocationPermissionGate.hasRequestedBefore(requireContext()),
-            shouldShowRationale = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
-        )
-    }
-
-    private fun launchLocationPermissionRequest() {
-        LocationPermissionGate.markRequestedBefore(requireContext())
-        requestLocationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
     private fun showLocationPermissionFeedback() {
-        val messageRes = when (resolveLocationPermissionState()) {
+        val messageRes = when (locationPermissionController.resolveState()) {
             LocationPermissionGate.State.RATIONALE -> R.string.gems_location_permission_rationale
             LocationPermissionGate.State.SETTINGS -> R.string.gems_location_permission_settings
             else -> R.string.gems_location_permission_required
         }
         showEmptyStateText(getString(messageRes), showRetry = true)
         showSnackbar(getString(messageRes), isError = true)
-    }
-
-    private fun openAppSettings() {
-        val intent = Intent(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.fromParts("package", requireContext().packageName, null)
-        )
-        startActivity(intent)
     }
 
     private fun showLoadingState(message: String = getString(R.string.gems_loading_default)) {

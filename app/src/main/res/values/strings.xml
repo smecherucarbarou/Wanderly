@@ -25,6 +25,7 @@
     <string name="profile_tab">My Hive</string>
     <string name="honey_label">Honey</string>
     <string name="rank_label">Rank</string>
+    <string name="rank_number_format">#%d</string>
     <string name="rank_1">Worker Bee</string>
     <string name="rank_2">Scout Bee</string>
     <string name="rank_3">Expert Bee</string>
@@ -36,6 +37,7 @@
     <string name="email_verified_error">Please verify your email first</string>
     <string name="email_sent">Verification email sent! Check your inbox.</string>
     <string name="error_network">Network error. Check your connection</string>
+    <string name="error_generic_retry">Something went wrong. Please try again.</string>
     <string name="error_wrong_credentials">Wrong email or password</string>
     <string name="error_email_in_use">Email already in use</string>
     <string name="cities_visited">Cities visited</string>
@@ -48,6 +50,7 @@
     <string name="title_profile">My Hive</string>
     <string name="title_gems">Hidden Gems</string>
     <string name="title_social">Hive</string>
+    <string name="menu_god_mode">God mode</string>
     <string name="gems_title">Hidden Gems Near You</string>
     <string name="gems_refresh_content_description">Refresh hidden gems</string>
     <string name="gems_loading_default">Buzzy is exploring...</string>
@@ -79,11 +82,16 @@
     <string name="social_add_friend">Add</string>
     <string name="social_empty_leaderboard">No explorers are on your leaderboard yet.</string>
     <string name="social_empty_friends">No friends added yet. Share your code and build your hive.</string>
+    <string name="social_friend_already_added">Already friends with this user</string>
+    <string name="social_add_friend_failed">Could not add friend. Please try again.</string>
     <string name="social_remove_friend_title">Remove Friend</string>
     <string name="social_remove_friend_message">Are you sure you want to remove %1$s from your hive?</string>
     <string name="social_remove_friend_confirm">Remove</string>
     <string name="social_remove_friend_cancel">Cancel</string>
+    <string name="accessibility_user_avatar">User avatar</string>
     <string name="profile_default_name">Explorer</string>
+    <string name="profile_loading">Loading profile...</string>
+    <string name="profile_load_failed">Could not load profile. Please try again.</string>
     <string name="unknown_explorer">Unknown</string>
     <string name="friend_code_display">Friend Code: %1$s</string>
     <string name="friend_code_copied">Friend code copied</string>
@@ -187,6 +195,13 @@
     <string name="mission_location_loading">Locking onto your current location...</string>
     <string name="mission_location_failed">Could not get precise location</string>
     <string name="mission_camera_start_failed">Could not start camera interface</string>
+    <string name="notification_permission_rationale_title">Enable notifications?</string>
+    <string name="notification_permission_rationale_message">Allow Wanderly to send streak and hive alerts when they matter.</string>
+    <string name="notification_permission_rationale_positive">Allow</string>
+    <string name="notification_permission_settings_title">Notifications are off</string>
+    <string name="notification_permission_settings_message">Turn on notifications in settings to receive streak and hive alerts.</string>
+    <string name="notification_permission_settings_positive">Open settings</string>
+    <string name="notification_permission_negative">Not now</string>
     <string name="streak_crisis_title">STREAK CRISIS!</string>
     <string name="streak_crisis_message">Did you get stuck in a tourist trap yesterday? Your %1$d-day streak is dead. Pay %2$d Honey to buy your reputation back, or start from zero.</string>
     <string name="streak_crisis_pay">PAY THE TOLL (%1$d Honey)</string>

@@ -1,10 +1,13 @@
 package com.novahorizon.wanderly
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.location.Geocoder
 import android.location.Location
 import android.os.Build
+import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -86,9 +89,22 @@ object DefaultMissionLocationProvider : MissionLocationProvider {
         onFailure: (Exception) -> Unit
     ) {
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(fragment.requireActivity())
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-            .addOnSuccessListener(onSuccess)
-            .addOnFailureListener { error -> onFailure(Exception(error)) }
+        val context = fragment.requireContext()
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener(onSuccess)
+                .addOnFailureListener { error -> onFailure(Exception(error)) }
+        } catch (e: SecurityException) {
+            onFailure(e)
+        }
     }
 }
 

@@ -69,6 +69,7 @@ object AvatarLoader {
         }
 
         requestBuilder
+            .override(160, 160)
             .diskCacheStrategy(DiskCacheStrategy.ALL)
             .circleCrop()
             .listener(object : RequestListener<android.graphics.drawable.Drawable> {
@@ -78,7 +79,8 @@ object AvatarLoader {
                     target: Target<android.graphics.drawable.Drawable>,
                     isFirstResource: Boolean
                 ): Boolean {
-                    Log.e(TAG, "Avatar load failed for model=$model", e)
+                    if (BuildConfig.DEBUG) Log.e(TAG, "Avatar load failed for model=$model", e)
+                    else Log.e(TAG, "Avatar load failed", e)
                     showInitial(initialView, imageView, displayName)
                     return true
                 }
@@ -152,6 +154,7 @@ object AvatarLoader {
                     requestBuilder.error(
                         Glide.with(imageView)
                             .load(authenticatedFallback)
+                            .override(160, 160)
                             .circleCrop()
                             .error(R.drawable.ic_buzzy)
                     )
