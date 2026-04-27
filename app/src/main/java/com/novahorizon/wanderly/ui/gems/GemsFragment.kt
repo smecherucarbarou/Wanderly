@@ -12,16 +12,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -29,92 +31,61 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.databinding.FragmentGemsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.Normalizer
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class GemsFragment : Fragment() {
     private val logTag = "GemsFragment"
 
-    private lateinit var gemsRecycler: RecyclerView
-    private lateinit var loadingIndicator: View
-    private lateinit var loadingText: TextView
-    private lateinit var refreshBtn: ImageButton
-    private lateinit var emptyStateText: TextView
-    private lateinit var retryBtn: Button
+    private var _binding: FragmentGemsBinding? = null
+    private val binding get() = _binding!!
+
     private val viewModel: GemsViewModel by viewModels {
         WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
     }
 
-    private val gemsAdapter = GemsAdapter { gem ->
-        openInMaps(gem)
-    }
-
+    private var gemsAdapter: GemsAdapter? = null
     private val locationPermissionController = LocationPermissionController(this)
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         logDebug("onCreateView called")
-        val view = inflater.inflate(R.layout.fragment_gems, container, false)
-        gemsRecycler = view.findViewById(R.id.gems_recycler)
-        loadingIndicator = view.findViewById(R.id.gems_loading)
-        loadingText = view.findViewById(R.id.gems_loading_text)
-        refreshBtn = view.findViewById(R.id.refresh_gems_btn)
-        emptyStateText = view.findViewById(R.id.gems_empty_state)
-        retryBtn = view.findViewById(R.id.gems_retry_button)
-
-        gemsRecycler.layoutManager = LinearLayoutManager(requireContext())
-        gemsRecycler.adapter = gemsAdapter
-        return view
+        val currentBinding = FragmentGemsBinding.inflate(inflater, container, false)
+        _binding = currentBinding
+        return currentBinding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        viewModel.gemsState.observe(viewLifecycleOwner) { state ->
-            when (state) {
-                is GemsViewModel.GemsState.Idle -> Unit
-                is GemsViewModel.GemsState.Loading -> showLoadingState(state.message)
-                is GemsViewModel.GemsState.Loaded -> {
-                    hideEmptyState()
-                    gemsRecycler.visibility = View.VISIBLE
-                    gemsAdapter.submitList(state.gems)
-                    loadingIndicator.visibility = View.GONE
-                    loadingText.visibility = View.GONE
-                    refreshBtn.isEnabled = true
-                }
-
-                is GemsViewModel.GemsState.Empty -> {
-                    gemsAdapter.submitList(emptyList())
-                    showEmptyStateText(state.message, showRetry = true)
-                }
-
-                is GemsViewModel.GemsState.Error -> {
-                    gemsAdapter.submitList(emptyList())
-                    showErrorState(state.message)
-                }
-            }
+        val currentBinding = binding
+        val adapter = GemsAdapter { gem ->
+            _binding ?: return@GemsAdapter
+            openInMaps(gem)
         }
+        gemsAdapter = adapter
 
-        viewModel.message.observe(viewLifecycleOwner) { message ->
-            if (message.isNullOrBlank()) return@observe
-            showSnackbar(message, isError = true)
-            viewModel.clearMessage()
-        }
+        currentBinding.gemsRecycler.layoutManager = LinearLayoutManager(requireContext())
+        currentBinding.gemsRecycler.adapter = adapter
 
-        refreshBtn.setOnClickListener {
+        observeViewModel()
+
+        currentBinding.refreshGemsBtn.setOnClickListener {
             requestGemsLoad(isUserInitiated = true)
         }
-        retryBtn.setOnClickListener {
+        currentBinding.gemsRetryButton.setOnClickListener {
             requestGemsLoad()
         }
 
@@ -123,17 +94,73 @@ class GemsFragment : Fragment() {
         }
     }
 
+    private fun observeViewModel() {
+        val owner = viewLifecycleOwner
+        owner.lifecycleScope.launch {
+            owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                val stateObserver = Observer<GemsViewModel.GemsState> { state ->
+                    renderGemsState(state)
+                }
+                val messageObserver = Observer<String?> messageObserver@{ message ->
+                    if (message.isNullOrBlank()) return@messageObserver
+                    _binding ?: return@messageObserver
+                    showGemsSnackbar(message, isError = true)
+                    viewModel.clearMessage()
+                }
+
+                viewModel.gemsState.observe(owner, stateObserver)
+                viewModel.message.observe(owner, messageObserver)
+                try {
+                    awaitCancellation()
+                } finally {
+                    viewModel.gemsState.removeObserver(stateObserver)
+                    viewModel.message.removeObserver(messageObserver)
+                }
+            }
+        }
+    }
+
+    private fun renderGemsState(state: GemsViewModel.GemsState) {
+        val currentBinding = _binding ?: return
+        val adapter = gemsAdapter ?: return
+        when (state) {
+            is GemsViewModel.GemsState.Idle -> Unit
+            is GemsViewModel.GemsState.Loading -> showLoadingState(state.message)
+            is GemsViewModel.GemsState.Loaded -> {
+                hideEmptyState()
+                currentBinding.gemsRecycler.visibility = View.VISIBLE
+                adapter.submitList(state.gems)
+                currentBinding.gemsLoading.visibility = View.GONE
+                currentBinding.gemsLoadingText.visibility = View.GONE
+                currentBinding.refreshGemsBtn.isEnabled = true
+            }
+
+            is GemsViewModel.GemsState.Empty -> {
+                adapter.submitList(emptyList())
+                showEmptyStateText(state.message, showRetry = true)
+            }
+
+            is GemsViewModel.GemsState.Error -> {
+                adapter.submitList(emptyList())
+                showErrorState(state.message)
+            }
+        }
+    }
+
     private fun requestGemsLoad(isUserInitiated: Boolean = false) {
+        if (_binding == null || !isAdded) return
+
         when (val permissionState = locationPermissionController.resolveState()) {
             LocationPermissionGate.State.GRANTED -> checkLocationAndLoadGems(isRefresh = isUserInitiated)
             LocationPermissionGate.State.REQUEST,
             LocationPermissionGate.State.RATIONALE -> {
                 if (permissionState == LocationPermissionGate.State.RATIONALE) {
                     showEmptyStateText(getString(R.string.gems_location_permission_rationale), showRetry = true)
-                    showSnackbar(getString(R.string.gems_location_permission_rationale), isError = true)
+                    showGemsSnackbar(getString(R.string.gems_location_permission_rationale), isError = true)
                 }
                 locationPermissionController.requestPermission { granted ->
-                    if (!isAdded || view == null) return@requestPermission
+                    val binding = _binding ?: return@requestPermission
+                    if (!isAdded || !isCurrentBinding(binding)) return@requestPermission
                     if (granted) {
                         checkLocationAndLoadGems(isRefresh = isUserInitiated)
                     } else {
@@ -144,7 +171,7 @@ class GemsFragment : Fragment() {
 
             LocationPermissionGate.State.SETTINGS -> {
                 showEmptyStateText(getString(R.string.gems_location_permission_settings), showRetry = true)
-                showSnackbar(getString(R.string.gems_location_permission_settings), isError = true)
+                showGemsSnackbar(getString(R.string.gems_location_permission_settings), isError = true)
                 locationPermissionController.openAppSettings()
             }
         }
@@ -152,17 +179,22 @@ class GemsFragment : Fragment() {
 
     private fun checkLocationAndLoadGems(isRefresh: Boolean = false) {
         logDebug("checkLocationAndLoadGems called, isRefresh=$isRefresh")
+        val currentBinding = _binding ?: return
+        val fragmentContext = context ?: return
+        val fragmentActivity = activity ?: return
+
         val hasFineLocation = ContextCompat.checkSelfPermission(
-            requireContext(),
+            fragmentContext,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         val hasCoarseLocation = ContextCompat.checkSelfPermission(
-            requireContext(),
+            fragmentContext,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasFineLocation && !hasCoarseLocation) {
             locationPermissionController.requestPermission { granted ->
-                if (!isAdded || view == null) return@requestPermission
+                val binding = _binding ?: return@requestPermission
+                if (!isAdded || !isCurrentBinding(binding)) return@requestPermission
                 if (granted) {
                     checkLocationAndLoadGems(isRefresh)
                 } else {
@@ -174,15 +206,42 @@ class GemsFragment : Fragment() {
 
         showLoadingState()
         if (isRefresh) {
-            gemsAdapter.submitList(emptyList())
+            gemsAdapter?.submitList(emptyList())
         }
 
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
-            if (location != null) {
-                viewLifecycleOwner.lifecycleScope.launch {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(fragmentActivity)
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { location ->
+                val binding = _binding ?: return@addOnSuccessListener
+                if (location == null) {
+                    if (GemsLocationCallbackGuard.shouldHandleLocationFailure(
+                            isFragmentAdded = isAdded,
+                            hasBinding = isCurrentBinding(binding)
+                        )
+                    ) {
+                        showErrorState(getString(R.string.gems_location_failed))
+                    }
+                    return@addOnSuccessListener
+                }
+
+                val lifecycleOwner = viewLifecycleOwnerLiveData.value
+                val hasActiveLifecycleOwner =
+                    lifecycleOwner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.INITIALIZED) == true
+                if (!GemsLocationCallbackGuard.shouldHandleLocationSuccess(
+                        hasLocation = true,
+                        isFragmentAdded = isAdded,
+                        hasBinding = isCurrentBinding(binding),
+                        hasLifecycleOwner = hasActiveLifecycleOwner
+                    )
+                ) {
+                    return@addOnSuccessListener
+                }
+
+                lifecycleOwner ?: return@addOnSuccessListener
+                val callbackContext = context ?: return@addOnSuccessListener
+                lifecycleOwner.lifecycleScope.launch {
                     val searchCity = try {
-                        val geocoder = Geocoder(requireContext(), Locale.getDefault())
+                        val geocoder = Geocoder(callbackContext, Locale.getDefault())
                         val address = withContext(Dispatchers.IO) {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 geocoder.getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
@@ -201,57 +260,76 @@ class GemsFragment : Fragment() {
                         "this area"
                     }
 
-                    if (isAdded && view != null) {
-                        viewModel.loadGems(location.latitude, location.longitude, searchCity)
-                    }
+                    if (_binding == null || !isAdded) return@launch
+                    viewModel.loadGems(location.latitude, location.longitude, searchCity)
                 }
-            } else if (isAdded && view != null) {
-                showErrorState(getString(R.string.gems_location_failed))
             }
-        }.addOnFailureListener {
-            if (isAdded && view != null) {
-                showErrorState(getString(R.string.gems_location_failed))
+            .addOnFailureListener {
+                val binding = _binding ?: return@addOnFailureListener
+                if (GemsLocationCallbackGuard.shouldHandleLocationFailure(
+                        isFragmentAdded = isAdded,
+                        hasBinding = isCurrentBinding(binding)
+                    )
+                ) {
+                    showErrorState(getString(R.string.gems_location_failed))
+                }
             }
-        }
+
+        currentBinding.gemsRecycler.visibility = View.VISIBLE
     }
 
     private fun showLocationPermissionFeedback() {
+        if (_binding == null || !isAdded) return
         val messageRes = when (locationPermissionController.resolveState()) {
             LocationPermissionGate.State.RATIONALE -> R.string.gems_location_permission_rationale
             LocationPermissionGate.State.SETTINGS -> R.string.gems_location_permission_settings
             else -> R.string.gems_location_permission_required
         }
         showEmptyStateText(getString(messageRes), showRetry = true)
-        showSnackbar(getString(messageRes), isError = true)
+        showGemsSnackbar(getString(messageRes), isError = true)
     }
 
-    private fun showLoadingState(message: String = getString(R.string.gems_loading_default)) {
-        gemsRecycler.visibility = View.VISIBLE
-        refreshBtn.isEnabled = false
-        loadingIndicator.visibility = View.VISIBLE
-        loadingText.visibility = View.VISIBLE
-        loadingText.text = message
+    private fun showLoadingState(message: String? = null) {
+        val currentBinding = _binding ?: return
+        if (!isAdded) return
+        currentBinding.gemsRecycler.visibility = View.VISIBLE
+        currentBinding.refreshGemsBtn.isEnabled = false
+        currentBinding.gemsLoading.visibility = View.VISIBLE
+        currentBinding.gemsLoadingText.visibility = View.VISIBLE
+        currentBinding.gemsLoadingText.text = message ?: getString(R.string.gems_loading_default)
         hideEmptyState()
     }
 
     private fun showErrorState(message: String) {
-        gemsAdapter.submitList(emptyList())
+        gemsAdapter?.submitList(emptyList())
         showEmptyStateText(message, showRetry = true)
     }
 
     private fun showEmptyStateText(message: String, showRetry: Boolean) {
-        gemsRecycler.visibility = View.GONE
-        refreshBtn.isEnabled = true
-        loadingIndicator.visibility = View.GONE
-        loadingText.visibility = View.GONE
-        emptyStateText.text = message
-        emptyStateText.visibility = View.VISIBLE
-        retryBtn.visibility = if (showRetry) View.VISIBLE else View.GONE
+        val currentBinding = _binding ?: return
+        currentBinding.gemsRecycler.visibility = View.GONE
+        currentBinding.refreshGemsBtn.isEnabled = true
+        currentBinding.gemsLoading.visibility = View.GONE
+        currentBinding.gemsLoadingText.visibility = View.GONE
+        currentBinding.gemsEmptyState.text = message
+        currentBinding.gemsEmptyState.visibility = View.VISIBLE
+        currentBinding.gemsRetryButton.visibility = if (showRetry) View.VISIBLE else View.GONE
     }
 
     private fun hideEmptyState() {
-        emptyStateText.visibility = View.GONE
-        retryBtn.visibility = View.GONE
+        val currentBinding = _binding ?: return
+        currentBinding.gemsEmptyState.visibility = View.GONE
+        currentBinding.gemsRetryButton.visibility = View.GONE
+    }
+
+    private fun showGemsSnackbar(message: String, isError: Boolean = false) {
+        _binding ?: return
+        if (!isAdded) return
+        showSnackbar(message, isError)
+    }
+
+    private fun isCurrentBinding(binding: FragmentGemsBinding): Boolean {
+        return _binding === binding
     }
 
     private fun resolveSearchCity(address: Address?): String {
@@ -297,14 +375,26 @@ class GemsFragment : Fragment() {
     }
 
     private fun openInMaps(gem: Gem) {
-        val geoUri = Uri.parse("geo:${gem.lat},${gem.lng}?q=${Uri.encode(gem.name)}")
+        if (_binding == null || !isAdded) return
+        val geoUri = "geo:${gem.lat},${gem.lng}?q=${Uri.encode(gem.name)}".toUri()
         val mapsIntent = Intent(Intent.ACTION_VIEW, geoUri).setPackage("com.google.android.apps.maps")
         try {
             startActivity(mapsIntent)
         } catch (_: ActivityNotFoundException) {
             val webUrl = "https://www.google.com/maps/search/?api=1&query=${gem.lat},${gem.lng}"
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)))
+            startActivity(Intent(Intent.ACTION_VIEW, webUrl.toUri()))
         }
+    }
+
+    override fun onDestroyView() {
+        val currentBinding = _binding
+        currentBinding?.refreshGemsBtn?.setOnClickListener(null)
+        currentBinding?.gemsRetryButton?.setOnClickListener(null)
+        currentBinding?.gemsRecycler?.adapter = null
+        gemsAdapter?.clearOnGemClick()
+        gemsAdapter = null
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun logDebug(message: String) {
@@ -312,16 +402,20 @@ class GemsFragment : Fragment() {
             android.util.Log.d(logTag, message)
         }
     }
-
 }
 
-class GemsAdapter(private val onGemClick: (Gem) -> Unit) : ListAdapter<Gem, GemsAdapter.ViewHolder>(GemDiffCallback()) {
+class GemsAdapter(onGemClick: (Gem) -> Unit) : ListAdapter<Gem, GemsAdapter.ViewHolder>(GemDiffCallback()) {
+    private var onGemClick: ((Gem) -> Unit)? = onGemClick
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val name: TextView = view.findViewById(R.id.gem_name)
         val location: TextView = view.findViewById(R.id.gem_location)
         val description: TextView = view.findViewById(R.id.gem_description)
         val reason: TextView = view.findViewById(R.id.gem_reason)
+    }
+
+    fun clearOnGemClick() {
+        onGemClick = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -335,7 +429,7 @@ class GemsAdapter(private val onGemClick: (Gem) -> Unit) : ListAdapter<Gem, Gems
         holder.location.text = holder.itemView.context.getString(R.string.gem_location_format, gem.location)
         holder.description.text = gem.description
         holder.reason.text = holder.itemView.context.getString(R.string.gem_reason_format, gem.reason)
-        holder.itemView.setOnClickListener { onGemClick(gem) }
+        holder.itemView.setOnClickListener { onGemClick?.invoke(gem) }
     }
 
     private class GemDiffCallback : DiffUtil.ItemCallback<Gem>() {
