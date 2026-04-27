@@ -1,9 +1,11 @@
 package com.novahorizon.wanderly.data
 
 import android.util.Log
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +43,7 @@ class SocialRepository {
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
-            Log.e("SocialRepository", "Error getting leaderboard", e)
+            logError("Error getting leaderboard", e)
             emptyList()
         }
     }
@@ -96,7 +98,7 @@ class SocialRepository {
             }
             true
         } catch (e: Exception) {
-            Log.e("SocialRepository", "Error removing friend: ${e.message}", e)
+            logError("Error removing friend", e)
             false
         }
     }
@@ -132,7 +134,7 @@ class SocialRepository {
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
-            Log.e("SocialRepository", "Error getting friends", e)
+            logError("Error getting friends", e)
             emptyList()
         }
     }
@@ -143,6 +145,17 @@ class SocialRepository {
         internal fun normalizeFriendCode(friendCode: String): String? {
             val normalizedCode = friendCode.trim().uppercase()
             return normalizedCode.takeIf { FRIEND_CODE_REGEX.matches(it) }
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable) {
+        if (BuildConfig.DEBUG) {
+            Log.e(
+                "SocialRepository",
+                "${LogRedactor.redact(message)} [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
+            )
+        } else {
+            Log.e("SocialRepository", message)
         }
     }
 }

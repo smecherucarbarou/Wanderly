@@ -12,6 +12,7 @@ import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.databinding.FragmentLoginBinding
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
@@ -65,9 +66,13 @@ class LoginFragment : Fragment() {
 
         binding.googleSignInButton.setOnClickListener {
             binding.googleSignInButton.isEnabled = false
+            val rememberMe = AuthRouting.rememberMeForOAuthStart(
+                isRememberMeChecked = binding.rememberMeCheckbox.isChecked
+            )
 
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    WanderlyGraph.repository(requireContext()).setRememberMeEnabled(rememberMe)
                     com.novahorizon.wanderly.api.SupabaseClient.client.auth.signInWith(
                         provider = Google,
                         redirectUrl = authCallbackUrl

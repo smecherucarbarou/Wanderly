@@ -7,6 +7,10 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +88,12 @@ class ProfileRepository(
             )
             profile
         } catch (e: Exception) {
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_SYNC_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "get_current_profile"
+            )
             logError("Error getting profile: ${e.message}", e)
             null
         }
@@ -100,6 +110,12 @@ class ProfileRepository(
             )
             true
         } catch (e: Exception) {
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_SYNC_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "update_profile"
+            )
             logError("Update profile failed: ${e.message}", e)
             false
         }
@@ -110,6 +126,12 @@ class ProfileRepository(
             val profile = getCurrentProfile() ?: return@withContext false
             updateProfile(profile.copy(last_mission_date = "2000-01-01"))
         } catch (e: Exception) {
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_SYNC_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "reset_mission_date"
+            )
             logError("Operation failed", e)
             false
         }
@@ -190,22 +212,26 @@ class ProfileRepository(
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("ProfileRepository", message)
+            Log.d("ProfileRepository", LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w("ProfileRepository", message)
+            Log.w("ProfileRepository", LogRedactor.redact(message))
         }
     }
 
     private fun logError(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
+            val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e("ProfileRepository", message, throwable)
+                Log.e(
+                    "ProfileRepository",
+                    "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
+                )
             } else {
-                Log.e("ProfileRepository", message)
+                Log.e("ProfileRepository", safeMessage)
             }
         }
     }

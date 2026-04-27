@@ -163,8 +163,8 @@ class StreakWidgetStateHelperTest {
     @Test
     fun resolveFrameIndexRotatesPredictablyAcrossThreeFrames() {
         assertEquals(0, StreakWidgetStateHelper.resolveFrameIndex(0L))
-        assertEquals(1, StreakWidgetStateHelper.resolveFrameIndex(15_000L))
-        assertEquals(2, StreakWidgetStateHelper.resolveFrameIndex(30_000L))
-        assertEquals(0, StreakWidgetStateHelper.resolveFrameIndex(45_000L))
+        assertEquals(1, StreakWidgetStateHelper.resolveFrameIndex(StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS))
+        assertEquals(2, StreakWidgetStateHelper.resolveFrameIndex(StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS * 2))
+        assertEquals(0, StreakWidgetStateHelper.resolveFrameIndex(StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS * 3))
     }
 }

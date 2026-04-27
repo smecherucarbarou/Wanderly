@@ -8,6 +8,10 @@ import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,7 +45,7 @@ class AvatarRepository(private val context: Context) {
             throw IllegalStateException("No access token available for avatar upload")
         }
 
-        logDebug("Uploading avatar for profile: $profileId")
+        logDebug("Uploading avatar")
 
         try {
             val avatarBytes = buildAvatarBytes(uri) ?: run {
@@ -75,12 +79,18 @@ class AvatarRepository(private val context: Context) {
                     logError(message)
                     throw IllegalStateException(message)
                 }
-                logDebug("Avatar upload successful for $profileId")
+                logDebug("Avatar upload successful")
             }
 
-            logDebug("Generated avatar path: ${target.filePath}")
+            logDebug("Generated avatar storage path")
             target.filePath
         } catch (e: Exception) {
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_AVATAR_UPLOAD_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile",
+                CrashKey.OPERATION to "avatar_upload"
+            )
             logError("Exception during avatar upload", e)
             throw e
         }
@@ -141,16 +151,20 @@ class AvatarRepository(private val context: Context) {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("AvatarRepository", message)
+            Log.d("AvatarRepository", LogRedactor.redact(message))
         }
     }
 
     private fun logError(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
+            val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e("AvatarRepository", message, throwable)
+                Log.e(
+                    "AvatarRepository",
+                    "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
+                )
             } else {
-                Log.e("AvatarRepository", message)
+                Log.e("AvatarRepository", safeMessage)
             }
         }
     }

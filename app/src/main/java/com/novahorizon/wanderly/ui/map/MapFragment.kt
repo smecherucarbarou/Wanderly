@@ -3,7 +3,6 @@ package com.novahorizon.wanderly.ui.map
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
@@ -13,6 +12,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -266,12 +267,12 @@ class MapFragment : Fragment() {
         friendMarkerIcon?.let { return it }
 
         val buzzyDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_buzzy) ?: return null
-        val bitmap = Bitmap.createBitmap(60, 60, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(60, 60)
         val canvas = Canvas(bitmap)
         buzzyDrawable.setBounds(0, 0, canvas.width, canvas.height)
         buzzyDrawable.draw(canvas)
 
-        return BitmapDrawable(resources, bitmap).also { friendMarkerIcon = it }
+        return bitmap.toDrawable(resources).also { friendMarkerIcon = it }
     }
 
     private fun renderFriendMarkers() {
@@ -322,7 +323,7 @@ class MapFragment : Fragment() {
         friendClusterIcons[memberCount]?.let { return it }
 
         val size = (72 * resources.displayMetrics.density).toInt()
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size)
         val canvas = Canvas(bitmap)
         ContextCompat.getDrawable(requireContext(), R.drawable.bg_button_gradient)?.let { background ->
             background.setBounds(0, 0, size, size)
@@ -342,7 +343,7 @@ class MapFragment : Fragment() {
             val textY = size / 2f - (descent() + ascent()) / 2f
             canvas.drawText(memberCount.toString(), size / 2f, textY, this)
         }
-        return BitmapDrawable(resources, bitmap).also { friendClusterIcons[memberCount] = it }
+        return bitmap.toDrawable(resources).also { friendClusterIcons[memberCount] = it }
     }
 
     override fun onResume() {

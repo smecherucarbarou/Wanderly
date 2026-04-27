@@ -5,7 +5,11 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.streak.DailyStreakStatus
 import com.novahorizon.wanderly.streak.DailyStreakStatusEvaluator
 import com.novahorizon.wanderly.util.DateUtils
@@ -70,7 +74,17 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     else -> _streakStatus.postValue(StreakStatus.Active)
                 }
             } catch (e: Exception) {
-                Log.e("WanderlyStreak", "Error checking streak expiry", e)
+                CrashReporter.recordNonFatal(
+                    CrashEvent.STREAK_CHECK_FAILED,
+                    e,
+                    CrashKey.COMPONENT to "main",
+                    CrashKey.OPERATION to "daily_streak_check"
+                )
+                if (BuildConfig.DEBUG) {
+                    Log.e("WanderlyStreak", "Error checking streak expiry", e)
+                } else {
+                    Log.e("WanderlyStreak", "Error checking streak expiry")
+                }
             }
         }
     }

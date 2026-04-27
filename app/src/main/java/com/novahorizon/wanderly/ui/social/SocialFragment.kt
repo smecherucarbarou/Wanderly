@@ -289,7 +289,7 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
         holder.rankNumber.text = holder.itemView.context.getString(R.string.rank_number_format, position + 1)
 
         holder.username.text = profile.username ?: holder.itemView.context.getString(R.string.unknown_explorer)
-        holder.honeyAmount.text = (profile.honey ?: 0).toString()
+        holder.honeyAmount.text = String.format(Locale.getDefault(), "%d", profile.honey ?: 0)
         
         val rank = HiveRank.fromHoney(profile.honey)
         holder.rankName.text = getRankName(holder.itemView.context, rank)

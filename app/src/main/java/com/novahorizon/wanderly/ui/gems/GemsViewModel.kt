@@ -9,6 +9,9 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
 import kotlinx.coroutines.launch
 
 class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
@@ -62,6 +65,12 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     _gemsState.postValue(GemsState.Loaded(gems))
                 }
             } catch (e: Exception) {
+                CrashReporter.recordNonFatal(
+                    CrashEvent.GEMS_LOAD_FAILED,
+                    e,
+                    CrashKey.COMPONENT to "gems",
+                    CrashKey.OPERATION to "load"
+                )
                 if (BuildConfig.DEBUG) {
                     Log.e("GemsViewModel", "Error loading gems", e)
                 }

@@ -2,84 +2,40 @@ package com.novahorizon.wanderly.widgets
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.provider.Settings
 
 enum class AlarmDeliveryMode {
-    EXACT_ALLOW_WHILE_IDLE,
-    INEXACT_ALLOW_WHILE_IDLE
+    INEXACT_NON_WAKEUP
 }
 
 data class AlarmSchedulePlan(
-    val triggerAtMillis: Long,
-    val useExactAlarm: Boolean,
+    val triggerAtElapsedMillis: Long,
+    val windowLengthMillis: Long,
     val deliveryMode: AlarmDeliveryMode
 )
 
 object StreakWidgetAlarmScheduler {
-    const val REFRESH_INTERVAL_MILLIS = 15_000L
 
-    fun resolveSchedulePlan(
-        nowMillis: Long,
-        sdkInt: Int,
-        canScheduleExactAlarms: Boolean
-    ): AlarmSchedulePlan {
-        val triggerAtMillis = nowMillis + REFRESH_INTERVAL_MILLIS
-        val useExactAlarm = sdkInt < Build.VERSION_CODES.S || canScheduleExactAlarms
-        val deliveryMode = if (useExactAlarm) {
-            AlarmDeliveryMode.EXACT_ALLOW_WHILE_IDLE
-        } else {
-            AlarmDeliveryMode.INEXACT_ALLOW_WHILE_IDLE
-        }
-
+    fun resolveSchedulePlan(nowElapsedMillis: Long): AlarmSchedulePlan {
         return AlarmSchedulePlan(
-            triggerAtMillis = triggerAtMillis,
-            useExactAlarm = useExactAlarm,
-            deliveryMode = deliveryMode
+            triggerAtElapsedMillis = nowElapsedMillis + StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS,
+            windowLengthMillis = StreakWidgetRefreshPolicy.FLEX_WINDOW_MILLIS,
+            deliveryMode = AlarmDeliveryMode.INEXACT_NON_WAKEUP
         )
     }
 
     fun scheduleNext(
-        context: Context,
         alarmManager: AlarmManager,
         pendingIntent: PendingIntent,
-        nowMillis: Long = System.currentTimeMillis(),
-        sdkInt: Int = Build.VERSION.SDK_INT
+        nowElapsedMillis: Long = android.os.SystemClock.elapsedRealtime()
     ) {
-        val canScheduleExactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            alarmManager.canScheduleExactAlarms()
-        } else {
-            true
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !canScheduleExactAlarms) {
-            context.startActivity(
-                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-            )
-            return
-        }
-        val plan = resolveSchedulePlan(
-            nowMillis = nowMillis,
-            sdkInt = sdkInt,
-            canScheduleExactAlarms = canScheduleExactAlarms
-        )
+        val plan = resolveSchedulePlan(nowElapsedMillis = nowElapsedMillis)
 
         when (plan.deliveryMode) {
-            AlarmDeliveryMode.EXACT_ALLOW_WHILE_IDLE -> {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    plan.triggerAtMillis,
-                    pendingIntent
-                )
-            }
-
-            AlarmDeliveryMode.INEXACT_ALLOW_WHILE_IDLE -> {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    plan.triggerAtMillis,
+            AlarmDeliveryMode.INEXACT_NON_WAKEUP -> {
+                alarmManager.setWindow(
+                    AlarmManager.ELAPSED_REALTIME,
+                    plan.triggerAtElapsedMillis,
+                    plan.windowLengthMillis,
                     pendingIntent
                 )
             }

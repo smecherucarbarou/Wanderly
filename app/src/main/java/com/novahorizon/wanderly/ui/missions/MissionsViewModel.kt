@@ -19,6 +19,9 @@ import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.util.AiResponseParser
 import com.novahorizon.wanderly.util.DateUtils
 import kotlinx.coroutines.CancellationException
@@ -27,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import java.util.Calendar
+import java.util.Locale
 import java.util.TimeZone
 
 class MissionsViewModel(
@@ -353,6 +357,12 @@ class MissionsViewModel(
     }
 
     private fun postGenericMissionError(message: String, e: Exception) {
+        CrashReporter.recordNonFatal(
+            CrashEvent.MISSION_FLOW_FAILED,
+            e,
+            CrashKey.COMPONENT to "missions",
+            CrashKey.OPERATION to message.lowercase(Locale.US).replace(' ', '_')
+        )
         if (BuildConfig.DEBUG) {
             Log.e("MissionsViewModel", message, e)
         }

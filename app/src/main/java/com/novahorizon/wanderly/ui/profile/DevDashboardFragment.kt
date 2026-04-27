@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
@@ -19,6 +20,7 @@ import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.workers.SocialWorker
@@ -70,7 +72,7 @@ class DevDashboardFragment : Fragment() {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 7
             viewLifecycleOwner.lifecycleScope.launch {
                 WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
-                announceTrigger(getString(R.string.dev_dashboard_forced_daily_reminder, streak))
+                announceTrigger(resources.getQuantityString(R.plurals.dev_dashboard_forced_daily_reminder, streak, streak))
             }
         }
         binding.btnResetDailyCooldown.setOnClickListener {
@@ -97,7 +99,7 @@ class DevDashboardFragment : Fragment() {
             val streak = binding.editStreak.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10
             viewLifecycleOwner.lifecycleScope.launch {
                 WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
-                announceTrigger(getString(R.string.dev_dashboard_forced_milestone, streak))
+                announceTrigger(resources.getQuantityString(R.plurals.dev_dashboard_forced_milestone, streak, streak))
             }
         }
         binding.btnResetMilestoneCooldown.setOnClickListener {
@@ -220,6 +222,18 @@ class DevDashboardFragment : Fragment() {
             WorkManager.getInstance(requireContext()).enqueue(streakRequest)
 
             announceTrigger(getString(R.string.dev_dashboard_workers_queued))
+        }
+
+        binding.btnCrashlyticsNonfatal.isEnabled = BuildConfig.CRASH_REPORTING_CONFIGURED
+        binding.btnCrashlyticsNonfatal.setOnClickListener {
+            val recorded = CrashReporter.recordTestNonFatal(requireContext().applicationContext)
+            announceTrigger(
+                if (recorded) {
+                    getString(R.string.dev_dashboard_crashlytics_nonfatal_queued)
+                } else {
+                    getString(R.string.dev_dashboard_crashlytics_unavailable)
+                }
+            )
         }
     }
 

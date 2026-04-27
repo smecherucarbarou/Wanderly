@@ -54,14 +54,15 @@ class LoginFlowInstrumentedTest {
 
     @Test
     fun loginWithValidCredentialsOpensMainActivity() {
+        val credentials = AndroidTestCredentialProvider.requireCredentials()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val mainActivityMonitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
 
         ActivityScenario.launch(AuthActivity::class.java).use {
             onView(isRoot()).perform(waitFor(visibleViewMatcher(R.id.email_input), 7_000L))
 
-            onView(withId(R.id.email_input)).perform(typeText(TEST_EMAIL), closeSoftKeyboard())
-            onView(withId(R.id.password_input)).perform(typeText(TEST_PASSWORD), closeSoftKeyboard())
+            onView(withId(R.id.email_input)).perform(typeText(credentials.email), closeSoftKeyboard())
+            onView(withId(R.id.password_input)).perform(typeText(credentials.password), closeSoftKeyboard())
             onView(withId(R.id.login_button)).perform(scrollTo(), click())
 
             val launchedMainActivity = instrumentation.waitForMonitorWithTimeout(mainActivityMonitor, 5_000L)
@@ -82,18 +83,15 @@ class LoginFlowInstrumentedTest {
 
     @Test
     fun loginWithBlankPasswordShowsErrorSnackbar() {
+        val email = AndroidTestCredentialProvider.requireEmail()
+
         ActivityScenario.launch(AuthActivity::class.java).use {
             onView(isRoot()).perform(waitFor(visibleViewMatcher(R.id.email_input), 7_000L))
 
-            onView(withId(R.id.email_input)).perform(typeText(TEST_EMAIL), closeSoftKeyboard())
+            onView(withId(R.id.email_input)).perform(typeText(email), closeSoftKeyboard())
             onView(withId(R.id.login_button)).perform(scrollTo(), click())
 
             onView(withText(R.string.auth_password_required)).check(matches(isDisplayed()))
         }
-    }
-
-    companion object {
-        const val TEST_EMAIL = "mihaileon55@gmail.com"
-        const val TEST_PASSWORD = "Carbarou123"
     }
 }

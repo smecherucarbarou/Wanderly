@@ -23,6 +23,7 @@ class OnboardingFragment : Fragment() {
 
     private var _binding: FragmentOnboardingBinding? = null
     private val binding get() = _binding!!
+    private var onboardingPageCallback: ViewPager2.OnPageChangeCallback? = null
 
     private val pages = listOf(
         OnboardingPage(
@@ -85,14 +86,14 @@ class OnboardingFragment : Fragment() {
             }
         }
 
-        binding.onboardingPager.registerOnPageChangeCallback(
-            object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
-                override fun onPageSelected(position: Int) {
-                    super.onPageSelected(position)
-                    updateActions(position)
-                }
+        val pageCallback = object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                updateActions(position)
             }
-        )
+        }
+        onboardingPageCallback = pageCallback
+        binding.onboardingPager.registerOnPageChangeCallback(pageCallback)
         updateActions(binding.onboardingPager.currentItem)
     }
 
@@ -116,6 +117,8 @@ class OnboardingFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        onboardingPageCallback?.let(binding.onboardingPager::unregisterOnPageChangeCallback)
+        onboardingPageCallback = null
         super.onDestroyView()
         _binding = null
     }

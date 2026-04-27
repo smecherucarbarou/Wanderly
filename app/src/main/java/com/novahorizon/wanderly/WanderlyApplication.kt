@@ -6,6 +6,8 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.StrictModeInitializer
 import com.novahorizon.wanderly.workers.StreakWorker
 import com.novahorizon.wanderly.workers.SocialWorker
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +22,8 @@ class WanderlyApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        StrictModeInitializer.enableForDebugBuild()
+        CrashReporter.initialize(this, BuildConfig.CRASH_REPORTING_CONFIGURED)
         
         // Initialize Supabase
         com.novahorizon.wanderly.api.SupabaseClient.init(this)

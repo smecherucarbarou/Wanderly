@@ -107,11 +107,7 @@ class MainActivity : AppCompatActivity() {
     private fun startHiveService(hasSession: Boolean) {
         if (AuthRouting.shouldStartSessionServices(hasSession)) {
             val intent = Intent(this, HiveRealtimeService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            startForegroundService(intent)
         }
     }
 
@@ -156,9 +152,9 @@ class MainActivity : AppCompatActivity() {
     private fun showStreakCrisisDialog(days: Int, cost: Int) {
         androidx.appcompat.app.AlertDialog.Builder(this, R.style.Wanderly_AlertDialog)
             .setTitle(R.string.streak_crisis_title)
-            .setMessage(getString(R.string.streak_crisis_message, days, cost))
+            .setMessage(resources.getQuantityString(R.plurals.streak_crisis_message, days, days, cost))
             .setCancelable(false)
-            .setPositiveButton(getString(R.string.streak_crisis_pay, cost)) { _, _ ->
+            .setPositiveButton(resources.getQuantityString(R.plurals.streak_crisis_pay, cost, cost)) { _, _ ->
                 viewModel.restoreStreak(cost)
             }
             .setNegativeButton(R.string.streak_crisis_accept_defeat) { _, _ ->

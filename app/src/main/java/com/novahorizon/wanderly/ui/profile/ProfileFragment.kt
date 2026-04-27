@@ -26,12 +26,17 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileRepository
 import com.novahorizon.wanderly.databinding.FragmentProfileBinding
 import com.novahorizon.wanderly.invites.InviteShareFormatter
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
@@ -67,7 +72,20 @@ class ProfileFragment : Fragment() {
             return@registerForActivityResult
         }
         if (!isUsableCropResult(resultUri)) {
-            Log.e("ProfileFragment", "Avatar crop result was empty or unreadable: $resultUri")
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_AVATAR_CROP_FAILED,
+                IllegalStateException("avatar_crop_result_unusable"),
+                CrashKey.COMPONENT to "profile",
+                CrashKey.OPERATION to "avatar_crop"
+            )
+            if (BuildConfig.DEBUG) {
+                Log.e(
+                    "ProfileFragment",
+                    "Avatar crop result was empty or unreadable: ${LogRedactor.redact(resultUri.toString())}"
+                )
+            } else {
+                Log.e("ProfileFragment", "Avatar crop result was empty or unreadable")
+            }
             Toast.makeText(requireContext(), R.string.profile_avatar_crop_failed, Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
@@ -241,7 +259,7 @@ class ProfileFragment : Fragment() {
         val needed = nextRankHoney - currentHoney
         binding.progressText.text = if (currentRank < 4) {
             if (needed > 0) {
-                getString(R.string.profile_next_rank_in_honey, needed)
+                resources.getQuantityString(R.plurals.profile_next_rank_in_honey, needed, needed)
             } else {
                 getString(R.string.profile_rank_up_ready)
             }

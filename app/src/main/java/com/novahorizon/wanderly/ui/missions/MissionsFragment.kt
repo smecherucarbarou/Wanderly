@@ -69,8 +69,9 @@ class MissionsFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
-                        requireContext().contentResolver.openInputStream(imageUri)?.use { input ->
-                            android.graphics.BitmapFactory.decodeStream(input)
+                        val resolver = requireContext().contentResolver
+                        MissionPhotoDecoder.decodeForVerification {
+                            resolver.openInputStream(imageUri)
                         }
                     }
                     if (bitmap == null) {
@@ -319,7 +320,7 @@ class MissionsFragment : Fragment() {
         val honey = profile.honey ?: 0
         val derivedRank = profile.derivedHiveRank()
 
-        binding.honeyCount.text = getString(R.string.mission_honey_format, honey)
+        binding.honeyCount.text = resources.getQuantityString(R.plurals.mission_honey_format, honey, honey)
         binding.rankName.text = getRankName(derivedRank)
 
         val maxHoney = HiveRank.maxHoneyForRank(derivedRank)

@@ -5,6 +5,7 @@ import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.observability.LogRedactor
 
 object NotificationCheckCoordinator {
     private const val LOG_TAG = "NotifCheck"
@@ -52,7 +53,7 @@ object NotificationCheckCoordinator {
 
     fun log(category: String, source: String, message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(LOG_TAG, "[$category][$source] $message")
+            Log.d(LOG_TAG, LogRedactor.redact("[$category][$source] $message"))
         }
     }
 

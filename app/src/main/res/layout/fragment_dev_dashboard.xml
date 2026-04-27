@@ -3,7 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background"
     android:padding="24dp">
 
     <TextView
@@ -67,6 +66,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/dev_dashboard_honey_hint"
+                        android:importantForAutofill="no"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -75,6 +75,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/dev_dashboard_streak_hint"
+                        android:importantForAutofill="no"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -83,6 +84,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/dev_dashboard_flights_hint"
+                        android:importantForAutofill="no"
                         android:inputType="number"
                         android:textColor="@color/text_primary" />
 
@@ -129,6 +131,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:hint="@string/dev_dashboard_target_rival_hint"
+                        android:importantForAutofill="no"
                         android:inputType="text"
                         android:textColor="@color/text_primary" />
 
@@ -343,6 +346,15 @@
                         android:layout_marginTop="4dp"
                         android:backgroundTint="@color/primary"
                         android:text="@string/dev_dashboard_force_run_workers"
+                        android:textAllCaps="false" />
+
+                    <Button
+                        android:id="@+id/btn_crashlytics_nonfatal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:backgroundTint="@color/primary"
+                        android:text="@string/dev_dashboard_send_crashlytics_nonfatal"
                         android:textAllCaps="false" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

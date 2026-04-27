@@ -5,6 +5,7 @@ import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.GeminiClient
+import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.AiResponseParser
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -151,7 +152,7 @@ class GemCurationRepository(
 
     private fun logRawResponse(response: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("GemCurationRepository", "Raw gem response: $response")
+            Log.d("GemCurationRepository", "Raw gem response: ${LogRedactor.redact(response)}")
         }
     }
 }

@@ -232,14 +232,21 @@ class PreferencesStore(context: Context) {
         dataStoreManager.getMainFloat(typedKey)?.let { return it.toDouble() }
 
         val legacyRawValue = dataStoreManager.getMainString(legacyKey, null) ?: return null
-        val legacyValue = legacyRawValue.toDoubleOrNull() ?: 0.0
-        dataStoreManager.putMainFloat(typedKey, legacyValue.toFloat())
         dataStoreManager.removeMainKeys(listOf(legacyKey))
+        val legacyValue = parseLegacyMissionCoordinate(legacyRawValue) ?: return null
+        dataStoreManager.putMainFloat(typedKey, legacyValue.toFloat())
         return legacyValue
     }
 
     companion object {
         internal const val NOTIFICATION_CHECK_PREFS_NAME = "notification_check_state"
         internal const val NOTIFICATION_COOLDOWN_PREFS_NAME = "notif_dedup"
+
+        internal fun parseLegacyMissionCoordinate(rawValue: String?): Double? {
+            return rawValue
+                ?.trim()
+                ?.toDoubleOrNull()
+                ?.takeIf { it in -180.0..180.0 }
+        }
     }
 }

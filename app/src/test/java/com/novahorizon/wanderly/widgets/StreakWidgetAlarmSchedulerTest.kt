@@ -1,52 +1,38 @@
 package com.novahorizon.wanderly.widgets
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreakWidgetAlarmSchedulerTest {
 
     @Test
-    fun refreshIntervalIsFifteenSeconds() {
-        assertEquals(15_000L, StreakWidgetAlarmScheduler.REFRESH_INTERVAL_MILLIS)
+    fun refreshIntervalUsesPolicySafeCadence() {
+        assertEquals(60 * 60 * 1000L, StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS)
     }
 
     @Test
-    fun resolveSchedulePlanUsesExactAlarmsOnAndroid12WhenAvailable() {
+    fun resolveSchedulePlanUsesInexactNonWakeupAlarm() {
         val plan = StreakWidgetAlarmScheduler.resolveSchedulePlan(
-            nowMillis = 1_000L,
-            sdkInt = 31,
-            canScheduleExactAlarms = true
+            nowElapsedMillis = 1_000L
         )
 
-        assertEquals(16_000L, plan.triggerAtMillis)
-        assertTrue(plan.useExactAlarm)
-        assertEquals(AlarmDeliveryMode.EXACT_ALLOW_WHILE_IDLE, plan.deliveryMode)
+        assertEquals(3_601_000L, plan.triggerAtElapsedMillis)
+        assertEquals(15 * 60 * 1000L, plan.windowLengthMillis)
+        assertEquals(AlarmDeliveryMode.INEXACT_NON_WAKEUP, plan.deliveryMode)
     }
 
     @Test
-    fun resolveSchedulePlanFallsBackToInexactAlarmsOnAndroid12WhenUnavailable() {
-        val plan = StreakWidgetAlarmScheduler.resolveSchedulePlan(
-            nowMillis = 1_000L,
-            sdkInt = 31,
-            canScheduleExactAlarms = false
+    fun remoteRefreshPolicySkipsFreshCachedSnapshot() {
+        val snapshot = com.novahorizon.wanderly.data.WidgetStreakSnapshot(
+            streakCount = 5,
+            lastMissionDate = "2026-04-26",
+            savedAtMillis = 10_000L,
+            lastSyncSucceeded = true
         )
 
-        assertEquals(16_000L, plan.triggerAtMillis)
-        assertFalse(plan.useExactAlarm)
-        assertEquals(AlarmDeliveryMode.INEXACT_ALLOW_WHILE_IDLE, plan.deliveryMode)
-    }
-
-    @Test
-    fun resolveSchedulePlanUsesExactAlarmsBeforeAndroid12WithoutPermissionGate() {
-        val plan = StreakWidgetAlarmScheduler.resolveSchedulePlan(
-            nowMillis = 1_000L,
-            sdkInt = 30,
-            canScheduleExactAlarms = false
+        assertEquals(
+            false,
+            StreakWidgetRefreshPolicy.shouldFetchRemote(snapshot = snapshot, nowMillis = 11_000L)
         )
-
-        assertTrue(plan.useExactAlarm)
-        assertEquals(AlarmDeliveryMode.EXACT_ALLOW_WHILE_IDLE, plan.deliveryMode)
     }
 }

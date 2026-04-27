@@ -69,7 +69,7 @@ object StreakWidgetStateHelper {
     }
 
     fun resolveFrameIndex(tickMillis: Long): Int {
-        return ((tickMillis / StreakWidgetAlarmScheduler.REFRESH_INTERVAL_MILLIS) % FRAME_COUNT)
+        return ((tickMillis / StreakWidgetRefreshPolicy.REFRESH_INTERVAL_MILLIS) % FRAME_COUNT)
             .toInt()
     }
 

@@ -8,6 +8,7 @@ import androidx.test.espresso.PerformException
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import androidx.test.platform.app.InstrumentationRegistry
 import com.novahorizon.wanderly.api.PlacesGeocoder
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.hamcrest.Matcher
 import org.hamcrest.Matchers.allOf
+import org.junit.Assume.assumeTrue
 import java.util.concurrent.TimeoutException
 
 class FakeWanderlyRepository(
@@ -70,6 +72,40 @@ class FakeWanderlyRepository(
 
 class FakeEmailAuthService : EmailAuthService {
     override suspend fun signInWithEmail(email: String, password: String) = Unit
+}
+
+data class AndroidTestCredentials(val email: String, val password: String)
+
+object AndroidTestCredentialProvider {
+    private const val EMAIL_ARGUMENT = "wanderly.test.email"
+    private const val PASSWORD_ARGUMENT = "wanderly.test.password"
+
+    fun requireCredentials(): AndroidTestCredentials {
+        val email = readEmail()
+        val password = readPassword()
+        assumeTrue(
+            "Android login instrumentation tests require WANDERLY_ANDROID_TEST_EMAIL and " +
+                "WANDERLY_ANDROID_TEST_PASSWORD supplied through Gradle properties, environment, or local.properties.",
+            email.isNotBlank() && password.isNotBlank()
+        )
+        return AndroidTestCredentials(email = email, password = password)
+    }
+
+    fun requireEmail(): String {
+        val email = readEmail()
+        assumeTrue(
+            "Android login instrumentation tests require WANDERLY_ANDROID_TEST_EMAIL supplied through " +
+                "Gradle properties, environment, or local.properties.",
+            email.isNotBlank()
+        )
+        return email
+    }
+
+    private fun readEmail(): String =
+        InstrumentationRegistry.getArguments().getString(EMAIL_ARGUMENT).orEmpty().trim()
+
+    private fun readPassword(): String =
+        InstrumentationRegistry.getArguments().getString(PASSWORD_ARGUMENT).orEmpty()
 }
 
 class FakeMissionGenerationService(

@@ -13,6 +13,10 @@ import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.databinding.ActivityAuthBinding
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.coroutines.launch
@@ -37,6 +41,12 @@ class AuthActivity : AppCompatActivity() {
                     },
                     onError = { error ->
                         Log.e("AuthActivity", "Failed to import auth callback (${error.javaClass.simpleName})")
+                        CrashReporter.recordNonFatal(
+                            CrashEvent.AUTH_CALLBACK_IMPORT_FAILED,
+                            error,
+                            CrashKey.COMPONENT to "auth",
+                            CrashKey.OPERATION to "callback_import"
+                        )
                         lifecycleScope.launch {
                             resumeStandardAuthFlow()
                         }
@@ -69,7 +79,17 @@ class AuthActivity : AppCompatActivity() {
                 try {
                     SupabaseClient.client.auth.signOut()
                 } catch (e: Exception) {
-                    Log.e("AuthActivity", "Sign out error: ${e.message}")
+                    CrashReporter.recordNonFatal(
+                        CrashEvent.AUTH_SIGN_OUT_FAILED,
+                        e,
+                        CrashKey.COMPONENT to "auth",
+                        CrashKey.OPERATION to "fallback_sign_out"
+                    )
+                    if (BuildConfig.DEBUG) {
+                        Log.e("AuthActivity", "Sign out error: ${LogRedactor.redact(e.message)}")
+                    } else {
+                        Log.e("AuthActivity", "Sign out error")
+                    }
                 }
             }
             showAuthUi()

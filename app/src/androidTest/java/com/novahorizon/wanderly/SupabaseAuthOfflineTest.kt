@@ -43,11 +43,13 @@ class SupabaseAuthOfflineTest {
 
     @Test
     fun offlineLoginShowsFriendlyError() {
+        val credentials = AndroidTestCredentialProvider.requireCredentials()
+
         ActivityScenario.launch(AuthActivity::class.java).use {
             onView(isRoot()).perform(waitFor(visibleViewMatcher(R.id.email_input), 7_000L))
 
-            onView(withId(R.id.email_input)).perform(typeText(TEST_EMAIL), closeSoftKeyboard())
-            onView(withId(R.id.password_input)).perform(typeText(TEST_PASSWORD), closeSoftKeyboard())
+            onView(withId(R.id.email_input)).perform(typeText(credentials.email), closeSoftKeyboard())
+            onView(withId(R.id.password_input)).perform(typeText(credentials.password), closeSoftKeyboard())
             onView(withId(R.id.login_button)).perform(scrollTo(), click())
 
             onView(withText(FRIENDLY_OFFLINE_ERROR)).check(matches(isDisplayed()))
@@ -63,8 +65,6 @@ class SupabaseAuthOfflineTest {
     }
 
     companion object {
-        private const val TEST_EMAIL = "mihaileon55@gmail.com"
-        private const val TEST_PASSWORD = "Carbarou123"
         private const val RAW_NETWORK_ERROR = "network unavailable"
         private const val FRIENDLY_OFFLINE_ERROR =
             "No internet connection. Please check your network."

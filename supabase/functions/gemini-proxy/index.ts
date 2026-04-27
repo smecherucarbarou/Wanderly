@@ -1,4 +1,4 @@
-const MAX_BODY_BYTES = 64 * 1024
+const MAX_BODY_BYTES = 3 * 1024 * 1024
 
 function allowedOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
@@ -28,6 +28,16 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
   })
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isValidGeminiPayload(payload: unknown): boolean {
+  if (!isRecord(payload)) return false
+  const contents = payload.contents
+  return Array.isArray(contents) && contents.length > 0 && contents.length <= 16
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = buildCorsHeaders(req)
   if (req.method === "OPTIONS") {
@@ -54,7 +64,16 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "Invalid request size" }, 413)
     }
 
-    JSON.parse(requestBody)
+    let payload: unknown
+    try {
+      payload = JSON.parse(requestBody)
+    } catch {
+      return jsonResponse(req, { error: "Malformed JSON body" }, 400)
+    }
+
+    if (!isValidGeminiPayload(payload)) {
+      return jsonResponse(req, { error: "contents array is required" }, 400)
+    }
 
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
@@ -68,12 +87,15 @@ Deno.serve(async (req: Request) => {
     )
 
     const responseText = await geminiResponse.text()
+    if (!geminiResponse.ok) {
+      return jsonResponse(req, { error: "Gemini upstream request failed" }, geminiResponse.status)
+    }
+
     return new Response(responseText, {
       status: geminiResponse.status,
       headers: corsHeaders,
     })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Gemini proxy error"
-    return jsonResponse(req, { error: message }, 500)
+  } catch {
+    return jsonResponse(req, { error: "Gemini proxy request failed" }, 500)
   }
 })

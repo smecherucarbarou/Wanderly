@@ -1,4 +1,5 @@
 const MAX_FIELD_MASK_LENGTH = 256
+const MAX_BODY_BYTES = 16 * 1024
 
 function allowedOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
@@ -28,6 +29,10 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
   })
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = buildCorsHeaders(req)
   if (req.method === "OPTIONS") {
@@ -49,15 +54,27 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const payload = await req.json()
-    const fieldMask = typeof payload?.fieldMask === "string" ? payload.fieldMask : ""
-    const body = payload?.body
+    const requestBody = await req.text()
+    if (requestBody.length === 0 || requestBody.length > MAX_BODY_BYTES) {
+      return jsonResponse(req, { error: "Invalid request size" }, 413)
+    }
+
+    let payload: unknown
+    try {
+      payload = JSON.parse(requestBody)
+    } catch {
+      return jsonResponse(req, { error: "Malformed JSON body" }, 400)
+    }
+
+    const fieldMask = isRecord(payload) && typeof payload.fieldMask === "string" ? payload.fieldMask : ""
+    const body = isRecord(payload) ? payload.body : null
 
     if (
       !fieldMask ||
-      !body ||
+      !isRecord(body) ||
       fieldMask.length > MAX_FIELD_MASK_LENGTH ||
-      typeof body?.textQuery !== "string" ||
+      !/^[A-Za-z0-9_.,*]+$/.test(fieldMask) ||
+      typeof body.textQuery !== "string" ||
       body.textQuery.trim().length === 0 ||
       body.textQuery.length > 200
     ) {
@@ -75,12 +92,15 @@ Deno.serve(async (req: Request) => {
     })
 
     const responseText = await response.text()
+    if (!response.ok) {
+      return jsonResponse(req, { error: "Places upstream request failed" }, response.status)
+    }
+
     return new Response(responseText, {
       status: response.status,
       headers: corsHeaders,
     })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Places proxy error"
-    return jsonResponse(req, { error: message }, 500)
+  } catch {
+    return jsonResponse(req, { error: "Places proxy request failed" }, 500)
   }
 })

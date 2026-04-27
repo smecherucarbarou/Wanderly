@@ -1,13 +1,18 @@
 package com.novahorizon.wanderly
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
 
 object WanderlyGraph {
     @Volatile
+    @SuppressLint("StaticFieldLeak")
+    // Safe for the current manual graph: WanderlyRepository stores only applicationContext.
     private var repository: WanderlyRepository? = null
     @Volatile
+    @SuppressLint("StaticFieldLeak")
+    // Test-only override follows the same applicationContext repository contract.
     private var repositoryOverride: WanderlyRepository? = null
     @Volatile
     private var emailAuthServiceOverride: EmailAuthService? = null

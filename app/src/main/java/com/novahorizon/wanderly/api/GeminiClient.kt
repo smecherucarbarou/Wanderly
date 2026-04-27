@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import okhttp3.MediaType.Companion.toMediaType
@@ -140,7 +141,9 @@ object GeminiClient {
                                 throw Exception("Failed to refresh token or token unchanged")
                             }
                         } catch (refreshError: Exception) {
-                            if (BuildConfig.DEBUG) Log.e(TAG, "Session refresh failed: ${refreshError.message}")
+                            if (BuildConfig.DEBUG) {
+                                Log.e(TAG, "Session refresh failed: ${LogRedactor.redact(refreshError.message)}")
+                            }
                             else Log.e(TAG, "Session refresh failed [code=${refreshError.javaClass.simpleName}]")
                             throw GeminiHttpException(401, "Proxy call failed: 401 (Refresh failed)")
                         }
@@ -191,13 +194,13 @@ object GeminiClient {
 
     private inline fun logDebug(message: () -> String) {
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, message())
+            Log.d(TAG, LogRedactor.redact(message()))
         }
     }
 
     private fun logException(e: Exception) {
         if (BuildConfig.DEBUG) {
-            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})", e)
+            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName}): ${LogRedactor.redact(e.message)}")
         } else {
             Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})")
         }

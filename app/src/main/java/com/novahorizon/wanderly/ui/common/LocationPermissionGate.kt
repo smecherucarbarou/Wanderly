@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 
 object LocationPermissionGate {
     private const val PREFS_NAME = "wanderly_runtime_permissions"
@@ -52,8 +53,8 @@ object LocationPermissionGate {
 
     fun markRequestedBefore(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_FINE_LOCATION_REQUESTED, true)
-            .apply()
+            .edit {
+                putBoolean(KEY_FINE_LOCATION_REQUESTED, true)
+            }
     }
 }

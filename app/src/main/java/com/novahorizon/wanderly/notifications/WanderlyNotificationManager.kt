@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -14,6 +13,7 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.observability.LogRedactor
 
 object WanderlyNotificationManager {
     enum class NotificationType {
@@ -71,22 +71,20 @@ object WanderlyNotificationManager {
     }
 
     fun createNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Real-time updates about your rivals and streaks"
-                enableLights(true)
-                lightColor = Color.YELLOW
-                enableVibration(true)
-                setShowBadge(true)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-            }
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Real-time updates about your rivals and streaks"
+            enableLights(true)
+            lightColor = Color.YELLOW
+            enableVibration(true)
+            setShowBadge(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 
     suspend fun showNotification(
@@ -102,7 +100,7 @@ object WanderlyNotificationManager {
             return false
         }
 
-        logDebug("Attempting notification id=$notificationId key=${dedupKey ?: "none"} title=$title")
+        logDebug("Attempting notification id=$notificationId key=${dedupKey?.substringBefore('_') ?: "none"}")
 
         if (dedupKey != null && !bypassCooldown && isNotificationCooldownActive(context, dedupKey)) {
             return false
@@ -255,19 +253,19 @@ object WanderlyNotificationManager {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(LOG_TAG, message)
+            Log.d(LOG_TAG, LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w(LOG_TAG, message)
+            Log.w(LOG_TAG, LogRedactor.redact(message))
         }
     }
 
     private fun logError(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.e(LOG_TAG, message)
+            Log.e(LOG_TAG, LogRedactor.redact(message))
         }
     }
 }

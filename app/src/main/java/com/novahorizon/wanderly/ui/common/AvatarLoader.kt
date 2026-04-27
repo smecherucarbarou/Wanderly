@@ -17,6 +17,7 @@ import com.bumptech.glide.request.target.Target
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.auth.auth
 
 object AvatarLoader {
@@ -55,7 +56,7 @@ object AvatarLoader {
 
             extractSupabaseStoragePath(trimmedSource) != null -> {
                 buildSupabasePrimaryRequest(imageView, trimmedSource) ?: run {
-                    Log.w(TAG, "Could not build a Supabase avatar model for source=$trimmedSource")
+                    logDebug("Could not build a Supabase avatar model for storage source.")
                     showInitial(initialView, imageView, displayName)
                     return
                 }
@@ -79,8 +80,14 @@ object AvatarLoader {
                     target: Target<android.graphics.drawable.Drawable>,
                     isFirstResource: Boolean
                 ): Boolean {
-                    if (BuildConfig.DEBUG) Log.e(TAG, "Avatar load failed for model=$model", e)
-                    else Log.e(TAG, "Avatar load failed", e)
+                    if (BuildConfig.DEBUG) {
+                        Log.e(
+                            TAG,
+                            "Avatar load failed for model=${LogRedactor.redact(model?.toString())}: " +
+                                LogRedactor.redact(e?.message)
+                        )
+                    }
+                    else Log.e(TAG, "Avatar load failed")
                     showInitial(initialView, imageView, displayName)
                     return true
                 }
@@ -143,7 +150,7 @@ object AvatarLoader {
         val publicUrl = buildSupabasePublicAvatarUrl(BuildConfig.SUPABASE_URL, storagePath)
         val authenticatedFallback = buildSupabaseAuthenticatedModel(storagePath)
         logDebug(
-            "Loading Supabase avatar source=$source primary=$publicUrl fallback=${
+            "Loading Supabase avatar primary=$publicUrl fallback=${
                 if (authenticatedFallback != null) "authenticated" else "none"
             }"
         )
@@ -168,7 +175,7 @@ object AvatarLoader {
         val storagePath = extractSupabaseStoragePath(source) ?: return null
         val accessToken = runCatching { SupabaseClient.client.auth.currentAccessTokenOrNull() }.getOrNull()
             ?: run {
-                Log.w(TAG, "No access token available for authenticated avatar load. Falling back to public URL.")
+                logDebug("No access token available for authenticated avatar load. Falling back to public URL.")
                 return null
             }
         val authenticatedUrl = buildSupabaseAuthenticatedAvatarUrl(BuildConfig.SUPABASE_URL, storagePath)
@@ -181,7 +188,7 @@ object AvatarLoader {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, message)
+            Log.d(TAG, LogRedactor.redact(message))
         }
     }
 

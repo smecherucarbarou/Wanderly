@@ -5,7 +5,6 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -38,42 +37,36 @@ class ExactAlarmPermissionTest {
     }
 
     @Test
-    fun `scheduleNext opens exact alarm settings when permission is denied`() {
+    fun `scheduleNext does not open exact alarm settings when permission is denied`() {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
 
         StreakWidgetAlarmScheduler.scheduleNext(
-            context = context,
             alarmManager = alarmManager,
             pendingIntent = pendingIntent(),
-            nowMillis = 1_000L,
-            sdkInt = 31
+            nowElapsedMillis = 1_000L
         )
 
-        val startedIntent = shadowOf(context).nextStartedActivity
-        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, startedIntent.action)
-        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, startedIntent.flags and Intent.FLAG_ACTIVITY_NEW_TASK)
-        assertEquals(0, shadowOf(alarmManager).scheduledAlarms.size)
+        assertNull(shadowOf(context).nextStartedActivity)
+        assertEquals(1, shadowOf(alarmManager).scheduledAlarms.size)
     }
 
     @Test
-    fun `scheduleNext schedules exact alarm when permission is granted`() {
+    fun `scheduleNext schedules inexact non wakeup alarm`() {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
 
         StreakWidgetAlarmScheduler.scheduleNext(
-            context = context,
             alarmManager = alarmManager,
             pendingIntent = pendingIntent(),
-            nowMillis = 1_000L,
-            sdkInt = 31
+            nowElapsedMillis = 1_000L
         )
 
         val alarms = shadowOf(alarmManager).scheduledAlarms
         val alarm = alarms.first()
         assertNull(shadowOf(context).nextStartedActivity)
         assertEquals(1, alarms.size)
-        assertEquals(AlarmManager.RTC_WAKEUP, alarm.getType())
-        assertEquals(16_000L, alarm.getTriggerAtMs())
-        assertEquals(true, alarm.isAllowWhileIdle)
+        assertEquals(AlarmManager.ELAPSED_REALTIME, alarm.getType())
+        assertEquals(3_601_000L, alarm.getTriggerAtMs())
+        assertEquals(false, alarm.isAllowWhileIdle)
     }
 
     private fun pendingIntent(): PendingIntent {

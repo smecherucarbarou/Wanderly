@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.Auth
@@ -24,7 +25,7 @@ object SupabaseClient {
 
         validateConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "Initializing Supabase with URL: ${BuildConfig.SUPABASE_URL}")
+            Log.d(TAG, "Initializing Supabase with URL: ${LogRedactor.redact(BuildConfig.SUPABASE_URL)}")
         }
 
         _client = createSupabaseClient(

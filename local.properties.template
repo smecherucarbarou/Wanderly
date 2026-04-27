@@ -1,3 +1,15 @@
 SUPABASE_URL=https://your-supabase-url.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
 MAPS_API_KEY=your-google-maps-api-key
+
+# Optional instrumentation-test credentials. Use a disposable test account only.
+# These values are passed to androidTest as runner arguments and are never written to BuildConfig.
+WANDERLY_ANDROID_TEST_EMAIL=your-disposable-test-account@example.com
+WANDERLY_ANDROID_TEST_PASSWORD=your-disposable-test-password
+
+# Optional release signing inputs. Prefer GitHub secrets or local Gradle properties.
+# Do not commit real values or keystore files.
+RELEASE_STORE_FILE=/absolute/path/to/release.keystore
+RELEASE_STORE_PASSWORD=your-release-store-password
+RELEASE_KEY_ALIAS=your-release-key-alias
+RELEASE_KEY_PASSWORD=your-release-key-password

@@ -25,11 +25,139 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.toml','**/*.kts') }}
 
+      - name: Restore Firebase config if configured
+        id: firebase_config
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [[ -n "$GOOGLE_SERVICES_JSON_BASE64" ]]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --stacktrace --console=plain
 
       - name: Lint
-        run: ./gradlew :app:lintDebug --console=plain
+        run: ./gradlew :app:lintDebug --stacktrace --console=plain
+
+      - name: Release regression check
+        run: ./gradlew :app:releaseRegressionCheck --stacktrace --console=plain
+
+      - name: Baseline profile generator compile check
+        run: ./gradlew :baselineprofile:assemble --stacktrace --console=plain
+
+      - name: Coverage report
+        run: ./gradlew :app:koverXmlReportDebug :app:koverHtmlReportDebug :app:koverLogDebug --stacktrace --console=plain
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kover-coverage-report
+          path: |
+            app/build/reports/kover/**
+            app/build/reports/koverXmlReportDebug/**
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace --console=plain
+
+      - name: APK size report
+        run: ./gradlew :app:apkSizeReport --stacktrace --console=plain
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanderly-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload APK size summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-size-summary
+          path: app/build/reports/apk-size/apk-size-summary.txt
+
+      - name: Check release config secrets
+        id: release_config
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [[ -n "$SUPABASE_URL" && -n "$SUPABASE_ANON_KEY" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify release config fails fast without secrets
+        if: steps.release_config.outputs.available != 'true'
+        shell: bash
+        run: |
+          set +e
+          ./gradlew :app:validateReleaseConfig --stacktrace --console=plain
+          status=$?
+          set -e
+          if [[ "$status" -eq 0 ]]; then
+            echo "::error::Release config validation unexpectedly passed without SUPABASE_URL and SUPABASE_ANON_KEY."
+            exit 1
+          fi
+          echo "Release config validation failed as expected because release Supabase secrets are not configured."
+
+      - name: Prepare release signing keystore
+        if: steps.release_config.outputs.available == 'true'
+        id: release_signing
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$RELEASE_KEYSTORE_BASE64" && -n "$RELEASE_STORE_PASSWORD" && -n "$RELEASE_KEY_ALIAS" && -n "$RELEASE_KEY_PASSWORD" ]]; then
+            mkdir -p "$RUNNER_TEMP/wanderly-signing"
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/wanderly-signing/release.keystore"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "store_file=$RUNNER_TEMP/wanderly-signing/release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build unsigned release artifacts
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
+
+      - name: Build signed release artifacts
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          RELEASE_STORE_FILE: ${{ steps.release_signing.outputs.store_file }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
+
+      - name: Upload unsigned release APK
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanderly-unsigned-release-apk
+          path: app/build/outputs/apk/release/*unsigned*.apk
+
+      - name: Upload signed release AAB
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanderly-signed-release-aab
+          path: app/build/outputs/bundle/release/*.aab
 
       - name: Upload lint report
         if: always()

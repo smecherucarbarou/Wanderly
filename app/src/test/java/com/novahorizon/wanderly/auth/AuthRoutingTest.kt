@@ -14,6 +14,15 @@ class AuthRoutingTest {
     }
 
     @Test
+    fun googleOAuthRelaunchRoutingUsesRememberMeChoiceCapturedBeforeRedirect() {
+        val rememberOAuthSession = AuthRouting.rememberMeForOAuthStart(isRememberMeChecked = true)
+        val oneShotOAuthSession = AuthRouting.rememberMeForOAuthStart(isRememberMeChecked = false)
+
+        assertTrue(AuthRouting.shouldOpenMain(hasSession = true, rememberMe = rememberOAuthSession))
+        assertFalse(AuthRouting.shouldOpenMain(hasSession = true, rememberMe = oneShotOAuthSession))
+    }
+
+    @Test
     fun startsSessionServicesOnlyWhenSessionExists() {
         assertTrue(AuthRouting.shouldStartSessionServices(hasSession = true))
         assertFalse(AuthRouting.shouldStartSessionServices(hasSession = false))

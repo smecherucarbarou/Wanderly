@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background"
     android:fillViewport="true">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -173,12 +172,12 @@
 
                 <ImageButton
                     android:id="@+id/share_friend_code_button"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:layout_marginStart="4dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/profile_share_friend_code"
-                    android:padding="8dp"
+                    android:padding="12dp"
                     android:src="@android:drawable/ic_menu_share"
                     android:visibility="gone"
                     app:tint="@color/primary"

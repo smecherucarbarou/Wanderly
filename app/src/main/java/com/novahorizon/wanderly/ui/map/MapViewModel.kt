@@ -6,8 +6,12 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.Mission
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
 import kotlinx.coroutines.launch
 
 class MapViewModel(private val repository: WanderlyRepository) : ViewModel() {
@@ -48,7 +52,17 @@ class MapViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     repository.updateProfile(profile.copy(last_lat = lat, last_lng = lng))
                 }
             } catch (e: Exception) {
-                Log.e("MapViewModel", "Failed to update location", e)
+                CrashReporter.recordNonFatal(
+                    CrashEvent.MAP_LOCATION_UPDATE_FAILED,
+                    e,
+                    CrashKey.COMPONENT to "map",
+                    CrashKey.OPERATION to "location_update"
+                )
+                if (BuildConfig.DEBUG) {
+                    Log.e("MapViewModel", "Failed to update location", e)
+                } else {
+                    Log.e("MapViewModel", "Failed to update location")
+                }
             }
         }
     }

@@ -26,3 +26,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Wanderly"
 include(":app")
+include(":baselineprofile")

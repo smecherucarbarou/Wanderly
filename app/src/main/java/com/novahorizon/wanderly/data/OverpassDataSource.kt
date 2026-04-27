@@ -2,6 +2,7 @@ package com.novahorizon.wanderly.data
 
 import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -101,7 +102,10 @@ class OverpassDataSource {
                 }
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) {
-                    Log.e("OverpassDataSource", "Overpass error [${e.javaClass.simpleName}]", e)
+                    Log.e(
+                        "OverpassDataSource",
+                        "Overpass error [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]"
+                    )
                 }
             }
         }

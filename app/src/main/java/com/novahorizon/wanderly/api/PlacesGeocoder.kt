@@ -2,12 +2,14 @@ package com.novahorizon.wanderly.api
 
 import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.observability.LogRedactor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.text.Normalizer
 
 object PlacesGeocoder {
+    private const val TAG = "PlacesGeocoder"
     private val exclusionTypes = setOf(
         "local_government_office", "government_office", "social_service_organization",
         "city_hall", "courthouse", "embassy", "fire_station", "police", "post_office",
@@ -55,34 +57,32 @@ object PlacesGeocoder {
             )) {
                 is NetworkResult.Success -> result.data
                 is NetworkResult.HttpError -> {
-                    Log.e("PlacesGeocoder", "Google Places proxy failed [${result.code}]")
+                    logError("Google Places proxy failed [${result.code}]")
                     return@withContext null
                 }
                 is NetworkResult.NetworkError -> {
-                    Log.e("PlacesGeocoder", "Google Places network error", result.cause)
+                    logError("Google Places network error", result.cause)
                     return@withContext null
                 }
                 is NetworkResult.ParseError -> {
-                    Log.e("PlacesGeocoder", "Google Places parse error", result.cause)
+                    logError("Google Places parse error", result.cause)
                     return@withContext null
                 }
                 NetworkResult.Timeout -> {
-                    Log.e("PlacesGeocoder", "Google Places request timed out")
+                    logError("Google Places request timed out")
                     return@withContext null
                 }
             }
 
-            if (BuildConfig.DEBUG) {
-                Log.d("PlacesGeocoder", "--- Starting search: '$placeName' in '$targetCity' ---")
-            }
+            logDebug("--- Starting search: '$placeName' in '$targetCity' ---")
             if (!responseJson.has("places")) {
-                Log.e("PlacesGeocoder", "Google Places returned no candidates for '$placeName'")
+                logDebug("Google Places returned no candidates for '$placeName'")
                 return@withContext null
             }
 
             val placesArray = responseJson.getJSONArray("places")
             if (placesArray.length() == 0) {
-                Log.w("PlacesGeocoder", "Places list is empty for '$textQuery'")
+                logDebug("Places list is empty for '$textQuery'")
                 return@withContext null
             }
 
@@ -98,25 +98,24 @@ object PlacesGeocoder {
                 val placeTypes = buildTypeSet(place)
 
                 if (businessStatus == "CLOSED_PERMANENTLY" || businessStatus == "CLOSED_TEMPORARILY") {
-                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because status is $businessStatus")
+                    logDebug("Rejected '$verifiedName' because status is $businessStatus")
                     continue
                 }
 
                 val excludedType = placeTypes.firstOrNull(exclusionTypes::contains)
                 if (excludedType != null) {
-                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because it is a service/office ($excludedType)")
+                    logDebug("Rejected '$verifiedName' because it is a service/office ($excludedType)")
                     continue
                 }
 
                 if (!isPlaceNameCompatible(placeName, verifiedName, verifiedAddress, strictNameMatch)) {
-                    Log.w("PlacesGeocoder", "Rejected '$verifiedName' because it does not closely match '$placeName'")
+                    logDebug("Rejected '$verifiedName' because it does not closely match '$placeName'")
                     continue
                 }
 
                 val strongNameMatch = scoreNameMatch(placeName, verifiedName, verifiedAddress) >= 0.95
                 if (expectedTypes.isNotEmpty() && placeTypes.none(expectedTypes::contains) && !strongNameMatch) {
-                    Log.w(
-                        "PlacesGeocoder",
+                    logDebug(
                         "Rejected '$verifiedName' because its types do not fit category '$categoryHint'"
                     )
                     continue
@@ -126,7 +125,7 @@ object PlacesGeocoder {
                 val lat = location.getDouble("latitude")
                 val lng = location.getDouble("longitude")
                 if (!isWithinRadius(userLat, userLng, lat, lng, radiusKm)) {
-                    Log.d("PlacesGeocoder", "Rejected '$verifiedName' because it is outside the ${radiusKm}km radius")
+                    logDebug("Rejected '$verifiedName' because it is outside the ${radiusKm}km radius")
                     continue
                 }
 
@@ -150,14 +149,14 @@ object PlacesGeocoder {
             }
 
             if (bestCandidate == null) {
-                Log.w("PlacesGeocoder", "No valid Places candidate matched '$placeName'")
+                logDebug("No valid Places candidate matched '$placeName'")
             } else {
-                Log.d("PlacesGeocoder", "Validated place '${bestCandidate.name}' for '$placeName'")
+                logDebug("Validated place '${bestCandidate.name}' for '$placeName'")
             }
 
             bestCandidate
         } catch (e: Exception) {
-            Log.e("PlacesGeocoder", "Failed to resolve place", e)
+            logError("Failed to resolve place", e)
             null
         }
     }
@@ -262,5 +261,24 @@ object PlacesGeocoder {
             Math.sin(dLng / 2).let { it * it }
         val distance = earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return distance <= maxDistanceKm
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, LogRedactor.redact(message))
+        }
+    }
+
+    private fun logError(message: String, throwable: Throwable? = null) {
+        if (BuildConfig.DEBUG) {
+            val safeMessage = LogRedactor.redact(message)
+            if (throwable != null) {
+                Log.e(TAG, "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
+            } else {
+                Log.e(TAG, safeMessage)
+            }
+        } else {
+            Log.e(TAG, message)
+        }
     }
 }

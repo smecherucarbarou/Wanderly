@@ -18,6 +18,7 @@ import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
+import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -54,14 +55,12 @@ class HiveRealtimeService : Service() {
 
     private fun startForegroundService() {
         val channelId = "hive_realtime_service"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId, "Hive Realtime Monitor",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply { description = "Keeps you connected to the hive for instant alerts" }
-            val manager = getSystemService(NotificationManager::class.java) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            channelId, "Hive Realtime Monitor",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply { description = "Keeps you connected to the hive for instant alerts" }
+        val manager = getSystemService(NotificationManager::class.java) as NotificationManager
+        manager.createNotificationChannel(channel)
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Wanderly is Active")
@@ -125,7 +124,7 @@ class HiveRealtimeService : Service() {
 
             val currentProfile = repository.getCurrentProfile() ?: return@onEach
 
-            logDebug("Realtime update from: ${updatedProfile.username}")
+            logDebug("Realtime profile update received.")
             NotificationCheckCoordinator.handleRealtimeProfileUpdate(
                 context = applicationContext,
                 repository = repository,
@@ -161,22 +160,23 @@ class HiveRealtimeService : Service() {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("HiveRealtime", message)
+            Log.d("HiveRealtime", LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w("HiveRealtime", message)
+            Log.w("HiveRealtime", LogRedactor.redact(message))
         }
     }
 
     private fun logError(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
+            val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e("HiveRealtime", message, throwable)
+                Log.e("HiveRealtime", "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
             } else {
-                Log.e("HiveRealtime", message)
+                Log.e("HiveRealtime", safeMessage)
             }
         }
     }

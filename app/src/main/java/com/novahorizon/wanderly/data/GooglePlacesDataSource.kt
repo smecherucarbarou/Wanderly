@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.data
 
 import android.util.Log
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.NetworkResult
 import com.novahorizon.wanderly.api.PlacesProxyClient
 import kotlinx.coroutines.async
@@ -76,19 +77,19 @@ class GooglePlacesDataSource {
             )) {
                 is NetworkResult.Success -> result.data
                 is NetworkResult.HttpError -> {
-                    Log.e("GooglePlacesDataSource", "Google Places fallback HTTP error [${result.code}]")
+                    logError("Google Places fallback HTTP error [${result.code}]")
                     return emptyList()
                 }
                 is NetworkResult.NetworkError -> {
-                    Log.e("GooglePlacesDataSource", "Google Places fallback network error [${result.cause.javaClass.simpleName}]")
+                    logError("Google Places fallback network error [${result.cause.javaClass.simpleName}]")
                     return emptyList()
                 }
                 is NetworkResult.ParseError -> {
-                    Log.e("GooglePlacesDataSource", "Google Places fallback parse error [${result.cause.javaClass.simpleName}]")
+                    logError("Google Places fallback parse error [${result.cause.javaClass.simpleName}]")
                     return emptyList()
                 }
                 NetworkResult.Timeout -> {
-                    Log.e("GooglePlacesDataSource", "Google Places fallback timeout")
+                    logError("Google Places fallback timeout")
                     return emptyList()
                 }
             }
@@ -135,8 +136,14 @@ class GooglePlacesDataSource {
                 }
             }
         } catch (e: Exception) {
-            Log.e("GooglePlacesDataSource", "Google Places fallback error [${e.javaClass.simpleName}]")
+            logError("Google Places fallback error [${e.javaClass.simpleName}]")
             emptyList()
+        }
+    }
+
+    private fun logError(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.e("GooglePlacesDataSource", message)
         }
     }
 

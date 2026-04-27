@@ -7,8 +7,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.widget.RemoteViews
 import com.novahorizon.wanderly.BuildConfig
@@ -17,6 +15,10 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.data.WidgetStreakSnapshot
+import com.novahorizon.wanderly.observability.CrashEvent
+import com.novahorizon.wanderly.observability.CrashKey
+import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.observability.LogRedactor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -73,9 +75,6 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_REFRESH_WIDGET = "com.novahorizon.wanderly.widgets.ACTION_REFRESH_WIDGET"
         private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        private val fallbackHandler = Handler(Looper.getMainLooper())
-        @Volatile
-        private var fallbackRunnable: Runnable? = null
 
         private suspend fun refreshAndRenderWidgets(
             context: Context,
@@ -86,37 +85,44 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             val preferencesStore = PreferencesStore(appContext)
             val repository = WanderlyGraph.repository(appContext)
             val nowMillis = System.currentTimeMillis()
+            val cachedSnapshot = try {
+                preferencesStore.getWidgetStreakSnapshot()
+            } catch (e: Exception) {
+                reportWidgetError("snapshot_read", e)
+                null
+            }
+            val shouldFetchRemote = StreakWidgetRefreshPolicy.shouldFetchRemote(
+                snapshot = cachedSnapshot,
+                nowMillis = nowMillis
+            )
 
-            val fetchedSnapshot = try {
-                repository.getCurrentProfile()?.let { profile ->
-                    WidgetStreakSnapshot(
-                        streakCount = profile.streak_count ?: 0,
-                        lastMissionDate = profile.last_mission_date,
-                        savedAtMillis = nowMillis,
-                        lastSyncSucceeded = true
-                    ).also { snapshot ->
-                        try {
-                            preferencesStore.saveWidgetStreakSnapshot(snapshot)
-                        } catch (e: Exception) {
-                            logDebugError("Widget snapshot persistence failed", e)
-                            // Keep the fresh fetch for rendering even if persistence fails.
+            val fetchedSnapshot = if (shouldFetchRemote) {
+                try {
+                    repository.getCurrentProfile()?.let { profile ->
+                        WidgetStreakSnapshot(
+                            streakCount = profile.streak_count ?: 0,
+                            lastMissionDate = profile.last_mission_date,
+                            savedAtMillis = nowMillis,
+                            lastSyncSucceeded = true
+                        ).also { snapshot ->
+                            try {
+                                preferencesStore.saveWidgetStreakSnapshot(snapshot)
+                            } catch (e: Exception) {
+                                reportWidgetError("snapshot_persist", e)
+                                // Keep the fresh fetch for rendering even if persistence fails.
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    reportWidgetError("profile_refresh", e)
+                    null
                 }
-            } catch (e: Exception) {
-                logDebugError("Widget profile refresh failed", e)
+            } else {
                 null
             }
 
-            val snapshotToRender = fetchedSnapshot ?: run {
-                try {
-                    preferencesStore.getWidgetStreakSnapshot()
-                } catch (e: Exception) {
-                    logDebugError("Widget snapshot read failed", e)
-                    null
-                }
-            }
-            val currentFetchSucceeded = fetchedSnapshot != null
+            val snapshotToRender = fetchedSnapshot ?: cachedSnapshot
+            val currentFetchSucceeded = fetchedSnapshot != null || !shouldFetchRemote
             val visualState = StreakWidgetStateHelper.resolveVisualState(
                 snapshot = snapshotToRender,
                 currentFetchSucceeded = currentFetchSucceeded
@@ -153,16 +159,13 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             val appContext = context.applicationContext
             val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = refreshPendingIntent(appContext)
-            StreakWidgetAlarmScheduler.scheduleNext(appContext, alarmManager, pendingIntent)
-            scheduleFallbackTicker(appContext)
+            StreakWidgetAlarmScheduler.scheduleNext(alarmManager, pendingIntent)
         }
 
         private fun cancelScheduledUpdates(context: Context) {
             val appContext = context.applicationContext
             val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             StreakWidgetAlarmScheduler.cancel(alarmManager, refreshPendingIntent(appContext))
-            fallbackRunnable?.let(fallbackHandler::removeCallbacks)
-            fallbackRunnable = null
         }
 
         private fun refreshPendingIntent(context: Context): PendingIntent {
@@ -177,21 +180,6 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun scheduleFallbackTicker(context: Context) {
-            fallbackRunnable?.let(fallbackHandler::removeCallbacks)
-            val appContext = context.applicationContext
-            val runnable = Runnable {
-                fallbackRunnable = null
-                appContext.sendBroadcast(
-                    Intent(appContext, WanderlyStreakWidgetProvider::class.java).apply {
-                        action = ACTION_REFRESH_WIDGET
-                    }
-                )
-            }
-            fallbackRunnable = runnable
-            fallbackHandler.postDelayed(runnable, StreakWidgetAlarmScheduler.REFRESH_INTERVAL_MILLIS)
-        }
-
         private fun mainActivityPendingIntent(context: Context): PendingIntent {
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -204,9 +192,18 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun logDebugError(message: String, throwable: Throwable) {
+        private fun reportWidgetError(operation: String, throwable: Throwable) {
+            CrashReporter.recordNonFatal(
+                CrashEvent.WIDGET_REFRESH_FAILED,
+                throwable,
+                CrashKey.COMPONENT to "widget",
+                CrashKey.OPERATION to operation
+            )
             if (BuildConfig.DEBUG) {
-                Log.e("WanderlyStreakWidget", message, throwable)
+                Log.e(
+                    "WanderlyStreakWidget",
+                    "Widget $operation failed [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
+                )
             }
         }
     }

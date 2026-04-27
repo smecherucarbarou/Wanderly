@@ -136,7 +136,10 @@
     <string name="profile_hive_progress">Hive Progress</string>
     <string name="profile_badges_title">My Honeycombs (Badges)</string>
     <string name="profile_badges_empty">No honeycombs collected yet!</string>
-    <string name="profile_next_rank_in_honey">Next Rank in %1$d Honey</string>
+    <plurals name="profile_next_rank_in_honey">
+        <item quantity="one">Next Rank in %1$d Honey</item>
+        <item quantity="other">Next Rank in %1$d Honey</item>
+    </plurals>
     <string name="profile_progress_default">Next Rank in 50 Honey</string>
     <string name="profile_rank_up_ready">Rank up ready!</string>
     <string name="profile_max_rank">Maximum rank achieved!</string>
@@ -168,7 +171,10 @@
     <string name="map_active_mission_ready">Destination set!</string>
     <string name="map_go_to_missions">Go to Missions</string>
     <string name="mission_honey_default">0 Honey</string>
-    <string name="mission_honey_format">%1$d Honey</string>
+    <plurals name="mission_honey_format">
+        <item quantity="one">%1$d Honey</item>
+        <item quantity="other">%1$d Honey</item>
+    </plurals>
     <string name="mission_empty_state">No active mission. Generate a New Flight!</string>
     <string name="mission_verify_location">Verify Location</string>
     <string name="mission_learn_more">Learn more about this place</string>
@@ -203,8 +209,14 @@
     <string name="notification_permission_settings_positive">Open settings</string>
     <string name="notification_permission_negative">Not now</string>
     <string name="streak_crisis_title">STREAK CRISIS!</string>
-    <string name="streak_crisis_message">Did you get stuck in a tourist trap yesterday? Your %1$d-day streak is dead. Pay %2$d Honey to buy your reputation back, or start from zero.</string>
-    <string name="streak_crisis_pay">PAY THE TOLL (%1$d Honey)</string>
+    <plurals name="streak_crisis_message">
+        <item quantity="one">Did you get stuck in a tourist trap yesterday? Your %1$d-day streak is dead. Pay %2$d Honey to buy your reputation back, or start from zero.</item>
+        <item quantity="other">Did you get stuck in a tourist trap yesterday? Your %1$d-day streak is dead. Pay %2$d Honey to buy your reputation back, or start from zero.</item>
+    </plurals>
+    <plurals name="streak_crisis_pay">
+        <item quantity="one">PAY THE TOLL (%1$d Honey)</item>
+        <item quantity="other">PAY THE TOLL (%1$d Honey)</item>
+    </plurals>
     <string name="streak_crisis_accept_defeat">ACCEPT DEFEAT</string>
     <string name="class_selection_title">Choose Your Destiny</string>
     <string name="class_selection_subtitle">Ten flights reached. This choice is permanent.</string>
@@ -250,11 +262,18 @@
     <string name="dev_dashboard_reset_visit">Reset Last Visit (Test Background)</string>
     <string name="dev_dashboard_replay_onboarding">Replay onboarding flashcards</string>
     <string name="dev_dashboard_force_run_workers">Force Run Background Workers</string>
-    <string name="dev_dashboard_forced_daily_reminder">Daily streak reminder forced for %1$d days</string>
+    <string name="dev_dashboard_send_crashlytics_nonfatal">Send Crashlytics Non-Fatal</string>
+    <plurals name="dev_dashboard_forced_daily_reminder">
+        <item quantity="one">Daily streak reminder forced for %1$d day</item>
+        <item quantity="other">Daily streak reminder forced for %1$d days</item>
+    </plurals>
     <string name="dev_dashboard_daily_reminder_label">Daily reminder</string>
     <string name="dev_dashboard_forced_evening_alert">Evening rescue alert forced</string>
     <string name="dev_dashboard_evening_alert_label">Evening alert</string>
-    <string name="dev_dashboard_forced_milestone">Milestone alert forced for %1$d days</string>
+    <plurals name="dev_dashboard_forced_milestone">
+        <item quantity="one">Milestone alert forced for %1$d day</item>
+        <item quantity="other">Milestone alert forced for %1$d days</item>
+    </plurals>
     <string name="dev_dashboard_milestone_label">Milestone celebration</string>
     <string name="dev_dashboard_forced_streak_lost">Streak lost alert forced</string>
     <string name="dev_dashboard_streak_lost_label">Streak lost</string>
@@ -271,6 +290,8 @@
     <string name="dev_dashboard_reset_visit_success">Local and remote visit dates reset. Restart the app if needed.</string>
     <string name="dev_dashboard_reset_visit_partial_failure">Local reset worked, but the remote reset failed.</string>
     <string name="dev_dashboard_workers_queued">SocialWorker and StreakWorker were queued immediately</string>
+    <string name="dev_dashboard_crashlytics_nonfatal_queued">Crashlytics test non-fatal queued</string>
+    <string name="dev_dashboard_crashlytics_unavailable">Crashlytics is not configured for this build</string>
     <string name="dev_dashboard_ai_preview_started">AI notification preview started.</string>
     <string name="dev_dashboard_no_live_profile">No live profile available.</string>
     <string name="dev_dashboard_ai_invalid_json">AI did not return valid JSON.</string>
