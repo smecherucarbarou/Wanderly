@@ -1,5 +1,7 @@
 package com.novahorizon.wanderly.ui.gems
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -34,6 +36,7 @@ import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.databinding.FragmentGemsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
+import com.novahorizon.wanderly.ui.common.UiText
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import java.text.Normalizer
@@ -101,10 +104,11 @@ class GemsFragment : Fragment() {
                 val stateObserver = Observer<GemsViewModel.GemsState> { state ->
                     renderGemsState(state)
                 }
-                val messageObserver = Observer<String?> messageObserver@{ message ->
-                    if (message.isNullOrBlank()) return@messageObserver
+                val messageObserver = Observer<UiText?> messageObserver@{ message ->
+                    val text = message?.asString(requireContext()).orEmpty()
+                    if (text.isBlank()) return@messageObserver
                     _binding ?: return@messageObserver
-                    showGemsSnackbar(message, isError = true)
+                    showGemsSnackbar(text, isError = true)
                     viewModel.clearMessage()
                 }
 
@@ -125,7 +129,7 @@ class GemsFragment : Fragment() {
         val adapter = gemsAdapter ?: return
         when (state) {
             is GemsViewModel.GemsState.Idle -> Unit
-            is GemsViewModel.GemsState.Loading -> showLoadingState(state.message)
+            is GemsViewModel.GemsState.Loading -> showLoadingState(state.message.asString(requireContext()))
             is GemsViewModel.GemsState.Loaded -> {
                 hideEmptyState()
                 currentBinding.gemsRecycler.visibility = View.VISIBLE
@@ -137,12 +141,12 @@ class GemsFragment : Fragment() {
 
             is GemsViewModel.GemsState.Empty -> {
                 adapter.submitList(emptyList())
-                showEmptyStateText(state.message, showRetry = true)
+                showEmptyStateText(state.message.asString(requireContext()), showRetry = true)
             }
 
             is GemsViewModel.GemsState.Error -> {
                 adapter.submitList(emptyList())
-                showErrorState(state.message)
+                showErrorState(state.message.asString(requireContext()))
             }
         }
     }
@@ -399,7 +403,7 @@ class GemsFragment : Fragment() {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            android.util.Log.d(logTag, message)
+            AppLogger.d(logTag, message)
         }
     }
 }

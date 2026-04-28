@@ -1,10 +1,11 @@
 package com.novahorizon.wanderly.ui.missions
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,6 +26,7 @@ import com.novahorizon.wanderly.data.derivedHiveRank
 import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
+import com.novahorizon.wanderly.ui.common.RankUiFormatter
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import kotlinx.coroutines.Dispatchers
@@ -154,6 +156,7 @@ class MissionsFragment : Fragment() {
                 }
 
                 is MissionsViewModel.MissionState.VerificationResult -> {
+                    val message = state.message.asString(requireContext())
                     if (state.success) {
                         viewModel.currentMissionText()?.let {
                             binding.missionText.text = it
@@ -166,7 +169,7 @@ class MissionsFragment : Fragment() {
                     } else {
                         binding.verifyButton.isEnabled = true
                         binding.verifyButton.text = getString(R.string.mission_take_photo_to_verify)
-                        binding.buzzyBubble.text = state.message
+                        binding.buzzyBubble.text = message
                     }
                 }
 
@@ -194,10 +197,11 @@ class MissionsFragment : Fragment() {
                 }
 
                 is MissionsViewModel.MissionState.Error -> {
+                    val message = state.message.asString(requireContext())
                     locationLookupInFlight = false
                     binding.loadingIndicator.visibility = View.GONE
                     binding.missionText.visibility = View.VISIBLE
-                    binding.missionText.text = state.message
+                    binding.missionText.text = message
                     binding.newFlightButton.visibility = View.VISIBLE
                     binding.newFlightButton.isEnabled = true
                     binding.newFlightButton.text = getString(R.string.mission_retry)
@@ -205,8 +209,8 @@ class MissionsFragment : Fragment() {
                     binding.completeButton.visibility = View.GONE
                     binding.learnMoreButton.isEnabled = true
                     binding.learnMoreButton.text = getString(R.string.mission_learn_more)
-                    binding.buzzyBubble.text = state.message
-                    showSnackbar(state.message, isError = true)
+                    binding.buzzyBubble.text = message
+                    showSnackbar(message, isError = true)
                 }
 
                 else -> Unit
@@ -321,7 +325,7 @@ class MissionsFragment : Fragment() {
         val derivedRank = profile.derivedHiveRank()
 
         binding.honeyCount.text = resources.getQuantityString(R.plurals.mission_honey_format, honey, honey)
-        binding.rankName.text = getRankName(derivedRank)
+        binding.rankName.text = getString(RankUiFormatter.rankNameRes(derivedRank))
 
         val maxHoney = HiveRank.maxHoneyForRank(derivedRank)
         val minHoney = HiveRank.minHoneyForRank(derivedRank)
@@ -334,13 +338,6 @@ class MissionsFragment : Fragment() {
         binding.honeyProgress.progress = progress
     }
 
-    private fun getRankName(rank: Int) = when (rank) {
-        1 -> getString(R.string.rank_1)
-        2 -> getString(R.string.rank_2)
-        3 -> getString(R.string.rank_3)
-        else -> getString(R.string.rank_4)
-    }
-
     override fun onDestroyView() {
         tempImageFile?.delete()
         tempImageFile = null
@@ -351,16 +348,16 @@ class MissionsFragment : Fragment() {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(logTag, message)
+            AppLogger.d(logTag, message)
         }
     }
 
     private fun logError(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
             if (throwable != null) {
-                Log.e(logTag, message, throwable)
+                AppLogger.e(logTag, message, throwable)
             } else {
-                Log.e(logTag, message)
+                AppLogger.e(logTag, message)
             }
         }
     }

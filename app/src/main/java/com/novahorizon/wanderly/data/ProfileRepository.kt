@@ -1,8 +1,9 @@
 package com.novahorizon.wanderly.data
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
@@ -212,13 +213,13 @@ class ProfileRepository(
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("ProfileRepository", LogRedactor.redact(message))
+            AppLogger.d("ProfileRepository", LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w("ProfileRepository", LogRedactor.redact(message))
+            AppLogger.w("ProfileRepository", LogRedactor.redact(message))
         }
     }
 
@@ -226,12 +227,12 @@ class ProfileRepository(
         if (BuildConfig.DEBUG) {
             val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e(
+                AppLogger.e(
                     "ProfileRepository",
                     "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
                 )
             } else {
-                Log.e("ProfileRepository", safeMessage)
+                AppLogger.e("ProfileRepository", safeMessage)
             }
         }
     }

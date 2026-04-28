@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,8 +23,8 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
     private val _isLoading = MutableLiveData<Boolean>(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    private val _addFriendResult = MutableLiveData<String?>()
-    val addFriendResult: LiveData<String?> = _addFriendResult
+    private val _addFriendResult = MutableLiveData<UiText?>()
+    val addFriendResult: LiveData<UiText?> = _addFriendResult
 
     private val _state = MutableStateFlow<SocialUiState>(SocialUiState.Loading)
     val state: StateFlow<SocialUiState> = _state
@@ -35,7 +36,7 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
             val leaderboard: List<Profile>
         ) : SocialUiState()
         object Empty : SocialUiState()
-        data class Error(val messageRes: Int) : SocialUiState()
+        data class Error(val message: UiText) : SocialUiState()
     }
 
     fun loadLeaderboard() {
@@ -54,7 +55,7 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
                     )
                 }
             } catch (_: Exception) {
-                _state.value = SocialUiState.Error(R.string.error_network)
+                _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
             } finally {
                 _isLoading.postValue(false)
             }
@@ -77,7 +78,7 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
                     )
                 }
             } catch (_: Exception) {
-                _state.value = SocialUiState.Error(R.string.error_network)
+                _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
             } finally {
                 _isLoading.postValue(false)
             }
@@ -99,10 +100,8 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
                     _isLoading.postValue(false)
                 }
             } catch (_: Exception) {
-                _addFriendResult.postValue(
-                    repository.context.getString(R.string.social_add_friend_failed)
-                )
-                _state.value = SocialUiState.Error(R.string.error_network)
+                _addFriendResult.postValue(UiText.resource(R.string.social_add_friend_failed))
+                _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
                 _isLoading.postValue(false)
             }
         }
@@ -115,16 +114,16 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
             try {
                 val success = repository.removeFriend(friendId)
                 if (success) {
-                    _addFriendResult.postValue("Friend removed successfully")
+                    _addFriendResult.postValue(UiText.DynamicString("Friend removed successfully"))
                     loadFriends()
                 } else {
-                    _addFriendResult.postValue("Failed to remove friend")
-                    _state.value = SocialUiState.Error(R.string.error_network)
+                    _addFriendResult.postValue(UiText.DynamicString("Failed to remove friend"))
+                    _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
                     _isLoading.postValue(false)
                 }
             } catch (_: Exception) {
-                _addFriendResult.postValue("Failed to remove friend")
-                _state.value = SocialUiState.Error(R.string.error_network)
+                _addFriendResult.postValue(UiText.DynamicString("Failed to remove friend"))
+                _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
                 _isLoading.postValue(false)
             }
         }
@@ -134,21 +133,21 @@ class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() 
         _addFriendResult.value = null
     }
 
-    private fun addFriendDisplayMessage(resultMessage: String): String {
+    private fun addFriendDisplayMessage(resultMessage: String): UiText {
         return when {
             resultMessage == "Already friends with this user" ->
-                repository.context.getString(R.string.social_friend_already_added)
+                UiText.resource(R.string.social_friend_already_added)
             resultMessage.startsWith("Failed to add friend") ->
-                repository.context.getString(R.string.social_add_friend_failed)
-            else -> resultMessage
+                UiText.resource(R.string.social_add_friend_failed)
+            else -> UiText.DynamicString(resultMessage)
         }
     }
 
-    private fun addFriendErrorMessage(resultMessage: String): Int {
+    private fun addFriendErrorMessage(resultMessage: String): UiText {
         return when {
-            resultMessage == "Already friends with this user" -> R.string.social_friend_already_added
-            resultMessage.startsWith("Failed to add friend") -> R.string.social_add_friend_failed
-            else -> R.string.error_network
+            resultMessage == "Already friends with this user" -> UiText.resource(R.string.social_friend_already_added)
+            resultMessage.startsWith("Failed to add friend") -> UiText.resource(R.string.social_add_friend_failed)
+            else -> UiText.resource(R.string.error_network)
         }
     }
 }

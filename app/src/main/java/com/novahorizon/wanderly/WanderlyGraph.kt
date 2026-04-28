@@ -2,6 +2,7 @@ package com.novahorizon.wanderly
 
 import android.annotation.SuppressLint
 import android.content.Context
+import com.novahorizon.wanderly.data.AuthRepository
 import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
 
@@ -16,6 +17,10 @@ object WanderlyGraph {
     private var repositoryOverride: WanderlyRepository? = null
     @Volatile
     private var emailAuthServiceOverride: EmailAuthService? = null
+    @Volatile
+    private var authRepository: AuthRepository? = null
+    @Volatile
+    private var authRepositoryOverride: AuthRepository? = null
     @Volatile
     private var missionGenerationServiceOverride: MissionGenerationService? = null
     @Volatile
@@ -34,6 +39,13 @@ object WanderlyGraph {
 
     fun emailAuthService(): EmailAuthService =
         emailAuthServiceOverride ?: SupabaseEmailAuthService
+
+    fun authRepository(): AuthRepository {
+        authRepositoryOverride?.let { return it }
+        return authRepository ?: synchronized(this) {
+            authRepository ?: AuthRepository().also { authRepository = it }
+        }
+    }
 
     fun missionGenerationService(): MissionGenerationService =
         missionGenerationServiceOverride ?: DefaultMissionGenerationService
@@ -58,6 +70,10 @@ object WanderlyGraph {
         emailAuthServiceOverride = service
     }
 
+    fun setAuthRepositoryForTesting(testRepository: AuthRepository?) {
+        authRepositoryOverride = testRepository
+    }
+
     fun setMissionGenerationServiceForTesting(service: MissionGenerationService?) {
         missionGenerationServiceOverride = service
     }
@@ -73,6 +89,8 @@ object WanderlyGraph {
     fun resetTestOverrides() {
         repositoryOverride = null
         emailAuthServiceOverride = null
+        authRepositoryOverride = null
+        authRepository = null
         missionGenerationServiceOverride = null
         missionLocationProviderOverride = null
         missionCityResolverOverride = null

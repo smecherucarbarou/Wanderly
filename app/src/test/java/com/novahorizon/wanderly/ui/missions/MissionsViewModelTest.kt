@@ -14,6 +14,7 @@ import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,8 +94,8 @@ class MissionsViewModelTest {
             advanceUntilIdle()
 
             val error = states.last() as MissionsViewModel.MissionState.Error
-            assertEquals(context.getString(R.string.error_generic_retry), error.message)
-            assertFalse(error.message.contains("raw socket failure"))
+            assertEquals(UiText.StringResource(R.string.error_generic_retry), error.message)
+            assertFalse(error.message.asString(context).contains("raw socket failure"))
         } finally {
             store.clear()
             viewModel.missionState.removeObserver(states.observer)

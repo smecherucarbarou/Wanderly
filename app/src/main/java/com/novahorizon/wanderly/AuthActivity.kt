@@ -1,9 +1,10 @@
 package com.novahorizon.wanderly
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -40,7 +41,7 @@ class AuthActivity : AppCompatActivity() {
                         navigateToMain()
                     },
                     onError = { error ->
-                        Log.e("AuthActivity", "Failed to import auth callback (${error.javaClass.simpleName})")
+                        AppLogger.e("AuthActivity", "Failed to import auth callback (${error.javaClass.simpleName})")
                         CrashReporter.recordNonFatal(
                             CrashEvent.AUTH_CALLBACK_IMPORT_FAILED,
                             error,
@@ -86,9 +87,9 @@ class AuthActivity : AppCompatActivity() {
                         CrashKey.OPERATION to "fallback_sign_out"
                     )
                     if (BuildConfig.DEBUG) {
-                        Log.e("AuthActivity", "Sign out error: ${LogRedactor.redact(e.message)}")
+                        AppLogger.e("AuthActivity", "Sign out error: ${LogRedactor.redact(e.message)}")
                     } else {
-                        Log.e("AuthActivity", "Sign out error")
+                        AppLogger.e("AuthActivity", "Sign out error")
                     }
                 }
             }

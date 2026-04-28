@@ -1,12 +1,13 @@
 package com.novahorizon.wanderly.notifications
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.novahorizon.wanderly.BuildConfig
@@ -14,6 +15,8 @@ import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.util.Clock
+import com.novahorizon.wanderly.util.SystemClock
 
 object WanderlyNotificationManager {
     enum class NotificationType {
@@ -39,11 +42,12 @@ object WanderlyNotificationManager {
     private const val AGGREGATED_RIVAL_COOLDOWN_MS = 25 * 60 * 1000L
     private const val OVERTAKEN_COOLDOWN_MS = 45 * 60 * 1000L
     private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
+    internal var clock: Clock = SystemClock
 
     private suspend fun isNotificationCooldownActive(context: Context, key: String): Boolean {
         val preferencesStore = PreferencesStore(context)
         val lastSent = preferencesStore.getNotificationCooldown(key)
-        val now = System.currentTimeMillis()
+        val now = clock.nowMillis()
         val cooldownMs = cooldownForKey(key)
 
         if (now - lastSent < cooldownMs) {
@@ -253,19 +257,19 @@ object WanderlyNotificationManager {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(LOG_TAG, LogRedactor.redact(message))
+            AppLogger.d(LOG_TAG, LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w(LOG_TAG, LogRedactor.redact(message))
+            AppLogger.w(LOG_TAG, LogRedactor.redact(message))
         }
     }
 
     private fun logError(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.e(LOG_TAG, LogRedactor.redact(message))
+            AppLogger.e(LOG_TAG, LogRedactor.redact(message))
         }
     }
 }

@@ -1,23 +1,24 @@
 package com.novahorizon.wanderly.ui.profile
 
 import android.net.Uri
-import androidx.annotation.StringRes
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.data.AuthRepository
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
-import io.github.jan.supabase.auth.auth
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class ProfileViewModel(
     private val repository: WanderlyRepository,
-    private val profileStateProvider: ProfileStateProvider
+    private val profileStateProvider: ProfileStateProvider,
+    private val authRepository: AuthRepository = WanderlyGraph.authRepository()
 ) : ViewModel() {
     private var hasCheckedBadgesThisSession = false
     private var profileCollectorJob: Job? = null
@@ -36,7 +37,7 @@ class ProfileViewModel(
     }
 
     sealed class ProfileEvent {
-        data class ShowMessage(@param:StringRes val messageRes: Int, val isError: Boolean) : ProfileEvent()
+        data class ShowMessage(val message: UiText, val isError: Boolean) : ProfileEvent()
         data class AvatarUpdated(val remotePath: String) : ProfileEvent()
         data class ClassLocked(val className: String) : ProfileEvent()
         object LoggedOut : ProfileEvent()
@@ -45,7 +46,7 @@ class ProfileViewModel(
     sealed class ProfileUiState {
         object Loading : ProfileUiState()
         data class Loaded(val profile: Profile) : ProfileUiState()
-        data class Error(@param:StringRes val messageRes: Int) : ProfileUiState()
+        data class Error(val message: UiText) : ProfileUiState()
     }
 
     fun loadProfile() {
@@ -57,7 +58,7 @@ class ProfileViewModel(
             try {
                 val profile = profileStateProvider.refreshProfile()
                 if (profile == null) {
-                    _profileState.postValue(ProfileUiState.Error(R.string.profile_load_failed))
+                    _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
                     return@launch
                 }
                 _profile.postValue(profile)
@@ -67,7 +68,7 @@ class ProfileViewModel(
                     checkAndUnlockBadges(profile)
                 }
             } catch (_: Exception) {
-                _profileState.postValue(ProfileUiState.Error(R.string.profile_load_failed))
+                _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
             }
         }
     }
@@ -84,7 +85,7 @@ class ProfileViewModel(
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        R.string.profile_avatar_upload_failed,
+                        UiText.resource(R.string.profile_avatar_upload_failed),
                         isError = true
                     )
                 )
@@ -101,14 +102,14 @@ class ProfileViewModel(
                 }
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        R.string.profile_username_updated,
+                        UiText.resource(R.string.profile_username_updated),
                         isError = false
                     )
                 )
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        R.string.profile_username_update_failed,
+                        UiText.resource(R.string.profile_username_update_failed),
                         isError = true
                     )
                 )
@@ -125,7 +126,7 @@ class ProfileViewModel(
             } else {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        R.string.profile_class_lock_failed,
+                        UiText.resource(R.string.profile_class_lock_failed),
                         isError = true
                     )
                 )
@@ -136,14 +137,14 @@ class ProfileViewModel(
     fun logout() {
         viewModelScope.launch {
             try {
-                SupabaseClient.client.auth.signOut()
+                authRepository.logout()
                 repository.clearRememberMe()
                 repository.clearLocalState()
                 _profileEvent.postValue(ProfileEvent.LoggedOut)
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
-                        R.string.profile_logout_failed,
+                        UiText.resource(R.string.profile_logout_failed),
                         isError = true
                     )
                 )

@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.ui.gems
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -12,6 +13,7 @@ import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.launch
 
 class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
@@ -21,15 +23,15 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
     private val _gemsState = MutableLiveData<GemsState>(GemsState.Idle)
     val gemsState: LiveData<GemsState> = _gemsState
 
-    private val _message = MutableLiveData<String?>()
-    val message: LiveData<String?> = _message
+    private val _message = MutableLiveData<UiText?>()
+    val message: LiveData<UiText?> = _message
 
     sealed class GemsState {
         object Idle : GemsState()
-        data class Loading(val message: String) : GemsState()
+        data class Loading(val message: UiText) : GemsState()
         data class Loaded(val gems: List<Gem>) : GemsState()
-        data class Empty(val message: String) : GemsState()
-        data class Error(val message: String) : GemsState()
+        data class Empty(val message: UiText) : GemsState()
+        data class Error(val message: UiText) : GemsState()
     }
 
     fun loadGems(lat: Double, lng: Double, city: String) {
@@ -37,7 +39,7 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
             try {
                 _gemsState.postValue(
                     GemsState.Loading(
-                        repository.context.getString(R.string.gems_loading_city_format, city)
+                        UiText.resource(R.string.gems_loading_city_format, city)
                     )
                 )
 
@@ -47,9 +49,9 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
                 if (candidates.isEmpty()) {
                     _gemsState.postValue(
-                        GemsState.Empty(repository.context.getString(R.string.gems_empty_state))
+                        GemsState.Empty(UiText.resource(R.string.gems_empty_state))
                     )
-                    _message.postValue(repository.context.getString(R.string.gems_no_fresh_results))
+                    _message.postValue(UiText.resource(R.string.gems_no_fresh_results))
                     return@launch
                 }
 
@@ -58,9 +60,9 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
                 if (gems.isEmpty()) {
                     _gemsState.postValue(
-                        GemsState.Empty(repository.context.getString(R.string.gems_empty_state))
+                        GemsState.Empty(UiText.resource(R.string.gems_empty_state))
                     )
-                    _message.postValue(repository.context.getString(R.string.gems_no_fresh_results))
+                    _message.postValue(UiText.resource(R.string.gems_no_fresh_results))
                 } else {
                     _gemsState.postValue(GemsState.Loaded(gems))
                 }
@@ -72,9 +74,9 @@ class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     CrashKey.OPERATION to "load"
                 )
                 if (BuildConfig.DEBUG) {
-                    Log.e("GemsViewModel", "Error loading gems", e)
+                    AppLogger.e("GemsViewModel", "Error loading gems", e)
                 }
-                val message = repository.context.getString(R.string.gems_loading_failed)
+                val message = UiText.resource(R.string.gems_loading_failed)
                 _gemsState.postValue(GemsState.Error(message))
                 _message.postValue(message)
             }

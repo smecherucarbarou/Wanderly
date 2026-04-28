@@ -1,8 +1,9 @@
 package com.novahorizon.wanderly.api
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.graphics.Bitmap
 import android.util.Base64
-import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.await
@@ -129,7 +130,7 @@ object GeminiClient {
                     // If 401, try to refresh the session once
                     if (response.code == 401) {
                         response.close()
-                        Log.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
+                        AppLogger.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
                         try {
                             auth.refreshCurrentSession()
                             val newToken = auth.currentAccessTokenOrNull()
@@ -142,9 +143,9 @@ object GeminiClient {
                             }
                         } catch (refreshError: Exception) {
                             if (BuildConfig.DEBUG) {
-                                Log.e(TAG, "Session refresh failed: ${LogRedactor.redact(refreshError.message)}")
+                                AppLogger.e(TAG, "Session refresh failed: ${LogRedactor.redact(refreshError.message)}")
                             }
-                            else Log.e(TAG, "Session refresh failed [code=${refreshError.javaClass.simpleName}]")
+                            else AppLogger.e(TAG, "Session refresh failed [code=${refreshError.javaClass.simpleName}]")
                             throw GeminiHttpException(401, "Proxy call failed: 401 (Refresh failed)")
                         }
                     }
@@ -152,7 +153,7 @@ object GeminiClient {
                     response.use { resp ->
                         val responseBody = resp.body.string()
                         if (!resp.isSuccessful) {
-                            Log.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
+                            AppLogger.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
                             logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
                             throw GeminiHttpException(resp.code, "Proxy call failed: ${resp.code}")
                         }
@@ -194,15 +195,15 @@ object GeminiClient {
 
     private inline fun logDebug(message: () -> String) {
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, LogRedactor.redact(message()))
+            AppLogger.d(TAG, LogRedactor.redact(message()))
         }
     }
 
     private fun logException(e: Exception) {
         if (BuildConfig.DEBUG) {
-            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName}): ${LogRedactor.redact(e.message)}")
+            AppLogger.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName}): ${LogRedactor.redact(e.message)}")
         } else {
-            Log.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})")
+            AppLogger.e(TAG, "Exception during Gemini call (${e.javaClass.simpleName})")
         }
     }
 

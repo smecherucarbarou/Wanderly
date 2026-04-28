@@ -1,5 +1,7 @@
 package com.novahorizon.wanderly.services
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +10,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
@@ -16,9 +17,11 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.SocialRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.observability.LogRedactor
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -34,13 +37,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 class HiveRealtimeService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: WanderlyRepository
+    private val socialRepository = SocialRepository()
     private var realtimeChannel: RealtimeChannel? = null
     private var realtimeCollectorJob: Job? = null
     private var statusCollectorJob: Job? = null
@@ -113,11 +116,16 @@ class HiveRealtimeService : Service() {
 
         val channel = SupabaseClient.client.realtime.channel("hive_updates")
         realtimeChannel = channel
+        val relevantIds = buildList {
+            add(currentUserId)
+            addAll(socialRepository.getAcceptedFriendIds())
+        }.distinct()
 
         channel.postgresChangeFlow<PostgresAction.Update>(
             schema = "public"
         ) {
             table = Constants.TABLE_PROFILES
+            filter("id", FilterOperator.IN, relevantIds)
         }.onEach { change ->
             val updatedProfile = change.decodeRecord<Profile>()
             if (updatedProfile.id == currentUserId) return@onEach
@@ -143,30 +151,30 @@ class HiveRealtimeService : Service() {
     override fun onDestroy() {
         realtimeCollectorJob?.cancel()
         statusCollectorJob?.cancel()
-        try {
-            runBlocking {
-                withTimeout(2_000L) {
+        serviceScope.launch {
+            try {
+                withTimeoutOrNull(2_000L) {
                     realtimeChannel?.unsubscribe()
                 }
+                logDebug("Unsubscribed from channel.")
+            } catch (e: Exception) {
+                logError("Error during unsubscribe", e)
+            } finally {
+                serviceScope.cancel()
             }
-            logDebug("Unsubscribed from channel.")
-        } catch (e: Exception) {
-            logError("Error during unsubscribe", e)
-        } finally {
-            serviceScope.cancel()
-            super.onDestroy()
         }
+        super.onDestroy()
     }
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("HiveRealtime", LogRedactor.redact(message))
+            AppLogger.d("HiveRealtime", LogRedactor.redact(message))
         }
     }
 
     private fun logWarn(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.w("HiveRealtime", LogRedactor.redact(message))
+            AppLogger.w("HiveRealtime", LogRedactor.redact(message))
         }
     }
 
@@ -174,9 +182,9 @@ class HiveRealtimeService : Service() {
         if (BuildConfig.DEBUG) {
             val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e("HiveRealtime", "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
+                AppLogger.e("HiveRealtime", "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
             } else {
-                Log.e("HiveRealtime", safeMessage)
+                AppLogger.e("HiveRealtime", safeMessage)
             }
         }
     }

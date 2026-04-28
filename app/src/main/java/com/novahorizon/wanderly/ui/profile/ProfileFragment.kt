@@ -1,12 +1,13 @@
 package com.novahorizon.wanderly.ui.profile
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,7 +15,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
@@ -39,6 +39,8 @@ import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.AvatarLoader
+import com.novahorizon.wanderly.ui.common.RankUiFormatter
+import com.novahorizon.wanderly.ui.common.UiText
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.widgets.StreakTierHelper
@@ -79,12 +81,12 @@ class ProfileFragment : Fragment() {
                 CrashKey.OPERATION to "avatar_crop"
             )
             if (BuildConfig.DEBUG) {
-                Log.e(
+                AppLogger.e(
                     "ProfileFragment",
                     "Avatar crop result was empty or unreadable: ${LogRedactor.redact(resultUri.toString())}"
                 )
             } else {
-                Log.e("ProfileFragment", "Avatar crop result was empty or unreadable")
+                AppLogger.e("ProfileFragment", "Avatar crop result was empty or unreadable")
             }
             Toast.makeText(requireContext(), R.string.profile_avatar_crop_failed, Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
@@ -126,7 +128,7 @@ class ProfileFragment : Fragment() {
             when (state) {
                 ProfileViewModel.ProfileUiState.Loading -> renderProfileLoading()
                 is ProfileViewModel.ProfileUiState.Loaded -> renderProfileLoaded(state.profile)
-                is ProfileViewModel.ProfileUiState.Error -> renderProfileError(state.messageRes)
+                is ProfileViewModel.ProfileUiState.Error -> renderProfileError(state.message)
             }
         }
 
@@ -137,7 +139,7 @@ class ProfileFragment : Fragment() {
                         pendingAvatarPreviewSource = null
                         pendingAvatarRemotePath = null
                     }
-                    showSnackbar(getString(event.messageRes), isError = event.isError)
+                    showSnackbar(event.message.asString(requireContext()), isError = event.isError)
                     viewModel.clearProfileEvent()
                 }
 
@@ -230,7 +232,7 @@ class ProfileFragment : Fragment() {
         val currentRank = HiveRank.fromHoney(currentHoney)
         binding.honeyTotal.text = formatWholeNumber(currentHoney)
         binding.streakCount.text = formatWholeNumber(currentStreak)
-        binding.rankBadge.text = getRankName(currentRank)
+        binding.rankBadge.text = getString(RankUiFormatter.rankNameRes(currentRank))
         binding.missionsCompletedCount.text = formatWholeNumber(flights)
         val streakAccentColor = resolveStreakAccentColor(currentStreak)
         binding.streakStatIcon.setTextColor(streakAccentColor)
@@ -313,15 +315,16 @@ class ProfileFragment : Fragment() {
         updateUI(profile)
     }
 
-    private fun renderProfileError(@StringRes messageRes: Int) {
+    private fun renderProfileError(message: UiText) {
         val binding = _binding ?: return
+        val text = message.asString(requireContext())
         binding.avatarContainer.isEnabled = true
         binding.editUsernameButton.isEnabled = false
         binding.username.setText(R.string.profile_default_name)
-        binding.progressText.setText(messageRes)
+        binding.progressText.text = text
         binding.badgesRecycler.visibility = View.GONE
         binding.badgesTitle.setText(R.string.profile_badges_empty)
-        showSnackbar(getString(messageRes), isError = true)
+        showSnackbar(text, isError = true)
     }
 
     private fun uploadAvatarToSupabase(uri: Uri) {
@@ -386,13 +389,6 @@ class ProfileFragment : Fragment() {
                 showSnackbar(getString(R.string.profile_username_too_short), isError = true)
             }
         }
-    }
-
-    private fun getRankName(rank: Int) = when (rank) {
-        1 -> getString(R.string.rank_1)
-        2 -> getString(R.string.rank_2)
-        3 -> getString(R.string.rank_3)
-        else -> getString(R.string.rank_4)
     }
 
     private fun formatWholeNumber(value: Int): String = NumberFormat.getIntegerInstance().format(value)

@@ -1,4 +1,8 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+
 const MAX_BODY_BYTES = 3 * 1024 * 1024
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 
 function allowedOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
@@ -38,6 +42,29 @@ function isValidGeminiPayload(payload: unknown): boolean {
   return Array.isArray(contents) && contents.length > 0 && contents.length <= 16
 }
 
+async function verifyAuth(req: Request): Promise<string | null> {
+  const authorization = req.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return null
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase auth config")
+  }
+
+  const token = authorization.replace(/^Bearer\s+/i, "")
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  })
+
+  const { data, error } = await supabase.auth.getUser(token)
+  if (error || !data.user) return null
+  return data.user.id
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = buildCorsHeaders(req)
   if (req.method === "OPTIONS") {
@@ -51,6 +78,16 @@ Deno.serve(async (req: Request) => {
   const authorization = req.headers.get("authorization") ?? ""
   if (!authorization.startsWith("Bearer ")) {
     return jsonResponse(req, { error: "Missing bearer token" }, 401)
+  }
+
+  let userId: string | null
+  try {
+    userId = await verifyAuth(req)
+  } catch {
+    return jsonResponse(req, { error: "Missing Supabase auth config" }, 500)
+  }
+  if (!userId) {
+    return jsonResponse(req, { error: "Invalid bearer token" }, 401)
   }
 
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY")

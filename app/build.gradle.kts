@@ -44,6 +44,10 @@ fun resolveBuildSetting(vararg names: String): String =
         ?: names.firstNotNullOfOrNull { name -> nonBlank(localProperties.getProperty(name)) }
         ?: ""
 
+fun resolveReleaseSecretSetting(vararg names: String): String =
+    names.firstNotNullOfOrNull { name -> nonBlank(providers.environmentVariable(name).orNull) }
+        ?: ""
+
 fun buildConfigString(value: String): String =
     "\"" + value
         .replace("\\", "\\\\")
@@ -54,10 +58,10 @@ val supabaseAnonKey = resolveBuildSetting("SUPABASE_ANON_KEY")
 val androidTestEmail = resolveBuildSetting("WANDERLY_ANDROID_TEST_EMAIL")
 val androidTestPassword = resolveBuildSetting("WANDERLY_ANDROID_TEST_PASSWORD")
 
-val releaseStoreFilePath = resolveBuildSetting("RELEASE_STORE_FILE")
-val releaseStorePassword = resolveBuildSetting("RELEASE_STORE_PASSWORD")
-val releaseKeyAlias = resolveBuildSetting("RELEASE_KEY_ALIAS")
-val releaseKeyPassword = resolveBuildSetting("RELEASE_KEY_PASSWORD")
+val releaseStoreFilePath = resolveReleaseSecretSetting("RELEASE_STORE_FILE")
+val releaseStorePassword = resolveReleaseSecretSetting("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = resolveReleaseSecretSetting("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = resolveReleaseSecretSetting("RELEASE_KEY_PASSWORD")
 val releaseStoreFile = nonBlank(releaseStoreFilePath)?.let { rawPath ->
     val rawFile = File(rawPath)
     if (rawFile.isAbsolute) rawFile else rootProject.file(rawPath)
@@ -274,6 +278,18 @@ android {
     }
 }
 
+kover {
+    reports {
+        variant("debug") {
+            verify {
+                rule("Minimum debug line coverage") {
+                    minBound(15)
+                }
+            }
+        }
+    }
+}
+
 val validateReleaseConfig by tasks.registering(ValidateReleaseConfigTask::class) {
     group = "verification"
     description = "Fails release packaging when required Supabase config is absent or unsafe."
@@ -321,6 +337,7 @@ tasks.configureEach {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.appcompat)
     implementation(libs.com.google.android.material.material)
     implementation(libs.androidx.constraintlayout.constraintlayout)

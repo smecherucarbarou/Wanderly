@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.ui.missions
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
@@ -22,6 +23,7 @@ import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
+import com.novahorizon.wanderly.ui.common.UiText
 import com.novahorizon.wanderly.util.AiResponseParser
 import com.novahorizon.wanderly.util.DateUtils
 import kotlinx.coroutines.CancellationException
@@ -76,9 +78,9 @@ class MissionsViewModel(
         object Generating : MissionState()
         data class MissionReceived(val text: String) : MissionState()
         object Verifying : MissionState()
-        data class VerificationResult(val success: Boolean, val message: String) : MissionState()
+        data class VerificationResult(val success: Boolean, val message: UiText) : MissionState()
         object Completing : MissionState()
-        data class Error(val message: String) : MissionState()
+        data class Error(val message: UiText) : MissionState()
         object FetchingDetails : MissionState()
         data class DetailsReceived(val info: String) : MissionState()
     }
@@ -95,7 +97,7 @@ class MissionsViewModel(
     fun generateMission(lat: Double, lng: Double, city: String?) {
         if (missionGenerationInFlight) {
             if (BuildConfig.DEBUG) {
-                Log.w("MissionsViewModel", "Ignoring duplicate mission generation request.")
+                AppLogger.w("MissionsViewModel", "Ignoring duplicate mission generation request.")
             }
             return
         }
@@ -215,7 +217,10 @@ class MissionsViewModel(
                 if (resultText.contains("YES")) {
                     verificationStep = VERIFICATION_STEP_VERIFIED
                     _missionState.postValue(
-                        MissionState.VerificationResult(true, "Location verified successfully.")
+                        MissionState.VerificationResult(
+                            true,
+                            UiText.DynamicString("Location verified successfully.")
+                        )
                     )
                 } else {
                     verificationStep = VERIFICATION_STEP_RECEIVED
@@ -226,7 +231,9 @@ class MissionsViewModel(
                     _missionState.postValue(
                         MissionState.VerificationResult(
                             false,
-                            if (message.isEmpty()) "Could not verify location." else message
+                            UiText.DynamicString(
+                                if (message.isEmpty()) "Could not verify location." else message
+                            )
                         )
                     )
                 }
@@ -320,7 +327,9 @@ class MissionsViewModel(
                     _streakMessage.postValue(message.toString().trim())
                 } else {
                     _missionState.postValue(
-                        MissionState.Error("Failed to save progress to the hive. Check your connection!")
+                        MissionState.Error(
+                            UiText.DynamicString("Failed to save progress to the hive. Check your connection!")
+                        )
                     )
                 }
             } catch (e: Exception) {
@@ -343,7 +352,7 @@ class MissionsViewModel(
         return when (verificationStep) {
             VERIFICATION_STEP_VERIFIED -> MissionState.VerificationResult(
                 success = true,
-                message = "Location verified successfully."
+                message = UiText.DynamicString("Location verified successfully.")
             )
             VERIFICATION_STEP_RECEIVED -> MissionState.MissionReceived(mission)
             else -> MissionState.Idle
@@ -352,7 +361,7 @@ class MissionsViewModel(
 
     private fun logRawResponse(label: String, response: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("MissionsViewModel", "Raw $label response: $response")
+            AppLogger.d("MissionsViewModel", "Raw $label response: $response")
         }
     }
 
@@ -364,10 +373,10 @@ class MissionsViewModel(
             CrashKey.OPERATION to message.lowercase(Locale.US).replace(' ', '_')
         )
         if (BuildConfig.DEBUG) {
-            Log.e("MissionsViewModel", message, e)
+            AppLogger.e("MissionsViewModel", message, e)
         }
         _missionState.postValue(
-            MissionState.Error(repository.context.getString(R.string.error_generic_retry))
+            MissionState.Error(UiText.resource(R.string.error_generic_retry))
         )
     }
 

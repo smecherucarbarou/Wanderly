@@ -1,10 +1,11 @@
 package com.novahorizon.wanderly.data
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
@@ -12,6 +13,8 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.util.Clock
+import com.novahorizon.wanderly.util.SystemClock
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +27,10 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
 
-class AvatarRepository(private val context: Context) {
+class AvatarRepository(
+    private val context: Context,
+    private val clock: Clock = SystemClock
+) {
     internal data class AvatarStorageTarget(
         val filePath: String,
         val uploadUrl: String,
@@ -59,7 +65,7 @@ class AvatarRepository(private val context: Context) {
                 baseUrl = baseUrl,
                 bucket = bucket,
                 profileId = profileId,
-                versionToken = System.currentTimeMillis().toString()
+                versionToken = clock.nowMillis().toString()
             )
 
             logDebug("Target upload URL: ${target.uploadUrl}")
@@ -151,7 +157,7 @@ class AvatarRepository(private val context: Context) {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("AvatarRepository", LogRedactor.redact(message))
+            AppLogger.d("AvatarRepository", LogRedactor.redact(message))
         }
     }
 
@@ -159,12 +165,12 @@ class AvatarRepository(private val context: Context) {
         if (BuildConfig.DEBUG) {
             val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e(
+                AppLogger.e(
                     "AvatarRepository",
                     "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
                 )
             } else {
-                Log.e("AvatarRepository", safeMessage)
+                AppLogger.e("AvatarRepository", safeMessage)
             }
         }
     }

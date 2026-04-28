@@ -1,5 +1,7 @@
 package com.novahorizon.wanderly.widgets
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -7,7 +9,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import android.widget.RemoteViews
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
@@ -19,6 +20,8 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.util.Clock
+import com.novahorizon.wanderly.util.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,6 +78,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_REFRESH_WIDGET = "com.novahorizon.wanderly.widgets.ACTION_REFRESH_WIDGET"
         private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        internal var clock: Clock = SystemClock
 
         private suspend fun refreshAndRenderWidgets(
             context: Context,
@@ -84,7 +88,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             val appContext = context.applicationContext
             val preferencesStore = PreferencesStore(appContext)
             val repository = WanderlyGraph.repository(appContext)
-            val nowMillis = System.currentTimeMillis()
+            val nowMillis = clock.nowMillis()
             val cachedSnapshot = try {
                 preferencesStore.getWidgetStreakSnapshot()
             } catch (e: Exception) {
@@ -200,7 +204,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                 CrashKey.OPERATION to operation
             )
             if (BuildConfig.DEBUG) {
-                Log.e(
+                AppLogger.e(
                     "WanderlyStreakWidget",
                     "Widget $operation failed [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
                 )

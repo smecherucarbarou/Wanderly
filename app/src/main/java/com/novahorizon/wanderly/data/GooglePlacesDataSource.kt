@@ -1,9 +1,11 @@
 package com.novahorizon.wanderly.data
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.NetworkResult
 import com.novahorizon.wanderly.api.PlacesProxyClient
+import com.novahorizon.wanderly.util.GeoMath
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -58,7 +60,7 @@ class GooglePlacesDataSource {
 
         candidates
             .distinctBy { it.name.lowercase() }
-            .sortedBy { distanceKm(userLat, userLng, it.lat, it.lng) }
+            .sortedBy { GeoMath.distanceKm(userLat, userLng, it.lat, it.lng) }
     }
 
     private suspend fun fetchCandidatesForQuery(
@@ -116,7 +118,7 @@ class GooglePlacesDataSource {
                     val lat = location.optDouble("latitude", Double.NaN)
                     val lng = location.optDouble("longitude", Double.NaN)
                     if (lat.isNaN() || lng.isNaN()) continue
-                    if (distanceKm(userLat, userLng, lat, lng) > radiusMeters / 1000.0) continue
+                    if (GeoMath.distanceKm(userLat, userLng, lat, lng) > radiusMeters / 1000.0) continue
 
                     val name = place.optJSONObject("displayName")?.optString("text").orEmpty().trim()
                     if (name.isBlank()) continue
@@ -143,18 +145,8 @@ class GooglePlacesDataSource {
 
     private fun logError(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.e("GooglePlacesDataSource", message)
+            AppLogger.e("GooglePlacesDataSource", message)
         }
     }
 
-    private fun distanceKm(userLat: Double, userLng: Double, placeLat: Double, placeLng: Double): Double {
-        val earthRadius = 6371.0
-        val dLat = Math.toRadians(placeLat - userLat)
-        val dLng = Math.toRadians(placeLng - userLng)
-        val a = Math.sin(dLat / 2).let { it * it } +
-            Math.cos(Math.toRadians(userLat)) *
-            Math.cos(Math.toRadians(placeLat)) *
-            Math.sin(dLng / 2).let { it * it }
-        return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    }
 }

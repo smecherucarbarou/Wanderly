@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.ui.map
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.location.Location
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -59,9 +60,9 @@ class MapViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     CrashKey.OPERATION to "location_update"
                 )
                 if (BuildConfig.DEBUG) {
-                    Log.e("MapViewModel", "Failed to update location", e)
+                    AppLogger.e("MapViewModel", "Failed to update location", e)
                 } else {
-                    Log.e("MapViewModel", "Failed to update location")
+                    AppLogger.e("MapViewModel", "Failed to update location")
                 }
             }
         }

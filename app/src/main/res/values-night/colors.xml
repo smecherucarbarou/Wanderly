@@ -10,6 +10,7 @@
     <color name="pollen_white">#FAFAFA</color>
     <color name="button_gradient_start">#F5A623</color>
     <color name="button_gradient_end">#CC8800</color>
-    <color name="transparent">#00000000</color>
     <color name="error">#E53935</color>
+    <color name="dev_log_background">#33FFFFFF</color>
+    <color name="gem_divider">#33FFFFFF</color>
 </resources>

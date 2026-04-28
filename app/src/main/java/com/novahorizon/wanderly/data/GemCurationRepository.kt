@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.data
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
-import android.util.Log
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.GeminiClient
@@ -152,7 +153,7 @@ class GemCurationRepository(
 
     private fun logRawResponse(response: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("GemCurationRepository", "Raw gem response: ${LogRedactor.redact(response)}")
+            AppLogger.d("GemCurationRepository", "Raw gem response: ${LogRedactor.redact(response)}")
         }
     }
 }

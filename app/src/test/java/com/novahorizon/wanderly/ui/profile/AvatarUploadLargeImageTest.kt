@@ -15,6 +15,7 @@ import com.novahorizon.wanderly.data.AvatarRepository
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,7 +71,7 @@ class AvatarUploadLargeImageTest {
             advanceUntilIdle()
 
             val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
-            assertEquals(R.string.profile_avatar_upload_failed, event.messageRes)
+            assertEquals(UiText.StringResource(R.string.profile_avatar_upload_failed), event.message)
             assertTrue(event.isError)
         } finally {
             largeBitmap.recycle()

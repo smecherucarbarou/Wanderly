@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.api
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.LogRedactor
 import kotlinx.coroutines.Dispatchers
@@ -265,7 +266,7 @@ object PlacesGeocoder {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, LogRedactor.redact(message))
+            AppLogger.d(TAG, LogRedactor.redact(message))
         }
     }
 
@@ -273,12 +274,12 @@ object PlacesGeocoder {
         if (BuildConfig.DEBUG) {
             val safeMessage = LogRedactor.redact(message)
             if (throwable != null) {
-                Log.e(TAG, "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
+                AppLogger.e(TAG, "$safeMessage [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]")
             } else {
-                Log.e(TAG, safeMessage)
+                AppLogger.e(TAG, safeMessage)
             }
         } else {
-            Log.e(TAG, message)
+            AppLogger.e(TAG, message)
         }
     }
 }

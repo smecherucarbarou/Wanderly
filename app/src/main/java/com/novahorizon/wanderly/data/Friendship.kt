@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 data class Friendship(
     val user_id: String,
     val friend_id: String,
-    val status: String = "accepted"
+    val status: String = "pending"
 )

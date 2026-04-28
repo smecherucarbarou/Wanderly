@@ -13,6 +13,7 @@ import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,7 +72,10 @@ class GemsViewModelTest {
             advanceUntilIdle()
 
             val loading = states[1] as GemsViewModel.GemsState.Loading
-            assertEquals(context.getString(R.string.gems_loading_city_format, "Bucharest"), loading.message)
+            assertEquals(
+                UiText.StringResource(R.string.gems_loading_city_format, listOf("Bucharest")),
+                loading.message
+            )
             assertEquals(GemsViewModel.GemsState.Loaded(listOf(testGem())), states.last())
         } finally {
             store.clear()
@@ -94,9 +98,9 @@ class GemsViewModelTest {
             advanceUntilIdle()
 
             val error = states.last() as GemsViewModel.GemsState.Error
-            assertEquals(context.getString(R.string.gems_loading_failed), error.message)
-            assertFalse(error.message.contains("raw upstream"))
-            assertEquals(context.getString(R.string.gems_loading_failed), messages.last())
+            assertEquals(UiText.StringResource(R.string.gems_loading_failed), error.message)
+            assertFalse(error.message.asString(context).contains("raw upstream"))
+            assertEquals(UiText.StringResource(R.string.gems_loading_failed), messages.last())
         } finally {
             store.clear()
             viewModel.gemsState.removeObserver(states.observer)
@@ -116,10 +120,10 @@ class GemsViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                GemsViewModel.GemsState.Empty(context.getString(R.string.gems_empty_state)),
+                GemsViewModel.GemsState.Empty(UiText.StringResource(R.string.gems_empty_state)),
                 states.last()
             )
-            assertEquals(context.getString(R.string.gems_no_fresh_results), messages.last())
+            assertEquals(UiText.StringResource(R.string.gems_no_fresh_results), messages.last())
             assertEquals(0, repository.curateCalls)
         } finally {
             store.clear()
@@ -157,8 +161,8 @@ class GemsViewModelTest {
         val observer = Observer<GemsViewModel.GemsState> { add(it) }
     }
 
-    private class ObservedMessages : ArrayList<String?>() {
-        val observer = Observer<String?> { add(it) }
+    private class ObservedMessages : ArrayList<UiText?>() {
+        val observer = Observer<UiText?> { add(it) }
     }
 
     private class TestWanderlyRepository(

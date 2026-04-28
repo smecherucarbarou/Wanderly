@@ -24,6 +24,7 @@ import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.ui.common.AvatarLoader
+import com.novahorizon.wanderly.ui.common.RankUiFormatter
 import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import kotlinx.coroutines.flow.collect
@@ -170,8 +171,9 @@ class SocialFragment : Fragment() {
 
         viewModel.addFriendResult.observe(viewLifecycleOwner) { result ->
             result?.let {
-                val isError = !it.contains("successfully")
-                showSnackbar(it, isError = isError)
+                val message = it.asString(requireContext())
+                val isError = !message.contains("successfully", ignoreCase = true)
+                showSnackbar(message, isError = isError)
                 viewModel.clearAddFriendResult()
             }
         }
@@ -206,7 +208,7 @@ class SocialFragment : Fragment() {
 
             is SocialViewModel.SocialUiState.Error -> {
                 loadingIndicator.visibility = View.GONE
-                showSnackbar(getString(state.messageRes), isError = true)
+                showSnackbar(state.message.asString(requireContext()), isError = true)
                 renderEmptyState(
                     profiles = emptyList(),
                     emptyMessage = selectedEmptyMessage()
@@ -292,7 +294,7 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
         holder.honeyAmount.text = String.format(Locale.getDefault(), "%d", profile.honey ?: 0)
         
         val rank = HiveRank.fromHoney(profile.honey)
-        holder.rankName.text = getRankName(holder.itemView.context, rank)
+        holder.rankName.text = holder.itemView.context.getString(RankUiFormatter.rankNameRes(rank))
 
         if (canRemove) {
             holder.removeBtn.visibility = View.VISIBLE
@@ -308,13 +310,6 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
             profile.avatar_url,
             profile.username ?: holder.itemView.context.getString(R.string.profile_default_name)
         )
-    }
-
-    private fun getRankName(context: android.content.Context, rank: Int) = when(rank) {
-        1 -> context.getString(R.string.rank_1)
-        2 -> context.getString(R.string.rank_2)
-        3 -> context.getString(R.string.rank_3)
-        else -> context.getString(R.string.rank_4)
     }
 
     private class ProfileDiffCallback : DiffUtil.ItemCallback<Profile>() {

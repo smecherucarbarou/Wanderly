@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.app.Application
-import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -39,7 +40,7 @@ class WanderlyApplication : Application() {
 
     private fun setupBackgroundWorkers() {
         if (BuildConfig.DEBUG) {
-            Log.d("WanderlyApp", "Setting up background workers...")
+            AppLogger.d("WanderlyApp", "Setting up background workers...")
         }
         val workManager = WorkManager.getInstance(this)
 
@@ -66,7 +67,7 @@ class WanderlyApplication : Application() {
         )
         
         if (BuildConfig.DEBUG) {
-            Log.d("WanderlyApp", "Background workers scheduled with KEEP policy.")
+            AppLogger.d("WanderlyApp", "Background workers scheduled with KEEP policy.")
         }
     }
 }

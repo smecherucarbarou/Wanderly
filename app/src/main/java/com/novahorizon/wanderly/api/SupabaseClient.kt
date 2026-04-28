@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.api
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
-import android.util.Log
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.LogRedactor
@@ -25,7 +26,7 @@ object SupabaseClient {
 
         validateConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "Initializing Supabase with URL: ${LogRedactor.redact(BuildConfig.SUPABASE_URL)}")
+            AppLogger.d(TAG, "Initializing Supabase with URL: ${LogRedactor.redact(BuildConfig.SUPABASE_URL)}")
         }
 
         _client = createSupabaseClient(

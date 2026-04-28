@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.ui.main
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -81,9 +82,9 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     CrashKey.OPERATION to "daily_streak_check"
                 )
                 if (BuildConfig.DEBUG) {
-                    Log.e("WanderlyStreak", "Error checking streak expiry", e)
+                    AppLogger.e("WanderlyStreak", "Error checking streak expiry", e)
                 } else {
-                    Log.e("WanderlyStreak", "Error checking streak expiry")
+                    AppLogger.e("WanderlyStreak", "Error checking streak expiry")
                 }
             }
         }

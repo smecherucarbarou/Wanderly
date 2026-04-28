@@ -242,10 +242,13 @@ class DevDashboardFragment : Fragment() {
             val currentBinding = _binding ?: return@observe
             currentBinding.btnTestAiNotif.isEnabled = !state.isRunning
             if (state.logs.isNotEmpty()) {
-                currentBinding.tvAiLogs.text = state.logs.joinToString(separator = "\n\n", postfix = "\n\n")
+                currentBinding.tvAiLogs.text = state.logs
+                    .joinToString(separator = "\n\n", postfix = "\n\n") {
+                        it.asString(requireContext())
+                    }
             }
             state.snackbarMessage?.let { message ->
-                showSnackbar(message, isError = state.isError)
+                showSnackbar(message.asString(requireContext()), isError = state.isError)
                 adminToolsViewModel.clearSnackbarMessage()
             }
         }

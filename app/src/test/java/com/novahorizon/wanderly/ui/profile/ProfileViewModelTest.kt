@@ -13,6 +13,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,7 +92,7 @@ class ProfileViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                ProfileViewModel.ProfileUiState.Error(R.string.profile_load_failed),
+                ProfileViewModel.ProfileUiState.Error(UiText.StringResource(R.string.profile_load_failed)),
                 states.last()
             )
         } finally {
@@ -143,7 +144,7 @@ class ProfileViewModelTest {
             advanceUntilIdle()
 
             val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
-            assertEquals(R.string.profile_avatar_upload_failed, event.messageRes)
+            assertEquals(UiText.StringResource(R.string.profile_avatar_upload_failed), event.message)
             assertTrue(event.isError)
         } finally {
             store.clear()

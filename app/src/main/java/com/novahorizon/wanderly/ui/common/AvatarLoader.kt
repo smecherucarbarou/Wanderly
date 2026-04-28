@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.ui.common
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.util.Base64
-import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -45,7 +46,7 @@ object AvatarLoader {
                 when {
                     remoteRequest != null -> remoteRequest
                     !isRemoteAvatarUrlAllowed(trimmedSource) -> {
-                        Log.w(TAG, "Blocked non-HTTPS avatar URL.")
+                        AppLogger.w(TAG, "Blocked non-HTTPS avatar URL.")
                         showPlaceholder(initialView, imageView)
                         return
                     }
@@ -81,13 +82,13 @@ object AvatarLoader {
                     isFirstResource: Boolean
                 ): Boolean {
                     if (BuildConfig.DEBUG) {
-                        Log.e(
+                        AppLogger.e(
                             TAG,
                             "Avatar load failed for model=${LogRedactor.redact(model?.toString())}: " +
                                 LogRedactor.redact(e?.message)
                         )
                     }
-                    else Log.e(TAG, "Avatar load failed")
+                    else AppLogger.e(TAG, "Avatar load failed")
                     showInitial(initialView, imageView, displayName)
                     return true
                 }
@@ -188,7 +189,7 @@ object AvatarLoader {
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, LogRedactor.redact(message))
+            AppLogger.d(TAG, LogRedactor.redact(message))
         }
     }
 

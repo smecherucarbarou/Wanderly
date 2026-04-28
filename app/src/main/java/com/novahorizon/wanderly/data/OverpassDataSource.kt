@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.data
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.await
@@ -102,7 +103,7 @@ class OverpassDataSource {
                 }
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) {
-                    Log.e(
+                    AppLogger.e(
                         "OverpassDataSource",
                         "Overpass error [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]"
                     )

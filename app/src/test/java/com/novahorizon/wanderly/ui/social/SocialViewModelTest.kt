@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,7 +106,7 @@ class SocialViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                SocialViewModel.SocialUiState.Error(R.string.error_network),
+                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.error_network)),
                 viewModel.state.value
             )
         } finally {
@@ -128,7 +129,10 @@ class SocialViewModelTest {
             viewModel.addFriend("ABC123")
             advanceUntilIdle()
 
-            assertEquals("Friend added successfully!", viewModel.addFriendResult.value)
+            assertEquals(
+                UiText.DynamicString("Friend added successfully!"),
+                viewModel.addFriendResult.value
+            )
             assertEquals(friends, viewModel.friends.value)
             assertEquals(
                 SocialViewModel.SocialUiState.Loaded(
@@ -156,11 +160,11 @@ class SocialViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                context.getString(R.string.social_friend_already_added),
+                UiText.StringResource(R.string.social_friend_already_added),
                 viewModel.addFriendResult.value
             )
             assertEquals(
-                SocialViewModel.SocialUiState.Error(R.string.social_friend_already_added),
+                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.social_friend_already_added)),
                 viewModel.state.value
             )
         } finally {
@@ -181,11 +185,11 @@ class SocialViewModelTest {
             viewModel.addFriend("ABC123")
             advanceUntilIdle()
 
-            val message = viewModel.addFriendResult.value.orEmpty()
-            assertEquals(context.getString(R.string.social_add_friend_failed), message)
-            assertFalse(message.contains("raw add friend"))
+            val message = requireNotNull(viewModel.addFriendResult.value)
+            assertEquals(UiText.StringResource(R.string.social_add_friend_failed), message)
+            assertFalse(message.asString(context).contains("raw add friend"))
             assertEquals(
-                SocialViewModel.SocialUiState.Error(R.string.error_network),
+                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.error_network)),
                 viewModel.state.value
             )
         } finally {

@@ -8,18 +8,15 @@ class AuthCallbackMatcherTest {
 
     @Test
     fun matchesCanonicalCallback() {
-        assertTrue(AuthCallbackMatcher.matches("wanderly", "auth", "/callback"))
-    }
-
-    @Test
-    fun matchesLegacyCallbackHost() {
-        assertTrue(AuthCallbackMatcher.matches("wanderly", "login", "/callback"))
+        assertTrue(AuthCallbackMatcher.matches("https", "wanderly.app", "/auth/callback"))
     }
 
     @Test
     fun rejectsUnexpectedCallbackShape() {
-        assertFalse(AuthCallbackMatcher.matches("https", "auth", "/callback"))
-        assertFalse(AuthCallbackMatcher.matches("wanderly", "auth", "/wrong"))
-        assertFalse(AuthCallbackMatcher.matches("wanderly", "other", "/callback"))
+        assertFalse(AuthCallbackMatcher.matches("wanderly", "auth", "/callback"))
+        assertFalse(AuthCallbackMatcher.matches("wanderly", "login", "/callback"))
+        assertFalse(AuthCallbackMatcher.matches("https", "wanderly.app", "/callback"))
+        assertFalse(AuthCallbackMatcher.matches("https", "auth", "/auth/callback"))
+        assertFalse(AuthCallbackMatcher.matches("https", "other", "/auth/callback"))
     }
 }

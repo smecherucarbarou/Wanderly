@@ -6,9 +6,15 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.novahorizon.wanderly.Constants
+import com.novahorizon.wanderly.util.Clock
+import com.novahorizon.wanderly.util.SystemClock
 
-class PreferencesStore(context: Context) {
+class PreferencesStore(
+    context: Context,
+    private val clock: Clock = SystemClock
+) {
     private val dataStoreManager = DataStoreManager(context.applicationContext)
+    private var missionSnapshot: MissionSnapshot? = null
 
     suspend fun isRememberMeEnabled(): Boolean =
         dataStoreManager.getMainBoolean(Constants.KEY_REMEMBER_ME, false)
@@ -46,6 +52,7 @@ class PreferencesStore(context: Context) {
     }
 
     suspend fun clearAll() {
+        missionSnapshot = null
         dataStoreManager.clearMainStore()
     }
 
@@ -63,30 +70,31 @@ class PreferencesStore(context: Context) {
         dataStoreManager.putMainString(Constants.KEY_LAST_VISIT, date)
     }
 
-    suspend fun getMissionHistory(): String =
-        dataStoreManager.getMainString(Constants.KEY_MISSION_HISTORY, "") ?: ""
+    suspend fun getMissionHistory(): String {
+        removePersistedMissionData()
+        return missionSnapshot?.history.orEmpty()
+    }
 
-    suspend fun getMissionTarget(): String? =
-        dataStoreManager.getMainString(Constants.KEY_MISSION_TARGET, null)
+    suspend fun getMissionTarget(): String? {
+        removePersistedMissionData()
+        return missionSnapshot?.target
+    }
 
-    suspend fun getMissionCity(): String? =
-        dataStoreManager.getMainString(Constants.KEY_MISSION_CITY, null)
+    suspend fun getMissionCity(): String? {
+        removePersistedMissionData()
+        return missionSnapshot?.city
+    }
 
-    suspend fun getMissionText(): String? =
-        dataStoreManager.getMainString(Constants.KEY_MISSION_TEXT, null)
+    suspend fun getMissionText(): String? {
+        removePersistedMissionData()
+        return missionSnapshot?.text
+    }
 
     suspend fun hasMissionTargetCoordinates(): Boolean = getMissionTargetCoordinates() != null
 
     suspend fun getMissionTargetCoordinates(): Pair<Double, Double>? {
-        val lat = getMissionCoordinateAsync(
-            typedKey = Constants.KEY_MISSION_TARGET_LAT_TYPED,
-            legacyKey = Constants.KEY_MISSION_TARGET_LAT
-        )
-        val lng = getMissionCoordinateAsync(
-            typedKey = Constants.KEY_MISSION_TARGET_LNG_TYPED,
-            legacyKey = Constants.KEY_MISSION_TARGET_LNG
-        )
-        return if (lat != null && lng != null) lat to lng else null
+        removePersistedMissionData()
+        return missionSnapshot?.let { it.targetLat to it.targetLng }
     }
 
     suspend fun saveMissionData(
@@ -97,23 +105,36 @@ class PreferencesStore(context: Context) {
         targetLat: Double,
         targetLng: Double
     ) {
-        dataStoreManager.putMainString(Constants.KEY_MISSION_TEXT, text)
-        dataStoreManager.putMainString(Constants.KEY_MISSION_TARGET, target)
-        dataStoreManager.putMainString(Constants.KEY_MISSION_CITY, city)
-        dataStoreManager.putMainString(Constants.KEY_MISSION_HISTORY, history)
-        dataStoreManager.putMainFloat(Constants.KEY_MISSION_TARGET_LAT_TYPED, targetLat.toFloat())
-        dataStoreManager.putMainFloat(Constants.KEY_MISSION_TARGET_LNG_TYPED, targetLng.toFloat())
-        dataStoreManager.removeMainKeys(
-            listOf(Constants.KEY_MISSION_TARGET_LAT, Constants.KEY_MISSION_TARGET_LNG)
+        missionSnapshot = MissionSnapshot(
+            text = text,
+            target = target,
+            history = history,
+            city = city,
+            targetLat = targetLat,
+            targetLng = targetLng
         )
-    }
-
-    suspend fun clearMissionData() {
         dataStoreManager.removeMainKeys(
             listOf(
                 Constants.KEY_MISSION_TEXT,
                 Constants.KEY_MISSION_TARGET,
                 Constants.KEY_MISSION_CITY,
+                Constants.KEY_MISSION_HISTORY,
+                Constants.KEY_MISSION_TARGET_LAT,
+                Constants.KEY_MISSION_TARGET_LNG,
+                Constants.KEY_MISSION_TARGET_LAT_TYPED,
+                Constants.KEY_MISSION_TARGET_LNG_TYPED
+            )
+        )
+    }
+
+    suspend fun clearMissionData() {
+        missionSnapshot = null
+        dataStoreManager.removeMainKeys(
+            listOf(
+                Constants.KEY_MISSION_TEXT,
+                Constants.KEY_MISSION_TARGET,
+                Constants.KEY_MISSION_CITY,
+                Constants.KEY_MISSION_HISTORY,
                 Constants.KEY_MISSION_TARGET_LAT,
                 Constants.KEY_MISSION_TARGET_LNG,
                 Constants.KEY_MISSION_TARGET_LAT_TYPED,
@@ -141,7 +162,7 @@ class PreferencesStore(context: Context) {
     }
 
     suspend fun pruneStaleCooldowns(maxAgeMs: Long = 7 * 24 * 60 * 60 * 1000L) {
-        val now = System.currentTimeMillis()
+        val now = clock.nowMillis()
         dataStoreManager.getNotificationCooldownKeys().forEach { key ->
             val lastSent = dataStoreManager.getNotificationCooldown(key)
             if (lastSent <= 0L || now - lastSent > maxAgeMs) {
@@ -228,15 +249,29 @@ class PreferencesStore(context: Context) {
         )
     }
 
-    private suspend fun getMissionCoordinateAsync(typedKey: String, legacyKey: String): Double? {
-        dataStoreManager.getMainFloat(typedKey)?.let { return it.toDouble() }
-
-        val legacyRawValue = dataStoreManager.getMainString(legacyKey, null) ?: return null
-        dataStoreManager.removeMainKeys(listOf(legacyKey))
-        val legacyValue = parseLegacyMissionCoordinate(legacyRawValue) ?: return null
-        dataStoreManager.putMainFloat(typedKey, legacyValue.toFloat())
-        return legacyValue
+    private suspend fun removePersistedMissionData() {
+        dataStoreManager.removeMainKeys(
+            listOf(
+                Constants.KEY_MISSION_TEXT,
+                Constants.KEY_MISSION_TARGET,
+                Constants.KEY_MISSION_CITY,
+                Constants.KEY_MISSION_HISTORY,
+                Constants.KEY_MISSION_TARGET_LAT,
+                Constants.KEY_MISSION_TARGET_LNG,
+                Constants.KEY_MISSION_TARGET_LAT_TYPED,
+                Constants.KEY_MISSION_TARGET_LNG_TYPED
+            )
+        )
     }
+
+    private data class MissionSnapshot(
+        val text: String,
+        val target: String,
+        val history: String,
+        val city: String?,
+        val targetLat: Double,
+        val targetLng: Double
+    )
 
     companion object {
         internal const val NOTIFICATION_CHECK_PREFS_NAME = "notification_check_state"

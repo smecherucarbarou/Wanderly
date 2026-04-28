@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.observability
 
 import android.content.Context
-import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.novahorizon.wanderly.BuildConfig
@@ -54,7 +53,7 @@ object CrashReporter {
     fun initialize(context: Context, configured: Boolean) {
         if (!configured) {
             if (BuildConfig.DEBUG) {
-                Log.d(TAG, "Crash reporting disabled; Firebase configuration is not present.")
+                AppLogger.d(TAG, "Crash reporting disabled; Firebase configuration is not present.")
             }
             backend = null
             enabled = false
@@ -65,7 +64,7 @@ object CrashReporter {
             setFirebaseCollectionEnabledIfAvailable(context, enabled = false)
             backend = null
             enabled = false
-            Log.d(TAG, "Crash reporting disabled for debug builds.")
+            AppLogger.d(TAG, "Crash reporting disabled for debug builds.")
             return
         }
 
@@ -91,7 +90,7 @@ object CrashReporter {
             if (FirebaseApp.getApps(context).isEmpty()) {
                 backend = null
                 enabled = false
-                Log.w(TAG, "FirebaseApp is not initialized; Crashlytics disabled.")
+                AppLogger.w(TAG, "FirebaseApp is not initialized; Crashlytics disabled.")
                 return false
             }
 
@@ -105,7 +104,7 @@ object CrashReporter {
         } catch (e: Throwable) {
             backend = null
             enabled = false
-            Log.w(TAG, "Crashlytics initialization skipped [${e.javaClass.simpleName}]")
+            AppLogger.w(TAG, "Crashlytics initialization skipped [${e.javaClass.simpleName}]")
             return false
         }
     }
@@ -176,7 +175,7 @@ object CrashReporter {
                 FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(enabled)
             }
         } catch (e: Throwable) {
-            Log.w(TAG, "Crashlytics collection toggle skipped [${e.javaClass.simpleName}]")
+            AppLogger.w(TAG, "Crashlytics collection toggle skipped [${e.javaClass.simpleName}]")
         }
     }
 

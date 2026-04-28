@@ -5,14 +5,12 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.SupabaseClient
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
+import com.novahorizon.wanderly.data.AuthRepository
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
-class AuthViewModel : ViewModel() {
+class AuthViewModel(
+    private val authRepository: AuthRepository = WanderlyGraph.authRepository()
+) : ViewModel() {
 
     private val _authState = MutableLiveData<AuthState>(AuthState.Idle)
     val authState: LiveData<AuthState> = _authState
@@ -47,7 +45,7 @@ class AuthViewModel : ViewModel() {
         _authState.value = AuthState.Loading
         viewModelScope.launch {
             try {
-                WanderlyGraph.emailAuthService().signInWithEmail(email, pass)
+                authRepository.signInWithEmail(email, pass)
                 _authState.postValue(AuthState.Success)
             } catch (e: Exception) {
                 _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))
@@ -59,22 +57,12 @@ class AuthViewModel : ViewModel() {
         _authState.value = AuthState.Loading
         viewModelScope.launch {
             try {
-                // Trimitem username-ul ca user_metadata
-                val result = SupabaseClient.client.auth.signUpWith(Email) {
-                    this.email = email
-                    this.password = pass
-                    this.data = buildJsonObject {
-                        put("username", username)
-                    }
-                }
-
-                if (result != null && result.identities?.isEmpty() == true) {
+                val result = authRepository.signUpWithEmail(email, pass, username)
+                if (result.emailAlreadyRegistered) {
                     _authState.postValue(AuthState.Error("Email already registered"))
                     return@launch
                 }
 
-                // Daca inregistrarea a reusit, consideram succes. 
-                // Baza de date (prin Trigger) va crea profilul folosind 'username' din data.
                 _authState.postValue(AuthState.Success)
             } catch (e: Exception) {
                 _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))

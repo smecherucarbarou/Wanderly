@@ -19,6 +19,7 @@ import com.novahorizon.wanderly.ui.social.SocialViewModel
 
 class WanderlyViewModelFactory(private val repository: WanderlyRepository) : ViewModelProvider.Factory {
     private val profileStateProvider = ProfileStateProvider(repository)
+    private val authRepository = WanderlyGraph.authRepository()
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return create(modelClass, SavedStateHandle())
@@ -31,7 +32,7 @@ class WanderlyViewModelFactory(private val repository: WanderlyRepository) : Vie
     private fun <T : ViewModel> create(modelClass: Class<T>, savedStateHandle: SavedStateHandle): T {
         if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AuthViewModel() as T
+            return AuthViewModel(authRepository) as T
         }
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
@@ -60,7 +61,7 @@ class WanderlyViewModelFactory(private val repository: WanderlyRepository) : Vie
         }
         if (modelClass.isAssignableFrom(ProfileViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ProfileViewModel(repository, profileStateProvider) as T
+            return ProfileViewModel(repository, profileStateProvider, authRepository) as T
         }
         if (modelClass.isAssignableFrom(AdminToolsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")

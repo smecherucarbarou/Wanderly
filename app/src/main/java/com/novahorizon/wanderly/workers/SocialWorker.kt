@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.workers
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.novahorizon.wanderly.BuildConfig
@@ -21,14 +22,14 @@ class SocialWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val pid = android.os.Process.myPid()
         if (BuildConfig.DEBUG) {
-            Log.d("SocialWorker", "--- Social Polling Started (PID: $pid) ---")
+            AppLogger.d("SocialWorker", "--- Social Polling Started (PID: $pid) ---")
         }
         val repository = WanderlyGraph.repository(applicationContext)
 
         try {
             if (AuthSessionCoordinator.awaitResolvedSessionOrNull(7_000L) == null) {
                 if (BuildConfig.DEBUG) {
-                    Log.w("SocialWorker", "Auth not ready after waiting. Scheduling retry.")
+                    AppLogger.w("SocialWorker", "Auth not ready after waiting. Scheduling retry.")
                 }
                 return@withContext Result.retry()
             }
@@ -38,7 +39,7 @@ class SocialWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 source = "worker_social"
             )
             if (BuildConfig.DEBUG) {
-                Log.d("SocialWorker", "--- Social Polling Finished ---")
+                AppLogger.d("SocialWorker", "--- Social Polling Finished ---")
             }
             Result.success()
         } catch (e: Exception) {
@@ -50,9 +51,9 @@ class SocialWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 CrashKey.OPERATION to "social_poll"
             )
             if (BuildConfig.DEBUG) {
-                Log.e("SocialWorker", "Error in SocialWorker [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]")
+                AppLogger.e("SocialWorker", "Error in SocialWorker [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]")
             } else {
-                Log.e("SocialWorker", "Error in SocialWorker")
+                AppLogger.e("SocialWorker", "Error in SocialWorker")
             }
             Result.retry()
         }

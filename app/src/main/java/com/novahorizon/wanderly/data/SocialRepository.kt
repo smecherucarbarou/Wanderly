@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.data
 
-import android.util.Log
+import com.novahorizon.wanderly.observability.AppLogger
+
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
@@ -16,24 +17,9 @@ class SocialRepository {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
             val currentUserId = session.user?.id ?: return@withContext emptyList()
+            val relevantIds = getAcceptedFriendIds().toMutableList().apply { add(currentUserId) }
 
-            val friendships = SupabaseClient.client.postgrest["friendships"]
-                .select {
-                    filter {
-                        or {
-                            eq("user_id", currentUserId)
-                            eq("friend_id", currentUserId)
-                        }
-                    }
-                }
-                .decodeList<Friendship>()
-
-            val relevantIds = friendships.map {
-                if (it.user_id == currentUserId) it.friend_id else it.user_id
-            }.toMutableList()
-            relevantIds.add(currentUserId)
-
-            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
+            SupabaseClient.client.postgrest["profiles_public"]
                 .select {
                     filter {
                         isIn("id", relevantIds)
@@ -55,7 +41,7 @@ class SocialRepository {
             val normalizedCode = normalizeFriendCode(friendCode)
                 ?: return@withContext "Friend code must be 6 letters or digits"
 
-            val targetUsers = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
+            val targetUsers = SupabaseClient.client.postgrest["profiles_public"]
                 .select { filter { eq("friend_code", normalizedCode) } }
                 .decodeList<Profile>()
 
@@ -65,12 +51,12 @@ class SocialRepository {
             if (friendId == currentUserId) return@withContext "You cannot add yourself"
 
             SupabaseClient.client.postgrest["friendships"].insert(
-                Friendship(user_id = currentUserId, friend_id = friendId)
+                Friendship(user_id = currentUserId, friend_id = friendId, status = "pending")
             )
-            "Friend added successfully!"
+            "Friend request sent!"
         } catch (e: Exception) {
             if (e.message?.contains("duplicate key") == true || e.message?.contains("unique constraint") == true) {
-                "Already friends with this user"
+                "Already requested or friends with this user"
             } else {
                 "Failed to add friend: ${e.message}"
             }
@@ -105,27 +91,11 @@ class SocialRepository {
 
     suspend fun getFriends(): List<Profile> = withContext(Dispatchers.IO) {
         try {
-            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
-            val currentUserId = session.user?.id ?: return@withContext emptyList()
+            val friendIds = getAcceptedFriendIds()
 
-            val friendships = SupabaseClient.client.postgrest["friendships"]
-                .select {
-                    filter {
-                        or {
-                            eq("user_id", currentUserId)
-                            eq("friend_id", currentUserId)
-                        }
-                    }
-                }
-                .decodeList<Friendship>()
+            if (friendIds.isEmpty()) return@withContext emptyList()
 
-            if (friendships.isEmpty()) return@withContext emptyList()
-
-            val friendIds = friendships.map {
-                if (it.user_id == currentUserId) it.friend_id else it.user_id
-            }
-
-            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
+            SupabaseClient.client.postgrest["profiles_public"]
                 .select {
                     filter {
                         isIn("id", friendIds)
@@ -135,6 +105,31 @@ class SocialRepository {
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
             logError("Error getting friends", e)
+            emptyList()
+        }
+    }
+
+    suspend fun getAcceptedFriendIds(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
+            val currentUserId = session.user?.id ?: return@withContext emptyList()
+
+            SupabaseClient.client.postgrest["friendships"]
+                .select {
+                    filter {
+                        eq("status", "accepted")
+                        or {
+                            eq("user_id", currentUserId)
+                            eq("friend_id", currentUserId)
+                        }
+                    }
+                }
+                .decodeList<Friendship>()
+                .flatMap { friendship -> listOf(friendship.user_id, friendship.friend_id) }
+                .filter { userId -> userId != currentUserId }
+                .distinct()
+        } catch (e: Exception) {
+            logError("Error getting accepted friend ids", e)
             emptyList()
         }
     }
@@ -150,12 +145,12 @@ class SocialRepository {
 
     private fun logError(message: String, throwable: Throwable) {
         if (BuildConfig.DEBUG) {
-            Log.e(
+            AppLogger.e(
                 "SocialRepository",
                 "${LogRedactor.redact(message)} [${throwable.javaClass.simpleName}: ${LogRedactor.redact(throwable.message)}]"
             )
         } else {
-            Log.e("SocialRepository", message)
+            AppLogger.e("SocialRepository", message)
         }
     }
 }

@@ -1,7 +1,8 @@
 package com.novahorizon.wanderly.workers
 
+import com.novahorizon.wanderly.observability.AppLogger
+
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.novahorizon.wanderly.BuildConfig
@@ -18,12 +19,12 @@ class StreakWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     override suspend fun doWork(): Result {
         if (BuildConfig.DEBUG) {
-            Log.d("StreakWorker", "--- Streak Check Started ---")
+            AppLogger.d("StreakWorker", "--- Streak Check Started ---")
         }
         val repository = WanderlyGraph.repository(applicationContext)
         if (AuthSessionCoordinator.awaitResolvedSessionOrNull(7_000L) == null) {
             if (BuildConfig.DEBUG) {
-                Log.w("StreakWorker", "Auth not ready after waiting. Scheduling retry.")
+                AppLogger.w("StreakWorker", "Auth not ready after waiting. Scheduling retry.")
             }
             return Result.retry()
         }
@@ -44,9 +45,9 @@ class StreakWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 CrashKey.OPERATION to "streak_check"
             )
             if (BuildConfig.DEBUG) {
-                Log.e("StreakWorker", "Error in StreakWorker [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]")
+                AppLogger.e("StreakWorker", "Error in StreakWorker [${e.javaClass.simpleName}: ${LogRedactor.redact(e.message)}]")
             } else {
-                Log.e("StreakWorker", "Error in StreakWorker")
+                AppLogger.e("StreakWorker", "Error in StreakWorker")
             }
             Result.retry()
         }

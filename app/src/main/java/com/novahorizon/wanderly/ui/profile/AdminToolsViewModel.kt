@@ -8,6 +8,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -16,8 +17,8 @@ import org.json.JSONObject
 class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewModel() {
     data class AiNotificationState(
         val isRunning: Boolean = false,
-        val logs: List<String> = emptyList(),
-        val snackbarMessage: String? = null,
+        val logs: List<UiText> = emptyList(),
+        val snackbarMessage: UiText? = null,
         val isError: Boolean = false
     )
 
@@ -27,29 +28,29 @@ class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewMode
     fun runAiNotificationTest() {
         _aiNotificationState.value = AiNotificationState(
             isRunning = true,
-            logs = listOf(repository.context.getString(R.string.dev_dashboard_ai_preview_started))
+            logs = listOf(UiText.resource(R.string.dev_dashboard_ai_preview_started))
         )
 
         viewModelScope.launch {
             try {
                 val profile = repository.getCurrentProfile()
-                    ?: throw Exception(repository.context.getString(R.string.dev_dashboard_no_live_profile))
+                    ?: throw Exception("No live profile available.")
                 val payload = buildJsonObject {
-                    put("trigger", repository.context.getString(R.string.dev_dashboard_ai_trigger_daily))
+                    put("trigger", DEFAULT_AI_TRIGGER)
                     put("current_streak", profile.streak_count ?: 0)
-                    put("user_name", profile.username ?: repository.context.getString(R.string.dev_dashboard_default_explorer))
+                    put("user_name", profile.username ?: DEFAULT_EXPLORER_NAME)
                     put("honey_balance", profile.honey ?: 0)
                     put("hive_rank", profile.hive_rank ?: 1)
                 }
 
                 addLog(
-                    repository.context.getString(
+                    UiText.resource(
                         R.string.dev_dashboard_using_live_profile,
-                        profile.username ?: repository.context.getString(R.string.dev_dashboard_default_explorer)
+                        profile.username ?: DEFAULT_EXPLORER_NAME
                     )
                 )
                 addLog(
-                    repository.context.getString(
+                    UiText.resource(
                         R.string.dev_dashboard_live_profile_stats,
                         profile.streak_count ?: 0,
                         profile.honey ?: 0,
@@ -76,15 +77,15 @@ class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewMode
                 val jsonStart = rawResponse.indexOf("{")
                 val jsonEnd = rawResponse.lastIndexOf("}")
                 if (jsonStart == -1 || jsonEnd == -1) {
-                    throw Exception(repository.context.getString(R.string.dev_dashboard_ai_invalid_json))
+                    throw Exception("AI did not return valid JSON.")
                 }
 
                 val parsed = JSONObject(rawResponse.substring(jsonStart, jsonEnd + 1))
                 val title = parsed.optString("title").trim()
-                    .ifBlank { repository.context.getString(R.string.dev_dashboard_ai_default_title) }
+                    .ifBlank { DEFAULT_AI_TITLE }
                     .take(32)
                 val message = parsed.optString("message").trim().ifBlank {
-                    repository.context.getString(R.string.dev_dashboard_ai_default_message)
+                    DEFAULT_AI_MESSAGE
                 }.take(110)
 
                 WanderlyNotificationManager.showNotification(
@@ -96,14 +97,14 @@ class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewMode
                     bypassCooldown = true
                 )
 
-                addLog(repository.context.getString(R.string.dev_dashboard_ai_final_title, title))
-                addLog(repository.context.getString(R.string.dev_dashboard_ai_final_message, message))
-                addLog(repository.context.getString(R.string.dev_dashboard_ai_sent_notice))
-                finish(repository.context.getString(R.string.dev_dashboard_ai_sent_success), isError = false)
+                addLog(UiText.resource(R.string.dev_dashboard_ai_final_title, title))
+                addLog(UiText.resource(R.string.dev_dashboard_ai_final_message, message))
+                addLog(UiText.resource(R.string.dev_dashboard_ai_sent_notice))
+                finish(UiText.resource(R.string.dev_dashboard_ai_sent_success), isError = false)
             } catch (e: Exception) {
-                val errorMessage = e.message ?: repository.context.getString(R.string.error_network)
-                addLog(repository.context.getString(R.string.dev_dashboard_ai_failed, errorMessage))
-                finish(repository.context.getString(R.string.dev_dashboard_ai_failed, errorMessage), isError = true)
+                val errorMessage = e.message ?: "Network error"
+                addLog(UiText.resource(R.string.dev_dashboard_ai_failed, errorMessage))
+                finish(UiText.resource(R.string.dev_dashboard_ai_failed, errorMessage), isError = true)
             }
         }
     }
@@ -113,12 +114,12 @@ class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewMode
         _aiNotificationState.value = current.copy(snackbarMessage = null)
     }
 
-    private fun addLog(message: String) {
+    private fun addLog(message: UiText) {
         val current = _aiNotificationState.value ?: AiNotificationState(isRunning = true)
         _aiNotificationState.postValue(current.copy(logs = current.logs + message))
     }
 
-    private fun finish(message: String, isError: Boolean) {
+    private fun finish(message: UiText, isError: Boolean) {
         val current = _aiNotificationState.value ?: AiNotificationState()
         _aiNotificationState.postValue(
             current.copy(
@@ -127,5 +128,12 @@ class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewMode
                 isError = isError
             )
         )
+    }
+
+    private companion object {
+        const val DEFAULT_AI_TRIGGER = "Daily Reminder"
+        const val DEFAULT_EXPLORER_NAME = "Explorer"
+        const val DEFAULT_AI_TITLE = "Hive update"
+        const val DEFAULT_AI_MESSAGE = "Your streak is waiting. One quick mission keeps the hive alive."
     }
 }

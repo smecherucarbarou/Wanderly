@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.data
 
+import com.novahorizon.wanderly.util.GeoMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -59,19 +60,8 @@ class DiscoveryRepository(
                     .thenByDescending { (it.reviewCount ?: 0) >= 50 }
                     .thenByDescending { (it.reviewCount ?: 0) >= 20 }
                     .thenByDescending { it.rating ?: 0.0 }
-                    .thenBy { distanceKm(userLat, userLng, it.lat, it.lng) }
+                    .thenBy { GeoMath.distanceKm(userLat, userLng, it.lat, it.lng) }
                     .thenBy { it.name.lowercase() }
             )
-    }
-
-    private fun distanceKm(userLat: Double, userLng: Double, placeLat: Double, placeLng: Double): Double {
-        val earthRadius = 6371.0
-        val dLat = Math.toRadians(placeLat - userLat)
-        val dLng = Math.toRadians(placeLng - userLng)
-        val a = Math.sin(dLat / 2).let { it * it } +
-            Math.cos(Math.toRadians(userLat)) *
-            Math.cos(Math.toRadians(placeLat)) *
-            Math.sin(dLng / 2).let { it * it }
-        return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     }
 }

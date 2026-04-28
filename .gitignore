@@ -60,10 +60,14 @@ replay_pid*
 /.worktrees/
 /mds/
 /audit/
+/supabase/
 codex.md
 context.md
 fixesandimprov.md
 fixesandimprovs.md
+AUDIT.md
+continue.md
+supabase.txt
 supabase/.temp/
 docs/superpowers/specs/2026-04-22-streak-widget-profile-design.md
 docs/superpowers/plans/2026-04-22-streak-widget-profile-refresh.md
