@@ -9,8 +9,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      GEMINI_PROXY_URL: ${{ secrets.GEMINI_PROXY_URL }}
+      GOOGLE_PLACES_PROXY_URL: ${{ secrets.GOOGLE_PLACES_PROXY_URL }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
 
       - uses: actions/setup-java@v4
         with:
@@ -23,7 +33,9 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.toml','**/*.kts') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.toml','**/*.kts','**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Restore Firebase config if configured
         id: firebase_config
@@ -36,6 +48,18 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check debug/runtime config secrets
+        id: debug_config
+        shell: bash
+        run: |
+          if [[ -n "$SUPABASE_URL" && -n "$SUPABASE_ANON_KEY" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Debug Supabase config is available."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SUPABASE_URL / SUPABASE_ANON_KEY are missing. Instrumentation tests may crash if the app requires Supabase config at startup."
           fi
 
       - name: Unit tests
@@ -52,13 +76,27 @@ jobs:
         env:
           WANDERLY_ANDROID_TEST_EMAIL: ${{ secrets.WANDERLY_ANDROID_TEST_EMAIL }}
           WANDERLY_ANDROID_TEST_PASSWORD: ${{ secrets.WANDERLY_ANDROID_TEST_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GEMINI_PROXY_URL: ${{ secrets.GEMINI_PROXY_URL }}
+          GOOGLE_PLACES_PROXY_URL: ${{ secrets.GOOGLE_PLACES_PROXY_URL }}
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: ./gradlew :app:connectedDebugAndroidTest --stacktrace --console=plain
+
+      - name: Upload instrumentation test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connected-android-test-results
+          path: |
+            app/build/outputs/androidTest-results/**
+            app/build/reports/androidTests/**
 
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace --console=plain
@@ -103,19 +141,21 @@ jobs:
       - name: Check release config secrets
         id: release_config
         shell: bash
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           if [[ -n "$SUPABASE_URL" && -n "$SUPABASE_ANON_KEY" ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Release config secrets are available."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Release config secrets are missing."
           fi
 
       - name: Verify release config fails fast without secrets
         if: steps.release_config.outputs.available != 'true'
         shell: bash
+        env:
+          SUPABASE_URL: ''
+          SUPABASE_ANON_KEY: ''
         run: |
           set +e
           ./gradlew :app:validateReleaseConfig --stacktrace --console=plain
@@ -148,16 +188,11 @@ jobs:
 
       - name: Build unsigned inspection artifacts
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
 
       - name: Build signed release artifacts
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           RELEASE_STORE_FILE: ${{ steps.release_signing.outputs.store_file }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -178,6 +213,13 @@ jobs:
           name: unsigned-inspection-aab-not-for-play
           path: app/build/outputs/bundle/release/*.aab
 
+      - name: Upload signed release APK
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanderly-signed-release-apk
+          path: app/build/outputs/apk/release/*.apk
+
       - name: Upload signed release AAB
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
@@ -190,4 +232,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lint-results
-          path: app/build/reports/lint-results-debug.html
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
