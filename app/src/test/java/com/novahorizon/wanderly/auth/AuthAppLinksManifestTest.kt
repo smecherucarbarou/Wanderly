@@ -8,29 +8,42 @@ import org.junit.Test
 class AuthAppLinksManifestTest {
 
     @Test
-    fun `AuthActivity uses verified HTTPS app link for callbacks`() {
+    fun `AuthActivity handles custom scheme auth callback`() {
         val manifest = projectFile("app/src/main/AndroidManifest.xml").readText()
         val authActivity = manifest.substringAfter("""android:name=".AuthActivity"""")
             .substringBefore("</activity>")
 
-        assertTrue(authActivity.contains("""<intent-filter android:autoVerify="true">"""))
-        assertTrue(authActivity.contains("""android:scheme="https""""))
-        assertTrue(authActivity.contains("""android:host="wanderly.app""""))
-        assertTrue(authActivity.contains("""android:path="/auth/callback""""))
-        assertFalse(authActivity.contains("""android:scheme="wanderly""""))
-        assertFalse(authActivity.contains("""android:host="auth""""))
+        assertTrue(authActivity.contains("""<intent-filter>"""))
+        assertTrue(authActivity.contains("""android:scheme="wanderly""""))
+        assertTrue(authActivity.contains("""android:host="auth""""))
+        assertTrue(authActivity.contains("""android:path="/callback""""))
+        assertFalse(authActivity.contains("""android:scheme="https""""))
+        assertFalse(authActivity.contains("""android:host="wanderly.app""""))
+        assertFalse(authActivity.contains("""android:path="/auth/callback""""))
         assertFalse(authActivity.contains("""android:host="login""""))
     }
 
     @Test
-    fun `auth constants point to the verified HTTPS callback`() {
+    fun `auth constants point to custom scheme callback`() {
         val constants = projectFile("app/src/main/java/com/novahorizon/wanderly/Constants.kt")
             .readText()
 
-        assertTrue(constants.contains("""const val AUTH_CALLBACK_SCHEME = "https""""))
-        assertTrue(constants.contains("""const val AUTH_CALLBACK_HOST = "wanderly.app""""))
-        assertTrue(constants.contains("""const val AUTH_CALLBACK_PATH = "/auth/callback""""))
+        assertTrue(constants.contains("""const val AUTH_CALLBACK_SCHEME = "wanderly""""))
+        assertTrue(constants.contains("""const val AUTH_CALLBACK_HOST = "auth""""))
+        assertTrue(constants.contains("""const val AUTH_CALLBACK_PATH = "/callback""""))
         assertFalse(constants.contains("AUTH_CALLBACK_LEGACY_HOST"))
+    }
+
+    @Test
+    fun `existing invite app links remain declared on SplashActivity`() {
+        val manifest = projectFile("app/src/main/AndroidManifest.xml").readText()
+        val splashActivity = manifest.substringAfter("""android:name=".SplashActivity"""")
+            .substringBefore("</activity>")
+
+        assertTrue(splashActivity.contains("""android:scheme="wanderly""""))
+        assertTrue(splashActivity.contains("""android:host="invite""""))
+        assertTrue(splashActivity.contains("""android:pathPrefix="/invite/""""))
+        assertTrue(splashActivity.contains("""android:host="wanderly.app""""))
     }
 
     private fun projectFile(relativePath: String): File {

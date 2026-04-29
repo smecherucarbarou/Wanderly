@@ -24,6 +24,8 @@ import kotlin.random.Random
 object GeminiClient {
     private const val TAG = "GeminiClient"
     private const val API_URL = "/functions/v1/gemini-proxy"
+    private const val PRIMARY_MODEL = "gemini-3-flash-preview"
+    private const val FALLBACK_MODEL = "gemini-2.5-flash"
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val req = chain.request()
@@ -110,7 +112,7 @@ object GeminiClient {
             ?: throw Exception("Authentication required for Gemini proxy")
 
         val finalUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}$API_URL"
-        logDebug { "Starting Gemini $logLabel request with bodyLength=${body.toString().length}" }
+        logDebug { "Starting Gemini $logLabel request model=$PRIMARY_MODEL fallback=$FALLBACK_MODEL bodyLength=${body.toString().length}" }
 
         val buildRequest = { token: String ->
             Request.Builder()
@@ -157,6 +159,10 @@ object GeminiClient {
                             logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
                             throw GeminiHttpException(resp.code, "Proxy call failed: ${resp.code}")
                         }
+                        parseStructuredError(responseBody)?.let { error ->
+                            AppLogger.w(TAG, "Gemini $logLabel failed: type=${error.type} status=${error.status}")
+                            throw GeminiHttpException(error.status ?: resp.code, error.message)
+                        }
                         logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
                         extractText(responseBody).getOrElse { throw it }
                     }
@@ -166,6 +172,24 @@ object GeminiClient {
                 }
             }
         }
+    }
+
+    private data class StructuredGeminiError(
+        val type: String?,
+        val status: Int?,
+        val message: String
+    )
+
+    private fun parseStructuredError(responseBody: String): StructuredGeminiError? {
+        val json = runCatching { JSONObject(responseBody) }.getOrNull() ?: return null
+        if (!json.has("ok") || json.optBoolean("ok", true)) return null
+        val error = json.optJSONObject("error")
+        return StructuredGeminiError(
+            type = error?.optString("type")?.takeIf { it.isNotBlank() },
+            status = error?.optInt("status")?.takeIf { it > 0 },
+            message = error?.optString("message")?.takeIf { it.isNotBlank() }
+                ?: "Gemini proxy returned a structured error"
+        )
     }
 
     private fun extractText(responseBody: String): Result<String> {

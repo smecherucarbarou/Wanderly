@@ -146,7 +146,7 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build unsigned release artifacts
+      - name: Build unsigned inspection artifacts
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -164,12 +164,19 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
 
-      - name: Upload unsigned release APK
+      - name: Upload unsigned inspection APK not for Play
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: wanderly-unsigned-release-apk
+          name: unsigned-inspection-apk-not-for-play
           path: app/build/outputs/apk/release/*unsigned*.apk
+
+      - name: Upload unsigned inspection AAB not for Play
+        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-inspection-aab-not-for-play
+          path: app/build/outputs/bundle/release/*.aab
 
       - name: Upload signed release AAB
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'

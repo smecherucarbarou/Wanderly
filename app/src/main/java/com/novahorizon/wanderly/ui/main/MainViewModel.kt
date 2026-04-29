@@ -7,6 +7,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.data.SensitiveProfileMutationResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -14,12 +15,16 @@ import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.streak.DailyStreakStatus
 import com.novahorizon.wanderly.streak.DailyStreakStatusEvaluator
 import com.novahorizon.wanderly.util.DateUtils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
-import java.util.Locale
 import java.util.TimeZone
+import javax.inject.Inject
 
-class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
+@HiltViewModel
+class MainViewModel @Inject constructor(
+    private val repository: WanderlyRepository
+) : ViewModel() {
 
     private val _streakMessage = MutableLiveData<String?>()
     val streakMessage: LiveData<String?> = _streakMessage
@@ -57,18 +62,17 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
                     }
 
                     DailyStreakStatus.HARD_LOST -> {
-                        val yesterday = yesterdayUtcDate()
-                        val updated = profile.copy(
-                            streak_count = 0,
-                            last_mission_date = yesterday
-                        )
-                        if (repository.updateProfile(updated)) {
-                            _streakStatus.postValue(StreakStatus.Active)
-                            _streakMessage.postValue(
-                                "Streak lost for good. Freeze only saves one missed day."
-                            )
-                        } else {
-                            _streakMessage.postValue("Failed to reset lost streak. Check connection.")
+                        when (repository.acceptStreakLoss()) {
+                            is SensitiveProfileMutationResult.Success,
+                            is SensitiveProfileMutationResult.Rejected -> {
+                                _streakStatus.postValue(StreakStatus.Active)
+                                _streakMessage.postValue(
+                                    "Streak lost for good. Freeze only saves one missed day."
+                                )
+                            }
+                            else -> {
+                                _streakMessage.postValue("Failed to reset lost streak. Check connection.")
+                            }
                         }
                     }
 
@@ -104,17 +108,23 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
                 return@launch
             }
             if (currentHoney >= cost) {
-                val yesterday = yesterdayUtcDate()
-
-                val updated = profile.copy(
-                    honey = currentHoney - cost,
-                    last_mission_date = yesterday
-                )
-                if (repository.updateProfile(updated)) {
-                    _streakStatus.postValue(StreakStatus.Active)
-                    _streakMessage.postValue("Streak restored! Your reputation is safe.")
-                } else {
-                    _streakMessage.postValue("Failed to restore streak. Hive connection lost.")
+                when (val result = repository.restoreStreak(cost)) {
+                    is SensitiveProfileMutationResult.Success -> {
+                        _streakStatus.postValue(StreakStatus.Active)
+                        _streakMessage.postValue("Streak restored! Your reputation is safe.")
+                    }
+                    is SensitiveProfileMutationResult.Rejected -> {
+                        _streakMessage.postValue(
+                            when (result.reason) {
+                                "insufficient_honey" -> "Not enough Honey."
+                                "not_freeze_eligible" -> "Freeze only saves exactly one missed day."
+                                else -> "Failed to restore streak. Hive connection lost."
+                            }
+                        )
+                    }
+                    else -> {
+                        _streakMessage.postValue("Failed to restore streak. Hive connection lost.")
+                    }
                 }
             } else {
                 _streakMessage.postValue("Not enough Honey.")
@@ -124,31 +134,22 @@ class MainViewModel(private val repository: WanderlyRepository) : ViewModel() {
 
     fun acceptStreakLoss() {
         viewModelScope.launch {
-            val profile = repository.getCurrentProfile() ?: return@launch
+            repository.getCurrentProfile() ?: return@launch
 
-            val yesterday = yesterdayUtcDate()
-
-            val updated = profile.copy(
-                streak_count = 0,
-                last_mission_date = yesterday
-            )
-
-            if (repository.updateProfile(updated)) {
-                _streakStatus.postValue(StreakStatus.Active)
-                _streakMessage.postValue("Streak reset to 0. Time to rebuild!")
-            } else {
-                _streakMessage.postValue("Failed to reset streak. Check connection.")
+            when (repository.acceptStreakLoss()) {
+                is SensitiveProfileMutationResult.Success,
+                is SensitiveProfileMutationResult.Rejected -> {
+                    _streakStatus.postValue(StreakStatus.Active)
+                    _streakMessage.postValue("Streak reset to 0. Time to rebuild!")
+                }
+                else -> {
+                    _streakMessage.postValue("Failed to reset streak. Check connection.")
+                }
             }
         }
     }
 
     fun clearStreakMessage() {
         _streakMessage.value = null
-    }
-
-    private fun yesterdayUtcDate(): String {
-        val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.US)
-        calendar.add(Calendar.DAY_OF_YEAR, -1)
-        return DateUtils.formatUtcDate(calendar.time)
     }
 }

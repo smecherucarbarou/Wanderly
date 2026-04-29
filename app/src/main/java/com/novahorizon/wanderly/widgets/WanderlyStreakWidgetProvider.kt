@@ -166,7 +166,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             StreakWidgetAlarmScheduler.scheduleNext(alarmManager, pendingIntent)
         }
 
-        private fun cancelScheduledUpdates(context: Context) {
+        internal fun cancelScheduledUpdates(context: Context) {
             val appContext = context.applicationContext
             val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             StreakWidgetAlarmScheduler.cancel(alarmManager, refreshPendingIntent(appContext))

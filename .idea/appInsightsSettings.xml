@@ -9,10 +9,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.novahorizon.wanderly" />
+                  <option name="mobileSdkAppId" value="1:428065603648:android:67823aefd2bc4f4b675fa5" />
+                  <option name="projectId" value="wanderly-8b65a" />
+                  <option name="projectNumber" value="428065603648" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

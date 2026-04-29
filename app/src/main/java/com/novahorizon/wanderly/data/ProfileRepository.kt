@@ -1,23 +1,28 @@
 package com.novahorizon.wanderly.data
 
-import com.novahorizon.wanderly.observability.AppLogger
-
 import android.content.Context
 import android.net.Uri
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.Serializable
+import java.io.IOException
 import java.util.UUID
 
 class ProfileRepository(
@@ -26,17 +31,50 @@ class ProfileRepository(
 ) {
     internal data class ClientProfileUpdate(
         val username: String?,
-        val honey: Int?,
-        val hive_rank: Int?,
         val badges: List<String>?,
         val cities_visited: List<String>?,
         val avatar_url: String?,
-        val last_mission_date: String?,
-        val last_lat: Double?,
-        val last_lng: Double?,
         val friend_code: String?,
-        val streak_count: Int?,
         val explorer_class: String?
+    )
+
+    @Serializable
+    internal data class ClientProfileInsert(
+        val id: String,
+        val username: String?,
+        val friend_code: String?
+    )
+
+    @Serializable
+    private data class MissionCompletionRpcResponse(
+        val completed: Boolean,
+        val duplicate: Boolean,
+        val honey: Int,
+        val streak_count: Int,
+        val last_mission_date: String? = null,
+        val reward_honey: Int,
+        val streak_bonus_honey: Int
+    )
+
+    @Serializable
+    private data class LocationUpdateParams(
+        val lat: Double,
+        val lng: Double
+    )
+
+    @Serializable
+    private data class RestoreStreakParams(
+        val cost: Int
+    )
+
+    @Serializable
+    private data class StreakMutationRpcResponse(
+        val updated: Boolean? = null,
+        val restored: Boolean? = null,
+        val reason: String? = null,
+        val honey: Int? = null,
+        val streak_count: Int? = null,
+        val last_mission_date: String? = null
     )
 
     private val _currentProfile = MutableStateFlow<Profile?>(null)
@@ -73,7 +111,13 @@ class ProfileRepository(
                     friend_code = UUID.randomUUID().toString().substring(0, 6).uppercase(),
                     streak_count = 0
                 )
-                SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].upsert(newProfile)
+                SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].upsert(
+                    ClientProfileInsert(
+                        id = newProfile.id,
+                        username = newProfile.username,
+                        friend_code = newProfile.friend_code
+                    )
+                )
                 profile = newProfile
             }
 
@@ -122,6 +166,113 @@ class ProfileRepository(
         }
     }
 
+    suspend fun completeMission(): MissionCompletionResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext MissionCompletionResult.Unauthenticated
+        session.user?.id ?: return@withContext MissionCompletionResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("complete_mission")
+                .decodeSingle<MissionCompletionRpcResponse>()
+
+            if (response.duplicate) {
+                applyProgressSnapshot(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date
+                )
+                MissionCompletionResult.AlreadyCompleted(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date
+                )
+            } else if (response.completed && response.last_mission_date != null) {
+                applyProgressSnapshot(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date
+                )
+                MissionCompletionResult.Completed(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date,
+                    rewardHoney = response.reward_honey,
+                    streakBonusHoney = response.streak_bonus_honey
+                )
+            } else {
+                MissionCompletionResult.ServerFailure
+            }
+        } catch (e: Exception) {
+            mapMissionCompletionFailure(e)
+        }
+    }
+
+    suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
+        withContext(Dispatchers.IO) {
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+                ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+            session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+            try {
+                SupabaseClient.client.postgrest
+                    .rpc("update_profile_location", LocationUpdateParams(lat, lng))
+
+                _currentProfile.value = _currentProfile.value?.copy(last_lat = lat, last_lng = lng)
+                SensitiveProfileMutationResult.Success(_currentProfile.value)
+            } catch (e: Exception) {
+                mapSensitiveProfileMutationFailure(e)
+            }
+        }
+
+    suspend fun acceptStreakLoss(): SensitiveProfileMutationResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+        session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("accept_streak_loss")
+                .decodeSingle<StreakMutationRpcResponse>()
+            if (response.updated == true) {
+                val profile = applyProgressSnapshot(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date
+                )
+                SensitiveProfileMutationResult.Success(profile)
+            } else {
+                SensitiveProfileMutationResult.Rejected("not_hard_lost")
+            }
+        } catch (e: Exception) {
+            mapSensitiveProfileMutationFailure(e)
+        }
+    }
+
+    suspend fun restoreStreak(cost: Int): SensitiveProfileMutationResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+        session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("restore_streak", RestoreStreakParams(cost))
+                .decodeSingle<StreakMutationRpcResponse>()
+            if (response.restored == true) {
+                val profile = applyProgressSnapshot(
+                    honey = response.honey,
+                    streakCount = response.streak_count,
+                    lastMissionDate = response.last_mission_date
+                )
+                SensitiveProfileMutationResult.Success(profile, response.reason)
+            } else {
+                SensitiveProfileMutationResult.Rejected(response.reason ?: "not_restored")
+            }
+        } catch (e: Exception) {
+            mapSensitiveProfileMutationFailure(e)
+        }
+    }
+
     suspend fun resetMissionDateForTesting(): Boolean = withContext(Dispatchers.IO) {
         try {
             val profile = getCurrentProfile() ?: return@withContext false
@@ -153,24 +304,70 @@ class ProfileRepository(
     private suspend fun persistProfile(profile: Profile) {
         val payload = toClientProfileUpdate(profile)
 
-        // Use an explicit PATCH payload so values like streak_count = 0 are not skipped.
+        // Only user-editable profile columns are patched directly; server-owned fields use RPCs.
         SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
             Profile::username setTo payload.username
-            Profile::honey setTo payload.honey
-            Profile::hive_rank setTo payload.hive_rank
             Profile::badges setTo payload.badges
             Profile::cities_visited setTo payload.cities_visited
             Profile::avatar_url setTo payload.avatar_url
-            Profile::last_mission_date setTo payload.last_mission_date
-            Profile::last_lat setTo payload.last_lat
-            Profile::last_lng setTo payload.last_lng
             Profile::friend_code setTo payload.friend_code
-            Profile::streak_count setTo payload.streak_count
             Profile::explorer_class setTo payload.explorer_class
         }) {
             filter { eq("id", profile.id) }
         }
     }
+
+    private suspend fun applyProgressSnapshot(
+        honey: Int?,
+        streakCount: Int?,
+        lastMissionDate: String?
+    ): Profile? {
+        val base = _currentProfile.value ?: getCurrentProfile()
+        val updated = base?.copy(
+            honey = honey ?: base.honey,
+            streak_count = streakCount ?: base.streak_count,
+            last_mission_date = lastMissionDate ?: base.last_mission_date,
+            hive_rank = HiveRank.fromHoney(honey ?: base.honey)
+        )
+        if (updated != null) {
+            _currentProfile.value = updated
+            preferencesStore.cacheProfileStreakState(
+                lastMissionDate = updated.last_mission_date,
+                streakCount = updated.streak_count
+            )
+        }
+        return updated
+    }
+
+    private fun mapMissionCompletionFailure(error: Exception): MissionCompletionResult =
+        when (error) {
+            is SerializationException -> MissionCompletionResult.ParseFailure
+            is HttpRequestTimeoutException,
+            is IOException -> MissionCompletionResult.NetworkFailure
+            is RestException -> when (error.statusCode) {
+                401 -> MissionCompletionResult.Unauthenticated
+                403 -> MissionCompletionResult.Forbidden
+                429 -> MissionCompletionResult.RateLimited
+                in 500..599 -> MissionCompletionResult.ServerFailure
+                else -> MissionCompletionResult.ServerFailure
+            }
+            else -> MissionCompletionResult.ServerFailure
+        }
+
+    private fun mapSensitiveProfileMutationFailure(error: Exception): SensitiveProfileMutationResult =
+        when (error) {
+            is SerializationException -> SensitiveProfileMutationResult.ParseFailure
+            is HttpRequestTimeoutException,
+            is IOException -> SensitiveProfileMutationResult.NetworkFailure
+            is RestException -> when (error.statusCode) {
+                401 -> SensitiveProfileMutationResult.Unauthenticated
+                403 -> SensitiveProfileMutationResult.Forbidden
+                429 -> SensitiveProfileMutationResult.RateLimited
+                in 500..599 -> SensitiveProfileMutationResult.ServerFailure
+                else -> SensitiveProfileMutationResult.ServerFailure
+            }
+            else -> SensitiveProfileMutationResult.ServerFailure
+        }
 
     companion object {
         internal fun normalizeAvatarUrl(avatarUrl: String?): String? =
@@ -179,16 +376,10 @@ class ProfileRepository(
         internal fun toClientProfileUpdate(profile: Profile): ClientProfileUpdate {
             return ClientProfileUpdate(
                 username = profile.username,
-                honey = profile.honey,
-                hive_rank = profile.hive_rank,
                 badges = profile.badges,
                 cities_visited = profile.cities_visited,
                 avatar_url = normalizeAvatarUrl(profile.avatar_url),
-                last_mission_date = profile.last_mission_date,
-                last_lat = profile.last_lat,
-                last_lng = profile.last_lng,
                 friend_code = profile.friend_code,
-                streak_count = profile.streak_count,
                 explorer_class = profile.explorer_class
             )
         }

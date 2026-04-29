@@ -156,6 +156,8 @@
     <string name="mission_verify_location">Verify Location</string>
     <string name="mission_learn_more">Learn more about this place</string>
     <string name="mission_camera_permission_required">Buzzy needs camera access to see your progress!</string>
+    <string name="mission_camera_permission_rationale">Allow camera access so Buzzy can verify your mission photo.</string>
+    <string name="mission_camera_permission_settings">Camera is blocked for Missions. Enable it from app settings.</string>
     <string name="mission_location_permission_required">Buzzy needs your location to find flowers!</string>
     <string name="mission_location_permission_rationale">Allow location so Buzzy can generate a mission near you.</string>
     <string name="mission_location_permission_settings">Location is blocked for Missions. Enable it from app settings.</string>

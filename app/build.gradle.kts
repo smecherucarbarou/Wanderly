@@ -17,6 +17,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
+    id("com.google.dagger.hilt.android")
+    id("com.google.devtools.ksp")
 }
 
 kotlin {
@@ -55,6 +57,12 @@ fun buildConfigString(value: String): String =
 
 val supabaseUrl = resolveBuildSetting("SUPABASE_URL")
 val supabaseAnonKey = resolveBuildSetting("SUPABASE_ANON_KEY")
+val geminiProxyUrl = resolveBuildSetting("GEMINI_PROXY_URL").ifBlank {
+    if (supabaseUrl.isBlank()) "" else "${supabaseUrl.trimEnd('/')}/functions/v1/gemini-proxy"
+}
+val placesProxyUrl = resolveBuildSetting("PLACES_PROXY_URL").ifBlank {
+    if (supabaseUrl.isBlank()) "" else "${supabaseUrl.trimEnd('/')}/functions/v1/google-places-proxy"
+}
 val androidTestEmail = resolveBuildSetting("WANDERLY_ANDROID_TEST_EMAIL")
 val androidTestPassword = resolveBuildSetting("WANDERLY_ANDROID_TEST_PASSWORD")
 
@@ -245,6 +253,8 @@ android {
         debug {
             buildConfigField("String", "SUPABASE_URL", buildConfigString(supabaseUrl))
             buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(supabaseAnonKey))
+            buildConfigField("String", "GEMINI_PROXY_URL", buildConfigString(geminiProxyUrl))
+            buildConfigField("String", "PLACES_PROXY_URL", buildConfigString(placesProxyUrl))
             buildConfigField("Boolean", "CRASH_REPORTING_CONFIGURED", hasGoogleServicesJson.toString())
             manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
         }
@@ -254,6 +264,8 @@ android {
             isShrinkResources = true
             buildConfigField("String", "SUPABASE_URL", buildConfigString(supabaseUrl))
             buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(supabaseAnonKey))
+            buildConfigField("String", "GEMINI_PROXY_URL", buildConfigString(geminiProxyUrl))
+            buildConfigField("String", "PLACES_PROXY_URL", buildConfigString(placesProxyUrl))
             buildConfigField("Boolean", "CRASH_REPORTING_CONFIGURED", hasGoogleServicesJson.toString())
             manifestPlaceholders["crashlyticsCollectionEnabled"] = hasGoogleServicesJson.toString()
             if (hasReleaseSigningConfig) {
@@ -369,6 +381,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.datastore.preferences)
 
+    // Hilt
+    implementation("com.google.dagger:hilt-android:2.59.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.59.1")
+    implementation("androidx.hilt:hilt-navigation-fragment:1.2.0")
+
     // Glide
     implementation(libs.glide)
     
@@ -395,7 +412,11 @@ dependencies {
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    testImplementation("com.google.dagger:hilt-android-testing:2.59.1")
+    kspTest("com.google.dagger:hilt-android-compiler:2.59.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.espresso.intents)
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.59.1")
+    kspAndroidTest("com.google.dagger:hilt-android-compiler:2.59.1")
 }

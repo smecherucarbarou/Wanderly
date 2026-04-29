@@ -21,9 +21,9 @@ object Constants {
     const val KEY_WIDGET_STREAK_SAVED_AT_MILLIS = "widget_streak_saved_at_millis"
     const val KEY_WIDGET_LAST_SYNC_SUCCEEDED = "widget_last_sync_succeeded"
 
-    const val AUTH_CALLBACK_SCHEME = "https"
-    const val AUTH_CALLBACK_HOST = "wanderly.app"
-    const val AUTH_CALLBACK_PATH = "/auth/callback"
+    const val AUTH_CALLBACK_SCHEME = "wanderly"
+    const val AUTH_CALLBACK_HOST = "auth"
+    const val AUTH_CALLBACK_PATH = "/callback"
     const val INVITE_CALLBACK_SCHEME = "wanderly"
     const val INVITE_CALLBACK_HOST = "invite"
     const val INVITE_WEB_SCHEME = "https"

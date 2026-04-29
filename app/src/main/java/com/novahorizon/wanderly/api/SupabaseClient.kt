@@ -48,7 +48,9 @@ object SupabaseClient {
                 alwaysAutoRefresh = true
                 autoLoadFromStorage = true
             }
-            install(Realtime)
+            install(Realtime) {
+                maxAttempts = 3
+            }
         }
     }
 

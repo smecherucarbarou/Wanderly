@@ -5,6 +5,20 @@ const MAX_BODY_BYTES = 16 * 1024
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 
+interface PlacesErrorResponse {
+  ok: false
+  error: {
+    type: string
+    status: number
+    message: string
+  }
+}
+
+type AuthContext = {
+  userId: string
+  token: string
+}
+
 function allowedOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -33,19 +47,29 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
   })
 }
 
+function placesError(
+  req: Request,
+  type: string,
+  status: number,
+  message: string,
+): Response {
+  const body: PlacesErrorResponse = {
+    ok: false,
+    error: { type, status, message },
+  }
+  return jsonResponse(req, body as unknown as Record<string, unknown>, status)
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authorization = req.headers.get("authorization") ?? ""
-  if (!authorization.startsWith("Bearer ")) return null
+function createSupabaseForToken(token: string) {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error("Missing Supabase auth config")
   }
 
-  const token = authorization.replace(/^Bearer\s+/i, "")
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -54,10 +78,41 @@ async function verifyAuth(req: Request): Promise<string | null> {
       headers: { Authorization: `Bearer ${token}` },
     },
   })
+}
+
+async function verifyAuth(req: Request): Promise<AuthContext | null> {
+  const authorization = req.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return null
+
+  const token = authorization.replace(/^Bearer\s+/i, "")
+  const supabase = createSupabaseForToken(token)
 
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) return null
-  return data.user.id
+  return { userId: data.user.id, token }
+}
+
+function maxRequestsPerDay(envName: string, fallback: number): number {
+  const parsed = Number.parseInt(Deno.env.get(envName) ?? "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+async function consumeApiQuota(
+  req: Request,
+  auth: AuthContext,
+  provider: "gemini" | "places",
+  maxRequests: number,
+): Promise<boolean> {
+  if (!auth.userId) return false
+  const supabase = createSupabaseForToken(auth.token)
+  const { data, error } = await supabase.rpc("consume_api_quota", {
+    provider_name: provider,
+    max_requests_per_day: maxRequests,
+  })
+  if (error) {
+    throw new Error("Quota check failed")
+  }
+  return data === true
 }
 
 Deno.serve(async (req: Request) => {
@@ -75,13 +130,13 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(req, { error: "Missing bearer token" }, 401)
   }
 
-  let userId: string | null
+  let auth: AuthContext | null
   try {
-    userId = await verifyAuth(req)
+    auth = await verifyAuth(req)
   } catch {
     return jsonResponse(req, { error: "Missing Supabase auth config" }, 500)
   }
-  if (!userId) {
+  if (!auth) {
     return jsonResponse(req, { error: "Invalid bearer token" }, 401)
   }
 
@@ -118,6 +173,18 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "fieldMask and body.textQuery are required" }, 400)
     }
 
+    const quotaAllowed = await consumeApiQuota(req, auth, "places", maxRequestsPerDay("PLACES_DAILY_QUOTA", 100))
+    if (!quotaAllowed) {
+      return jsonResponse(req, { error: "Quota exhausted" }, 429)
+    }
+
+    const locationBias = body.locationBias
+    const circle = isRecord(locationBias) ? locationBias.circle : null
+    const radius = isRecord(circle)
+      ? circle.radius
+      : null
+    console.log(`Places text search query="${body.textQuery.trim()}" radius=${typeof radius === "number" ? radius : "none"}`)
+
     const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
@@ -130,7 +197,20 @@ Deno.serve(async (req: Request) => {
 
     const responseText = await response.text()
     if (!response.ok) {
-      return jsonResponse(req, { error: "Places upstream request failed" }, response.status)
+      return placesError(
+        req,
+        "places_upstream_request_failed",
+        response.status,
+        "Places upstream request failed",
+      )
+    }
+
+    try {
+      const parsed = JSON.parse(responseText)
+      const count = Array.isArray(parsed.places) ? parsed.places.length : 0
+      console.log(`Places text search result count=${count}`)
+    } catch {
+      console.log("Places text search result count=unknown")
     }
 
     return new Response(responseText, {

@@ -15,33 +15,32 @@ import androidx.work.WorkManager
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentDevDashboardBinding
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.CrashReporter
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.workers.SocialWorker
 import com.novahorizon.wanderly.workers.StreakWorker
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class DevDashboardFragment : Fragment() {
 
     private var _binding: FragmentDevDashboardBinding? = null
     private val binding get() = _binding!!
-    private lateinit var repository: WanderlyRepository
+    @Inject
+    lateinit var repository: WanderlyRepository
     private val prettyJson = Json { prettyPrint = true }
-    private val adminToolsViewModel: AdminToolsViewModel by viewModels {
-        WanderlyViewModelFactory(repository)
-    }
+    private val adminToolsViewModel: AdminToolsViewModel by viewModels()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentDevDashboardBinding.inflate(inflater, container, false)
-        repository = WanderlyGraph.repository(requireContext())
         binding.root.visibility = View.INVISIBLE
         return binding.root
     }

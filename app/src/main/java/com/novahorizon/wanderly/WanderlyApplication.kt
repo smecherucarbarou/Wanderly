@@ -3,7 +3,9 @@ package com.novahorizon.wanderly
 import com.novahorizon.wanderly.observability.AppLogger
 
 import android.app.Application
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.novahorizon.wanderly.data.PreferencesStore
@@ -17,7 +19,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import java.util.concurrent.TimeUnit
+import dagger.hilt.android.HiltAndroidApp
 
+@HiltAndroidApp
 class WanderlyApplication : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -29,12 +33,21 @@ class WanderlyApplication : Application() {
         // Initialize Supabase
         com.novahorizon.wanderly.api.SupabaseClient.init(this)
 
-        // Required for OSMDroid to load map tiles without being blocked by servers
-        Configuration.getInstance().userAgentValue = packageName
+        initOsmdroidAsync()
 
         appScope.launch {
             PreferencesStore(this@WanderlyApplication).pruneStaleCooldowns()
             setupBackgroundWorkers()
+        }
+    }
+
+    private fun initOsmdroidAsync() {
+        appScope.launch(Dispatchers.IO) {
+            Configuration.getInstance().load(
+                applicationContext,
+                applicationContext.getSharedPreferences("osmdroid", MODE_PRIVATE)
+            )
+            Configuration.getInstance().userAgentValue = packageName
         }
     }
 
@@ -43,10 +56,17 @@ class WanderlyApplication : Application() {
             AppLogger.d("WanderlyApp", "Setting up background workers...")
         }
         val workManager = WorkManager.getInstance(this)
+        val backgroundWorkConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
 
         val streakWorkRequest = PeriodicWorkRequestBuilder<StreakWorker>(
             15, TimeUnit.MINUTES
-        ).addTag("StreakCheckWork").build()
+        )
+            .setConstraints(backgroundWorkConstraints)
+            .addTag("StreakCheckWork")
+            .build()
 
         workManager.enqueueUniquePeriodicWork(
             "StreakCheckWork",
@@ -57,8 +77,9 @@ class WanderlyApplication : Application() {
         val socialWorkRequest = PeriodicWorkRequestBuilder<SocialWorker>(
             15, TimeUnit.MINUTES
         ).setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-         .addTag("SocialCheckWork")
-         .build()
+            .setConstraints(backgroundWorkConstraints)
+            .addTag("SocialCheckWork")
+            .build()
 
         workManager.enqueueUniquePeriodicWork(
             "SocialCheckWork",

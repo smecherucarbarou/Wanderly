@@ -25,7 +25,7 @@ class DeepLinkMalformedTest {
 
     @Test
     fun `AuthActivity accepts auth callback with extra unexpected query params`() {
-        val callback = Uri.parse("https://wanderly.app/auth/callback?code=auth-code&unexpected=value")
+        val callback = Uri.parse("wanderly://auth/callback?code=auth-code&unexpected=value")
 
         assertTrue(AuthCallbackMatcher.matchesCallbackUri(callback))
     }

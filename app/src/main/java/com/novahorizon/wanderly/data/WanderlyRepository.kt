@@ -22,6 +22,16 @@ open class WanderlyRepository(context: Context) {
 
     open suspend fun updateProfile(profile: Profile): Boolean = profileRepository.updateProfile(profile)
 
+    open suspend fun completeMission(): MissionCompletionResult = profileRepository.completeMission()
+
+    open suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
+        profileRepository.updateProfileLocation(lat, lng)
+
+    open suspend fun acceptStreakLoss(): SensitiveProfileMutationResult = profileRepository.acceptStreakLoss()
+
+    open suspend fun restoreStreak(cost: Int): SensitiveProfileMutationResult =
+        profileRepository.restoreStreak(cost)
+
     open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
     open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)

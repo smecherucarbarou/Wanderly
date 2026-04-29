@@ -13,6 +13,7 @@ import com.novahorizon.wanderly.auth.AuthCallbackMatcher
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.ActivityAuthBinding
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -20,11 +21,16 @@ import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class AuthActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAuthBinding
+    @Inject
+    lateinit var repository: WanderlyRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,7 +76,7 @@ class AuthActivity : AppCompatActivity() {
     }
 
     private suspend fun resumeStandardAuthFlow() {
-        val rememberMe = WanderlyGraph.repository(this@AuthActivity).isRememberMeEnabled()
+        val rememberMe = repository.isRememberMeEnabled()
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
 
         if (AuthRouting.shouldOpenMain(session != null, rememberMe)) {

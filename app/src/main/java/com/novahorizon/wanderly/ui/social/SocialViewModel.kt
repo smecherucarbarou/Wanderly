@@ -8,11 +8,16 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class SocialViewModel(private val repository: WanderlyRepository) : ViewModel() {
+@HiltViewModel
+class SocialViewModel @Inject constructor(
+    private val repository: WanderlyRepository
+) : ViewModel() {
 
     private val _leaderboard = MutableLiveData<List<Profile>>()
     val leaderboard: LiveData<List<Profile>> = _leaderboard

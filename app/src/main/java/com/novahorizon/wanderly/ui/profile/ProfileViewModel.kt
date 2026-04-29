@@ -8,20 +8,32 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.AuthRepository
+import com.novahorizon.wanderly.data.LogoutCoordinator
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ProfileViewModel(
+@HiltViewModel
+class ProfileViewModel @Inject constructor(
     private val repository: WanderlyRepository,
     private val profileStateProvider: ProfileStateProvider,
-    private val authRepository: AuthRepository = WanderlyGraph.authRepository()
+    private val authRepository: AuthRepository = WanderlyGraph.authRepository(),
+    private val logoutCoordinator: LogoutCoordinator? = null
 ) : ViewModel() {
     private var hasCheckedBadgesThisSession = false
     private var profileCollectorJob: Job? = null
+    private val defaultLogoutCoordinator by lazy {
+        LogoutCoordinator.create(
+            repository.context,
+            authRepository,
+            repository
+        )
+    }
 
     private val _profile = MutableLiveData<Profile?>()
     val profile: LiveData<Profile?> = _profile
@@ -137,10 +149,18 @@ class ProfileViewModel(
     fun logout() {
         viewModelScope.launch {
             try {
-                authRepository.logout()
-                repository.clearRememberMe()
-                repository.clearLocalState()
-                _profileEvent.postValue(ProfileEvent.LoggedOut)
+                val logoutCoordinator = logoutCoordinator ?: defaultLogoutCoordinator
+                val result = logoutCoordinator.logoutCompletely()
+                if (result.signedOut) {
+                    _profileEvent.postValue(ProfileEvent.LoggedOut)
+                } else {
+                    _profileEvent.postValue(
+                        ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_logout_failed),
+                            isError = true
+                        )
+                    )
+                }
             } catch (_: Exception) {
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(

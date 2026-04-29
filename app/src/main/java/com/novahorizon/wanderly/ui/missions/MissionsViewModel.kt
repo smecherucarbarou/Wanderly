@@ -9,37 +9,41 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.api.PlacesGeocoder
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.MissionDetailsRepository
+import com.novahorizon.wanderly.data.MissionCompletionResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.data.derivedHiveRank
+import com.novahorizon.wanderly.data.mission.MissionCandidateProvider
+import com.novahorizon.wanderly.data.mission.MissionPlaceSelectionResult
+import com.novahorizon.wanderly.data.mission.MissionPlaceSelecting
+import com.novahorizon.wanderly.data.mission.MissionPlaceSelector
+import com.novahorizon.wanderly.data.mission.ValidatedMissionPlace
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.ui.common.UiText
 import com.novahorizon.wanderly.util.AiResponseParser
-import com.novahorizon.wanderly.util.DateUtils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
-import java.util.Calendar
 import java.util.Locale
-import java.util.TimeZone
+import javax.inject.Inject
 
-class MissionsViewModel(
+@HiltViewModel
+class MissionsViewModel @Inject constructor(
     private val repository: WanderlyRepository,
     private val savedStateHandle: SavedStateHandle,
     private val profileStateProvider: ProfileStateProvider,
-    private val missionDetailsRepository: MissionDetailsRepository
+    private val missionDetailsRepository: MissionDetailsRepository,
+    private val missionCandidateProvider: MissionCandidateProvider,
+    private val missionPlaceSelector: MissionPlaceSelecting
 ) : ViewModel() {
 
     private val _profile = MutableLiveData<Profile?>()
@@ -51,7 +55,6 @@ class MissionsViewModel(
     private val _streakMessage = MutableLiveData<String?>()
     val streakMessage: LiveData<String?> = _streakMessage
 
-    private val json = Json { ignoreUnknownKeys = true }
     private var missionGenerationInFlight = false
     private var profileCollectorJob: Job? = null
     private var currentMission: String?
@@ -109,90 +112,107 @@ class MissionsViewModel(
                 val currentProfile = profileStateProvider.refreshProfile()
                 val rank = currentProfile?.derivedHiveRank() ?: 1
                 val radiusMeters = HiveRank.missionRadiusMeters(rank)
-
-                val nearbyPlaces = withTimeoutOrNull(1_500L) {
-                    repository.fetchNearbyPlaces(lat, lng, radiusMeters)
-                }.orEmpty()
                 val history = repository.getMissionHistory()
-                val promptCity = city ?: "this specific local area"
-                val recentExclusions = history.ifBlank { "none" }
-
-                val responseText = if (nearbyPlaces.isNotEmpty()) {
-                    val candidateList = nearbyPlaces.take(5).joinToString("\n") { "- $it" }
-                    val prompt = """
-                        User location: $promptCity
-                        Choose ONE exact place name from this list and turn it into a simple photo mission:
-                        $candidateList
-
-                        Rules:
-                        - Keep the place inside $promptCity.
-                        - Use the exact place name from the list.
-                        - Make it easy to verify with one photo.
-                        - Exclude hotels, clinics, pharmacies, schools, banks, offices, and apartment blocks.
-                        - Avoid anything already used: $recentExclusions
-
-                        Return ONLY raw JSON:
-                        {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
-                    """.trimIndent()
-                    WanderlyGraph.missionGenerationService().generateText(prompt)
-                } else {
-                    val prompt = """
-                        User location: $promptCity
-                        Find ONE real public place strictly inside $promptCity and turn it into a simple photo mission.
-
-                        Rules:
-                        - Use the exact current Google Maps place name.
-                        - It must be searchable right now.
-                        - Exclude hotels, clinics, pharmacies, schools, government buildings, banks, offices, and apartment blocks.
-                        - Avoid anything already used: $recentExclusions
-
-                        Return ONLY raw JSON:
-                        {"missionText":"Go to [Place] and take a photo of the sign or entrance.","targetName":"Exact Place Name"}
-                    """.trimIndent()
-                    WanderlyGraph.missionGenerationService().generateWithSearch(prompt)
-                }
-
-                val finalJson = AiResponseParser.extractFirstJsonObject(responseText)
-                    ?: throw IllegalStateException("Buzzy couldn't understand the mission response. Please try again.")
-                val missionResponse = runCatching {
-                    json.decodeFromString<GeminiMissionResponse>(finalJson)
-                }.onFailure {
-                    logRawResponse("mission", responseText)
-                }.getOrElse {
-                    throw IllegalStateException("Buzzy couldn't understand the mission response. Please try again.")
-                }
-                val resolvedTarget = WanderlyGraph.missionGenerationService().resolveCoordinates(
-                    placeName = missionResponse.targetName,
-                    targetCity = city.orEmpty(),
-                    userLat = lat,
-                    userLng = lng,
-                    radiusKm = radiusMeters / 1000.0
-                ) ?: throw Exception("Could not verify the mission destination. Please try again.")
-
-                val verifiedTargetName = resolvedTarget.name
-                val verifiedMissionText = missionResponse.missionText.replace(
-                    missionResponse.targetName,
-                    verifiedTargetName
+                val promptCity = city?.trim().orEmpty()
+                val missionType = DEFAULT_MISSION_TYPE
+                val desiredRadiusKm = maxOf(
+                    radiusMeters / 1000.0,
+                    MissionPlaceSelector.LANDMARK_RADIUS.preferredMeters / 1000.0
                 )
-                val newHistory = (verifiedTargetName + "|" + history).take(500)
+
+                val selection = runCatching {
+                    val candidates = missionCandidateProvider.generateCandidates(
+                        city = promptCity,
+                        latitude = lat,
+                        longitude = lng,
+                        radiusKm = desiredRadiusKm,
+                        missionType = missionType
+                    )
+                    missionPlaceSelector.selectBestMissionPlace(
+                        userLat = lat,
+                        userLng = lng,
+                        city = promptCity,
+                        countryRegion = null,
+                        missionType = missionType,
+                        candidates = candidates
+                    )
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    logFallback("Mission place selection failed; using nearby exploration fallback.", error)
+                }.getOrElse {
+                    MissionPlaceSelectionResult.Fallback("provider unavailable")
+                }
+
+                val preparedMission = when (selection) {
+                    is MissionPlaceSelectionResult.Success -> buildValidatedPlaceMission(selection.place, history)
+                    is MissionPlaceSelectionResult.Fallback -> {
+                        logFallback("Could not verify a specific mission destination; using nearby exploration fallback. reason=${selection.reason}")
+                        buildFallbackMission(
+                            history = history,
+                            city = city,
+                            lat = lat,
+                            lng = lng
+                        )
+                    }
+                }
 
                 repository.saveMissionData(
-                    text = verifiedMissionText,
-                    target = verifiedTargetName,
-                    history = newHistory,
+                    text = preparedMission.text,
+                    target = preparedMission.target,
+                    history = preparedMission.history,
                     city = city,
-                    targetLat = resolvedTarget.lat,
-                    targetLng = resolvedTarget.lng
+                    targetLat = preparedMission.targetLat,
+                    targetLng = preparedMission.targetLng
                 )
-                currentMission = verifiedMissionText
+                currentMission = preparedMission.text
                 verificationStep = VERIFICATION_STEP_RECEIVED
-                _missionState.postValue(MissionState.MissionReceived(verifiedMissionText))
+                _missionState.postValue(MissionState.MissionReceived(preparedMission.text))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 postGenericMissionError("Mission generation failed", e)
             } finally {
                 missionGenerationInFlight = false
             }
         }
+    }
+
+    private fun buildValidatedPlaceMission(
+        place: ValidatedMissionPlace,
+        history: String
+    ): PreparedMission {
+        val verifiedTargetName = place.placesName
+        val verifiedMissionText =
+            "Go to $verifiedTargetName and take a photo of a public sign, entrance, landmark feature, or safely visible detail."
+        return PreparedMission(
+            text = verifiedMissionText,
+            target = verifiedTargetName,
+            history = (verifiedTargetName + "|" + history).take(500),
+            targetLat = place.latitude,
+            targetLng = place.longitude
+        )
+    }
+
+    private fun buildFallbackMission(
+        history: String,
+        city: String?,
+        lat: Double,
+        lng: Double
+    ): PreparedMission {
+        val area = city?.trim()?.takeIf { it.isNotEmpty() }
+        val explorationText = if (area == null) {
+            "Explore your nearby area and take a photo of an interesting public landmark, mural, sign, park feature, or street detail."
+        } else {
+            "Explore a nearby public place in $area and take a photo of an interesting public landmark, mural, sign, park feature, or street detail."
+        }
+        val missionText = "Could not verify a specific destination, so Wanderly created a nearby exploration mission. $explorationText"
+        return PreparedMission(
+            text = missionText,
+            target = FALLBACK_MISSION_TARGET,
+            history = (FALLBACK_MISSION_TARGET + "|" + history).take(500),
+            targetLat = lat,
+            targetLng = lng
+        )
     }
 
     fun verifyPhoto(bitmap: Bitmap) {
@@ -202,19 +222,35 @@ class MissionsViewModel(
             try {
                 val targetName = repository.getMissionTarget() ?: "this place"
                 val targetCity = repository.getMissionCity() ?: ""
-                val prompt = """
-                    Objective Validation System:
-                    Target: "$targetName" in "$targetCity"
+                val prompt = if (targetName == FALLBACK_MISSION_TARGET) {
+                    """
+                        Objective Validation System:
+                        Target: a nearby public exploration detail in "$targetCity"
 
-                    Does the image show "$targetName" in "$targetCity"?
-                    Respond: "YES: [Confirmation]" or "NO: [Reason]".
-                """.trimIndent()
+                        Does the image show an interesting public landmark, mural, sign, park feature, street detail, or other safely accessible public place detail?
+                        Return ONLY raw JSON:
+                        {"verified":true,"reason":"The image clearly matches the exploration mission."}
+
+                        Use false when the image is private, unsafe, unrelated, missing, ambiguous, or clearly wrong.
+                    """.trimIndent()
+                } else {
+                    """
+                        Objective Validation System:
+                        Target: "$targetName" in "$targetCity"
+
+                        Does the image show "$targetName" in "$targetCity"?
+                        Return ONLY raw JSON:
+                        {"verified":true,"reason":"The image clearly matches the mission."}
+
+                        Use false when the target is missing, ambiguous, or clearly wrong.
+                    """.trimIndent()
+                }
 
                 val resultText = WanderlyGraph.missionGenerationService()
                     .analyzeImage(bitmap, prompt)
                     .trim()
-                    .uppercase()
-                if (resultText.contains("YES")) {
+                val verification = AiResponseParser.parsePhotoVerification(resultText)
+                if (verification.verified) {
                     verificationStep = VERIFICATION_STEP_VERIFIED
                     _missionState.postValue(
                         MissionState.VerificationResult(
@@ -224,10 +260,7 @@ class MissionsViewModel(
                     )
                 } else {
                     verificationStep = VERIFICATION_STEP_RECEIVED
-                    val message = resultText.substringAfter(":")
-                        .trim()
-                        .lowercase()
-                        .replaceFirstChar { it.uppercase() }
+                    val message = verification.reason.orEmpty()
                     _missionState.postValue(
                         MissionState.VerificationResult(
                             false,
@@ -266,77 +299,79 @@ class MissionsViewModel(
         isNewLocation: Boolean = false,
         isWild: Boolean = false
     ) {
-        val current = _profile.value ?: return
+        if (verificationStep != VERIFICATION_STEP_VERIFIED) {
+            _missionState.postValue(
+                MissionState.Error(
+                    UiText.DynamicString("Take and verify a mission photo before claiming rewards.")
+                )
+            )
+            return
+        }
         _missionState.postValue(MissionState.Completing)
 
         viewModelScope.launch {
             try {
-                val now = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                val today = DateUtils.formatUtcDate(now.time)
+                when (val result = repository.completeMission()) {
+                    is MissionCompletionResult.Completed -> {
+                        repository.updateLastVisitDate(result.lastMissionDate)
+                        repository.clearMissionData()
+                        currentMission = null
+                        verificationStep = VERIFICATION_STEP_IDLE
 
-                val yesterdayCal = now.clone() as Calendar
-                yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
-                val yesterday = DateUtils.formatUtcDate(yesterdayCal.time)
+                        val refreshedProfile = profileStateProvider.refreshProfile()
+                        _profile.postValue(refreshedProfile)
+                        _missionState.postValue(MissionState.Idle)
 
-                val lastMissionDate = current.last_mission_date ?: ""
-                var newStreak = current.streak_count ?: 0
-                var streakBonusHoney = 0
-
-                if (lastMissionDate != today) {
-                    if (lastMissionDate == yesterday) {
-                        newStreak += 1
-                        streakBonusHoney = 10 + (newStreak / 5) * 5
-                    } else {
-                        newStreak = 1
-                    }
-                }
-
-                val newHoney = (current.honey ?: 0) + Constants.MISSION_HONEY_REWARD + streakBonusHoney
-                val updatedProfile = current.copy(
-                    honey = newHoney,
-                    last_mission_date = today,
-                    streak_count = newStreak
-                )
-
-                val success = repository.updateProfile(updatedProfile)
-                if (success) {
-                    val recordedToday = DateUtils.formatUtcDate(
-                        Calendar.getInstance(TimeZone.getTimeZone("UTC")).time
-                    )
-                    repository.updateLastVisitDate(recordedToday)
-                    repository.clearMissionData()
-                    currentMission = null
-                    verificationStep = VERIFICATION_STEP_IDLE
-
-                    _profile.postValue(updatedProfile)
-                    _missionState.postValue(MissionState.Idle)
-
-                    val message = StringBuilder()
-                    if (streakBonusHoney > 0) {
-                        message.append("Streak: $newStreak days! +$streakBonusHoney Honey bonus!\n")
-                        if (newStreak % 5 == 0) {
-                            WanderlyNotificationManager.sendMilestoneCelebration(
-                                repository.context,
-                                newStreak
+                        val message = StringBuilder()
+                        if (result.streakBonusHoney > 0) {
+                            message.append(
+                                "Streak: ${result.streakCount} days! +${result.streakBonusHoney} Honey bonus!\n"
                             )
+                            if (result.streakCount % 5 == 0) {
+                                WanderlyNotificationManager.sendMilestoneCelebration(
+                                    repository.context,
+                                    result.streakCount
+                                )
+                            }
+                        } else if (result.streakCount == 1) {
+                            message.append("Streak started! First buzz today!\n")
                         }
-                    } else if (lastMissionDate != today) {
-                        message.append("Streak started! First buzz today!\n")
-                    }
 
-                    _streakMessage.postValue(message.toString().trim())
-                } else {
-                    _missionState.postValue(
-                        MissionState.Error(
-                            UiText.DynamicString("Failed to save progress to the hive. Check your connection!")
-                        )
-                    )
+                        _streakMessage.postValue(message.toString().trim())
+                    }
+                    is MissionCompletionResult.AlreadyCompleted -> {
+                        repository.clearMissionData()
+                        currentMission = null
+                        verificationStep = VERIFICATION_STEP_IDLE
+                        _missionState.postValue(MissionState.Idle)
+                        _streakMessage.postValue("Mission already completed today.")
+                    }
+                    else -> {
+                        _missionState.postValue(MissionState.Error(missionCompletionError(result)))
+                    }
                 }
             } catch (e: Exception) {
                 postGenericMissionError("Mission completion failed", e)
             }
         }
     }
+
+    private fun missionCompletionError(result: MissionCompletionResult): UiText =
+        when (result) {
+            MissionCompletionResult.Unauthenticated ->
+                UiText.DynamicString("Please sign in again to complete missions.")
+            MissionCompletionResult.Forbidden ->
+                UiText.DynamicString("Mission completion is not allowed for this account.")
+            MissionCompletionResult.RateLimited ->
+                UiText.DynamicString("Too many mission completion attempts. Try again later.")
+            MissionCompletionResult.NetworkFailure,
+            MissionCompletionResult.ParseFailure,
+            MissionCompletionResult.ServerFailure ->
+                UiText.resource(R.string.error_generic_retry)
+            is MissionCompletionResult.AlreadyCompleted,
+            is MissionCompletionResult.Completed ->
+                UiText.resource(R.string.error_generic_retry)
+        }
 
     private fun startProfileCollector() {
         profileCollectorJob?.cancel()
@@ -359,12 +394,6 @@ class MissionsViewModel(
         }
     }
 
-    private fun logRawResponse(label: String, response: String) {
-        if (BuildConfig.DEBUG) {
-            AppLogger.d("MissionsViewModel", "Raw $label response: $response")
-        }
-    }
-
     private fun postGenericMissionError(message: String, e: Exception) {
         CrashReporter.recordNonFatal(
             CrashEvent.MISSION_FLOW_FAILED,
@@ -380,11 +409,36 @@ class MissionsViewModel(
         )
     }
 
-    private companion object {
-        const val KEY_CURRENT_MISSION = "current_mission"
-        const val KEY_VERIFICATION_STEP = "verification_step"
-        const val VERIFICATION_STEP_IDLE = "idle"
-        const val VERIFICATION_STEP_RECEIVED = "received"
-        const val VERIFICATION_STEP_VERIFIED = "verified"
+    private fun logFallback(message: String, throwable: Throwable) {
+        if (BuildConfig.DEBUG) {
+            AppLogger.w(
+                "MissionsViewModel",
+                "$message [${throwable.javaClass.simpleName}]"
+            )
+        }
+    }
+
+    private fun logFallback(message: String) {
+        if (BuildConfig.DEBUG) {
+            AppLogger.w("MissionsViewModel", message)
+        }
+    }
+
+    private data class PreparedMission(
+        val text: String,
+        val target: String,
+        val history: String,
+        val targetLat: Double,
+        val targetLng: Double
+    )
+
+    companion object {
+        internal const val FALLBACK_MISSION_TARGET = "nearby public place"
+        private const val DEFAULT_MISSION_TYPE = "landmark"
+        private const val KEY_CURRENT_MISSION = "current_mission"
+        private const val KEY_VERIFICATION_STEP = "verification_step"
+        private const val VERIFICATION_STEP_IDLE = "idle"
+        private const val VERIFICATION_STEP_RECEIVED = "received"
+        private const val VERIFICATION_STEP_VERIFIED = "verified"
     }
 }

@@ -14,9 +14,14 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.ui.common.UiText
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class GemsViewModel(private val repository: WanderlyRepository) : ViewModel() {
+@HiltViewModel
+class GemsViewModel @Inject constructor(
+    private val repository: WanderlyRepository
+) : ViewModel() {
 
     private val seenGemsHistory = mutableSetOf<String>()
 

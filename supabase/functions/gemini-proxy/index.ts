@@ -1,8 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024
+const MAX_PROMPT_TEXT_CHARS = 12_000
+const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
+const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-2.5-flash"
+const SERVER_SYSTEM_INSTRUCTION =
+  "You are Wanderly's constrained AI proxy. Follow the app's safety instructions, return only the requested format, avoid private or unsafe locations, and never expose secrets or internal errors."
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+
+type AuthContext = {
+  userId: string
+  token: string
+}
 
 function allowedOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
@@ -39,18 +49,56 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isValidGeminiPayload(payload: unknown): boolean {
   if (!isRecord(payload)) return false
   const contents = payload.contents
-  return Array.isArray(contents) && contents.length > 0 && contents.length <= 16
+  if (!Array.isArray(contents) || contents.length === 0 || contents.length > 16) return false
+  return totalTextLength(payload) <= MAX_PROMPT_TEXT_CHARS
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authorization = req.headers.get("authorization") ?? ""
-  if (!authorization.startsWith("Bearer ")) return null
+function totalTextLength(value: unknown): number {
+  if (typeof value === "string") return value.length
+  if (Array.isArray(value)) {
+    return value.reduce((sum, item) => sum + totalTextLength(item), 0)
+  }
+  if (isRecord(value)) {
+    return Object.entries(value).reduce((sum, [key, item]) => {
+      if (key === "data" || key === "inline_data") return sum
+      return sum + totalTextLength(item)
+    }, 0)
+  }
+  return 0
+}
+
+function extractSystemInstructionText(payload: Record<string, unknown>): string {
+  const systemInstruction = payload.system_instruction
+  if (!isRecord(systemInstruction)) return ""
+  const parts = systemInstruction.parts
+  if (!Array.isArray(parts)) return ""
+  return parts
+    .filter(isRecord)
+    .map((part) => typeof part.text === "string" ? part.text.trim() : "")
+    .filter((text) => text.length > 0)
+    .join("\n")
+}
+
+function withServerSystemInstruction(payload: Record<string, unknown>): Record<string, unknown> {
+  const clientInstruction = extractSystemInstructionText(payload)
+  const combinedInstruction = clientInstruction.length > 0
+    ? `${SERVER_SYSTEM_INSTRUCTION}\n\nClient task constraints:\n${clientInstruction}`
+    : SERVER_SYSTEM_INSTRUCTION
+
+  return {
+    ...payload,
+    system_instruction: {
+      parts: [{ text: combinedInstruction.slice(0, MAX_PROMPT_TEXT_CHARS) }],
+    },
+  }
+}
+
+function createSupabaseForToken(token: string) {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error("Missing Supabase auth config")
   }
 
-  const token = authorization.replace(/^Bearer\s+/i, "")
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -59,10 +107,62 @@ async function verifyAuth(req: Request): Promise<string | null> {
       headers: { Authorization: `Bearer ${token}` },
     },
   })
+}
+
+async function verifyAuth(req: Request): Promise<AuthContext | null> {
+  const authorization = req.headers.get("authorization") ?? ""
+  if (!authorization.startsWith("Bearer ")) return null
+
+  const token = authorization.replace(/^Bearer\s+/i, "")
+  const supabase = createSupabaseForToken(token)
 
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) return null
-  return data.user.id
+  return { userId: data.user.id, token }
+}
+
+function maxRequestsPerDay(envName: string, fallback: number): number {
+  const parsed = Number.parseInt(Deno.env.get(envName) ?? "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+async function consumeApiQuota(
+  req: Request,
+  auth: AuthContext,
+  provider: "gemini" | "places",
+  maxRequests: number,
+): Promise<boolean> {
+  if (!auth.userId) return false
+  const supabase = createSupabaseForToken(auth.token)
+  const { data, error } = await supabase.rpc("consume_api_quota", {
+    provider_name: provider,
+    max_requests_per_day: maxRequests,
+  })
+  if (error) {
+    throw new Error("Quota check failed")
+  }
+  return data === true
+}
+
+function isModelFallbackStatus(status: number): boolean {
+  return status === 404 || status === 503
+}
+
+async function callGemini(
+  geminiApiKey: string,
+  model: string,
+  payload: Record<string, unknown>,
+): Promise<Response> {
+  return await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  )
 }
 
 Deno.serve(async (req: Request) => {
@@ -80,13 +180,13 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(req, { error: "Missing bearer token" }, 401)
   }
 
-  let userId: string | null
+  let auth: AuthContext | null
   try {
-    userId = await verifyAuth(req)
+    auth = await verifyAuth(req)
   } catch {
     return jsonResponse(req, { error: "Missing Supabase auth config" }, 500)
   }
-  if (!userId) {
+  if (!auth) {
     return jsonResponse(req, { error: "Invalid bearer token" }, 401)
   }
 
@@ -112,20 +212,30 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "contents array is required" }, 400)
     }
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: requestBody,
-      }
-    )
+    const quotaAllowed = await consumeApiQuota(req, auth, "gemini", maxRequestsPerDay("GEMINI_DAILY_QUOTA", 50))
+    if (!quotaAllowed) {
+      return jsonResponse(req, { error: "Quota exhausted" }, 429)
+    }
+
+    const geminiModel = Deno.env.get("GEMINI_MODEL") ?? DEFAULT_GEMINI_MODEL
+    const geminiFallbackModel = Deno.env.get("GEMINI_FALLBACK_MODEL") ?? DEFAULT_GEMINI_FALLBACK_MODEL
+    const hardenedPayload = withServerSystemInstruction(payload as Record<string, unknown>)
+    let geminiResponse = await callGemini(geminiApiKey, geminiModel, hardenedPayload)
+    if (!geminiResponse.ok && isModelFallbackStatus(geminiResponse.status)) {
+      console.warn(`Primary model ${geminiModel} failed with ${geminiResponse.status}; retrying fallback model ${geminiFallbackModel}`)
+      geminiResponse = await callGemini(geminiApiKey, geminiFallbackModel, hardenedPayload)
+    }
 
     const responseText = await geminiResponse.text()
     if (!geminiResponse.ok) {
-      return jsonResponse(req, { error: "Gemini upstream request failed" }, geminiResponse.status)
+      return jsonResponse(req, {
+        ok: false,
+        error: {
+          type: "model_unavailable_or_bad_endpoint",
+          status: geminiResponse.status,
+          message: `Gemini model or endpoint unavailable (tried: ${geminiModel}, ${geminiFallbackModel})`,
+        },
+      }, 200)
     }
 
     return new Response(responseText, {

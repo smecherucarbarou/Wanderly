@@ -3,9 +3,12 @@ package com.novahorizon.wanderly.ui.missions
 import com.novahorizon.wanderly.observability.AppLogger
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -27,21 +30,20 @@ import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.RankUiFormatter
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@AndroidEntryPoint
 class MissionsFragment : Fragment() {
 
     private var _binding: FragmentMissionsBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: MissionsViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
+    private val viewModel: MissionsViewModel by viewModels()
 
     private var tempImageUri: Uri? = null
     private var tempImageFile: File? = null
@@ -56,7 +58,7 @@ class MissionsFragment : Fragment() {
         if (isGranted) {
             startCamera()
         } else {
-            showSnackbar(getString(R.string.mission_camera_permission_required), isError = true)
+            showCameraPermissionFeedback()
         }
     }
 
@@ -301,22 +303,84 @@ class MissionsFragment : Fragment() {
     }
 
     private fun checkCameraPermissionAndStart() {
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
-            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        when {
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> startCamera()
+
+            shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) -> {
+                showSnackbar(getString(R.string.mission_camera_permission_rationale), isError = true)
+                markCameraPermissionRequested()
+                requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+
+            hasRequestedCameraPermission() -> {
+                showSnackbar(getString(R.string.mission_camera_permission_settings), isError = true)
+                openCameraPermissionSettings()
+            }
+
+            else -> {
+                markCameraPermissionRequested()
+                requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
         }
     }
 
+    private fun showCameraPermissionFeedback() {
+        when {
+            shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) -> {
+                showSnackbar(getString(R.string.mission_camera_permission_rationale), isError = true)
+            }
+
+            hasRequestedCameraPermission() -> {
+                showSnackbar(getString(R.string.mission_camera_permission_settings), isError = true)
+                openCameraPermissionSettings()
+            }
+
+            else -> showSnackbar(getString(R.string.mission_camera_permission_required), isError = true)
+        }
+    }
+
+    private fun hasRequestedCameraPermission(): Boolean {
+        return requireContext()
+            .getSharedPreferences(CAMERA_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_CAMERA_PERMISSION_REQUESTED, false)
+    }
+
+    private fun markCameraPermissionRequested() {
+        requireContext()
+            .getSharedPreferences(CAMERA_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_CAMERA_PERMISSION_REQUESTED, true)
+            .apply()
+    }
+
+    private fun openCameraPermissionSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", requireContext().packageName, null)
+        )
+        startActivity(intent)
+    }
+
     private fun startCamera() {
-        try {
-            tempImageFile?.delete()
-            val tempFile = File.createTempFile("mission_verify_", ".jpg", requireContext().cacheDir)
-            tempImageFile = tempFile
-            tempImageUri = FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.fileprovider", tempFile)
-            takePhotoLauncher.launch(tempImageUri)
-        } catch (_: Exception) {
-            showSnackbar(getString(R.string.mission_camera_start_failed), isError = true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val context = requireContext()
+                val tempFile = withContext(Dispatchers.IO) {
+                    tempImageFile?.delete()
+                    val imagesDir = File(context.cacheDir, "images").apply {
+                        mkdirs()
+                    }
+                    File.createTempFile("mission_verify_", ".jpg", imagesDir)
+                }
+                tempImageFile = tempFile
+                tempImageUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+                takePhotoLauncher.launch(tempImageUri)
+            } catch (_: Exception) {
+                showSnackbar(getString(R.string.mission_camera_start_failed), isError = true)
+            }
         }
     }
 
@@ -339,7 +403,12 @@ class MissionsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        tempImageFile?.delete()
+        val fileToDelete = tempImageFile
+        if (fileToDelete != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                fileToDelete.delete()
+            }
+        }
         tempImageFile = null
         tempImageUri = null
         super.onDestroyView()
@@ -360,5 +429,10 @@ class MissionsFragment : Fragment() {
                 AppLogger.e(logTag, message)
             }
         }
+    }
+
+    private companion object {
+        private const val CAMERA_PERMISSION_PREFS = "mission_camera_permission"
+        private const val KEY_CAMERA_PERMISSION_REQUESTED = "camera_permission_requested"
     }
 }

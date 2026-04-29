@@ -1,14 +1,14 @@
 package com.novahorizon.wanderly.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileRepositoryPayloadTest {
 
     @Test
-    fun `client payload excludes admin role`() {
+    fun `client payload excludes server owned reward progress location and admin fields`() {
         val profile = Profile(
             id = "user-1",
             username = "Explorer",
@@ -29,9 +29,18 @@ class ProfileRepositoryPayloadTest {
         val payload = ProfileRepository.toClientProfileUpdate(profile)
 
         assertEquals("Explorer", payload.username)
-        assertEquals(120, payload.honey)
-        assertEquals(7, payload.streak_count)
-        assertFalse(payload.javaClass.declaredFields.any { it.name == "admin_role" })
+        val clientWritableFields = payload.javaClass.declaredFields.map { it.name }.toSet()
+        val serverOwnedFields = setOf(
+            "honey",
+            "hive_rank",
+            "admin_role",
+            "last_mission_date",
+            "last_lat",
+            "last_lng",
+            "streak_count"
+        )
+
+        assertTrue(clientWritableFields.none { it in serverOwnedFields })
     }
 
     @Test

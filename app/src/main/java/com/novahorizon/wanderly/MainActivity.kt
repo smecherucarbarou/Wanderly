@@ -21,25 +21,27 @@ import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.snackbar.Snackbar
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.ActivityMainBinding
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.services.HiveRealtimeService
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.main.MainViewModel
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val repository by lazy { WanderlyGraph.repository(this) }
+    @Inject
+    lateinit var repository: WanderlyRepository
     private var shouldRoutePendingInvite = false
     private var bottomNavigationReady = false
-    private val viewModel: MainViewModel by viewModels {
-        WanderlyViewModelFactory(repository)
-    }
+    private val viewModel: MainViewModel by viewModels()
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }

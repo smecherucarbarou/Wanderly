@@ -11,24 +11,26 @@ import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.Constants
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.SessionNavigator
+import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentLoginBinding
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import dagger.hilt.android.AndroidEntryPoint
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class LoginFragment : Fragment() {
 
     private var _binding: FragmentLoginBinding? = null
     private val binding get() = _binding!!
+    @Inject
+    lateinit var repository: WanderlyRepository
     
-    private val viewModel: AuthViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
+    private val viewModel: AuthViewModel by viewModels()
 
     private val authCallbackUrl by lazy(LazyThreadSafetyMode.NONE) {
         "${Constants.AUTH_CALLBACK_SCHEME}://${Constants.AUTH_CALLBACK_HOST}${Constants.AUTH_CALLBACK_PATH}"
@@ -72,7 +74,7 @@ class LoginFragment : Fragment() {
 
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    WanderlyGraph.repository(requireContext()).setRememberMeEnabled(rememberMe)
+                    repository.setRememberMeEnabled(rememberMe)
                     com.novahorizon.wanderly.api.SupabaseClient.client.auth.signInWith(
                         provider = Google,
                         redirectUrl = authCallbackUrl
@@ -102,7 +104,7 @@ class LoginFragment : Fragment() {
                 is AuthViewModel.AuthState.Success -> {
                     val isRememberMeChecked = binding.rememberMeCheckbox.isChecked
                     viewLifecycleOwner.lifecycleScope.launch {
-                        WanderlyGraph.repository(requireContext()).setRememberMeEnabled(isRememberMeChecked)
+                        repository.setRememberMeEnabled(isRememberMeChecked)
                         SessionNavigator.openMain(requireActivity())
                     }
                 }

@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.ui.map
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -20,16 +19,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.Mission
 import com.novahorizon.wanderly.databinding.FragmentMapBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.social.SocialViewModel
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
@@ -39,17 +36,14 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 
+@AndroidEntryPoint
 class MapFragment : Fragment() {
 
     private var _binding: FragmentMapBinding? = null
     private val binding get() = _binding!!
     
-    private val viewModel: SocialViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
-    private val mapViewModel: MapViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
+    private val viewModel: SocialViewModel by viewModels()
+    private val mapViewModel: MapViewModel by viewModels()
     
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var myLocationOverlay: MyLocationNewOverlay? = null
@@ -64,10 +58,6 @@ class MapFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        Configuration.getInstance().load(
-            requireContext(),
-            requireActivity().getPreferences(Context.MODE_PRIVATE)
-        )
         Configuration.getInstance().cacheMapTileCount = 9.toShort()
         Configuration.getInstance().cacheMapTileOvershoot = 9.toShort()
         Configuration.getInstance().osmdroidTileCache =

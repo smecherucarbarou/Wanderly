@@ -9,12 +9,17 @@ import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.ui.common.UiText
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.json.JSONObject
+import javax.inject.Inject
 
-class AdminToolsViewModel(private val repository: WanderlyRepository) : ViewModel() {
+@HiltViewModel
+class AdminToolsViewModel @Inject constructor(
+    private val repository: WanderlyRepository
+) : ViewModel() {
     data class AiNotificationState(
         val isRunning: Boolean = false,
         val logs: List<UiText> = emptyList(),

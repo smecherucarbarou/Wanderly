@@ -25,7 +25,6 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.HiveRank
@@ -37,17 +36,17 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
-import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.RankUiFormatter
 import com.novahorizon.wanderly.ui.common.UiText
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.widgets.StreakTierHelper
 import com.yalantis.ucrop.UCrop
+import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.text.NumberFormat
 
+@AndroidEntryPoint
 class ProfileFragment : Fragment() {
 
     private var _binding: FragmentProfileBinding? = null
@@ -60,9 +59,7 @@ class ProfileFragment : Fragment() {
     private var pendingClassSelectionDialog: androidx.appcompat.app.AlertDialog? = null
     private var isClassDialogShowing = false
     private val badgesAdapter = BadgesAdapter()
-    private val viewModel: ProfileViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
+    private val viewModel: ProfileViewModel by viewModels()
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         _binding ?: return@registerForActivityResult
@@ -183,7 +180,6 @@ class ProfileFragment : Fragment() {
             findNavController().navigate(R.id.action_profile_to_devDashboard)
         }
         binding.logoutButton.setOnClickListener {
-            requireContext().stopService(Intent(requireContext(), HiveRealtimeService::class.java))
             viewModel.logout()
         }
     }

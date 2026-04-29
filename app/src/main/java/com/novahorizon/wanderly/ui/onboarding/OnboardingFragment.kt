@@ -13,16 +13,21 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayoutMediator
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
+import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.databinding.FragmentOnboardingBinding
 import com.novahorizon.wanderly.databinding.ItemOnboardingPageBinding
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class OnboardingFragment : Fragment() {
 
     private var _binding: FragmentOnboardingBinding? = null
     private val binding get() = _binding!!
+    @Inject
+    lateinit var repository: WanderlyRepository
     private var onboardingPageCallback: ViewPager2.OnPageChangeCallback? = null
 
     private val pages = listOf(
@@ -107,7 +112,7 @@ class OnboardingFragment : Fragment() {
 
     private fun completeOnboarding() {
         viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyGraph.repository(requireContext()).setOnboardingSeen(true)
+            repository.setOnboardingSeen(true)
             val navController = findNavController()
             navController.graph.setStartDestination(
                 MainNavigationDestinations.destinationAfterOnboarding(R.id.mapFragment)

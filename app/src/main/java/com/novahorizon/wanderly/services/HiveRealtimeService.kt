@@ -21,6 +21,7 @@ import com.novahorizon.wanderly.data.SocialRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.observability.LogRedactor
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
@@ -33,7 +34,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -44,10 +47,16 @@ class HiveRealtimeService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repository: WanderlyRepository
     private val socialRepository = SocialRepository()
-    private var realtimeChannel: RealtimeChannel? = null
-    private var realtimeCollectorJob: Job? = null
+    private val realtimeChannels = mutableListOf<RealtimeChannel>()
+    private val realtimeCollectorJobs = mutableListOf<Job>()
+    private val reconnectPolicy = HiveRealtimeReconnectPolicy()
     private var statusCollectorJob: Job? = null
     private var isSubscribed = false
+    private var networkRetryAttempt = 0
+    private var realtimeDisabledForSession = !ENABLE_PROFILE_REALTIME
+    private var realtimeSetupFailures = 0
+    private val maxRealtimeSetupFailures = 2
+    private var realtimeSetupGeneration = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -82,6 +91,10 @@ class HiveRealtimeService : Service() {
     private fun observeHiveChanges() {
         serviceScope.launch {
             try {
+                if (!ENABLE_PROFILE_REALTIME) {
+                    logInfo("Profile realtime disabled; using manual refresh fallback.")
+                    return@launch
+                }
                 val profile = repository.getCurrentProfile() ?: run {
                     logWarn("No profile found, stopping service.")
                     stopSelf()
@@ -93,11 +106,13 @@ class HiveRealtimeService : Service() {
                 statusCollectorJob?.cancel()
                 statusCollectorJob = SupabaseClient.client.realtime.status.onEach { status ->
                     logDebug("Connection Status: $status")
+                    if (realtimeDisabledForSession || reconnectPolicy.realtimeDisabledForSession) {
+                        return@onEach
+                    }
                     if (status == Realtime.Status.CONNECTED) {
                         if (!isSubscribed) {
                             logDebug("Connected! Subscribing to channel...")
-                            setupSubscription(profile.id)
-                            isSubscribed = true
+                            subscribeWithFallback(profile.id)
                         }
                     } else {
                         isSubscribed = false
@@ -110,38 +125,139 @@ class HiveRealtimeService : Service() {
         }
     }
 
+    private suspend fun subscribeWithFallback(currentUserId: String) {
+        try {
+            setupSubscription(currentUserId)
+            if (realtimeDisabledForSession || reconnectPolicy.realtimeDisabledForSession) {
+                isSubscribed = false
+                return
+            }
+            reconnectPolicy.resetAfterSuccessfulSubscription()
+            networkRetryAttempt = 0
+            isSubscribed = true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleSubscriptionFailure(currentUserId, e)
+        }
+    }
+
     private suspend fun setupSubscription(currentUserId: String) {
-        realtimeCollectorJob?.cancel()
-        realtimeChannel?.unsubscribe()
+        try {
+            setupSubscriptionInternal(currentUserId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IllegalStateException) {
+            logWarn("Realtime disabled for this session: ${e.message}")
+            disableRealtimeForSession()
+        } catch (e: Exception) {
+            logWarn("Realtime setup failed; falling back to manual refresh: ${e.message}")
+            disableRealtimeForSession()
+        }
+    }
 
-        val channel = SupabaseClient.client.realtime.channel("hive_updates")
-        realtimeChannel = channel
-        val relevantIds = buildList {
-            add(currentUserId)
-            addAll(socialRepository.getAcceptedFriendIds())
-        }.distinct()
+    private suspend fun setupSubscriptionInternal(currentUserId: String) {
+        if (!ENABLE_PROFILE_REALTIME || realtimeDisabledForSession) {
+            logInfo("Profile realtime disabled; using manual refresh fallback.")
+            disableRealtimeForSession()
+            return
+        }
+        clearRealtimeSubscriptions()
+        val setupGeneration = ++realtimeSetupGeneration
 
-        channel.postgresChangeFlow<PostgresAction.Update>(
-            schema = "public"
-        ) {
-            table = Constants.TABLE_PROFILES
-            filter("id", FilterOperator.IN, relevantIds)
-        }.onEach { change ->
-            val updatedProfile = change.decodeRecord<Profile>()
-            if (updatedProfile.id == currentUserId) return@onEach
+        val subscriptions = HiveRealtimeSubscriptionPlanner.subscriptionsFor(
+            currentUserId = currentUserId,
+            friendIds = socialRepository.getAcceptedFriendIds()
+        )
 
-            val currentProfile = repository.getCurrentProfile() ?: return@onEach
+        if (subscriptions.isEmpty()) {
+            logDebug("No accepted friends found; Realtime profile subscriptions are idle.")
+            return
+        }
 
-            logDebug("Realtime profile update received.")
-            NotificationCheckCoordinator.handleRealtimeProfileUpdate(
-                context = applicationContext,
-                repository = repository,
-                currentProfile = currentProfile,
-                updatedProfile = updatedProfile
-            )
-        }.launchIn(serviceScope).also { realtimeCollectorJob = it }
+        for (subscription in subscriptions) {
+            val channel = SupabaseClient.client.realtime.channel("${subscription.channelId}_$setupGeneration")
+            realtimeChannels += channel
 
-        channel.subscribe()
+            val profileChanges = channel.postgresChangeFlow<PostgresAction.Update>(
+                schema = "public"
+            ) {
+                table = Constants.TABLE_PROFILES
+                filter("id", FilterOperator.EQ, subscription.profileId)
+            }
+
+            val subscribed = withTimeoutOrNull(SUBSCRIPTION_JOIN_TIMEOUT_MS) {
+                channel.subscribe(blockUntilSubscribed = true)
+                true
+            } ?: false
+            if (!subscribed) {
+                throw IllegalStateException("Unable to subscribe to changes with given parameters before timeout")
+            }
+
+            profileChanges.onEach { change ->
+                val updatedProfile = change.decodeRecord<Profile>()
+                if (updatedProfile.id == currentUserId) return@onEach
+
+                val currentProfile = repository.getCurrentProfile() ?: return@onEach
+
+                logDebug("Realtime profile update received.")
+                NotificationCheckCoordinator.handleRealtimeProfileUpdate(
+                    context = applicationContext,
+                    repository = repository,
+                    currentProfile = currentProfile,
+                    updatedProfile = updatedProfile
+                )
+            }.launchIn(serviceScope).also { realtimeCollectorJobs += it }
+        }
+    }
+
+    private suspend fun handleSubscriptionFailure(currentUserId: String, error: Exception) {
+        clearRealtimeSubscriptions()
+        when (reconnectPolicy.recordSubscriptionFailure(error)) {
+            RealtimeRecoveryAction.RefreshTokenAndRetry -> {
+                logWarn("Realtime auth token rejected; refreshing once before retry.")
+                val refreshed = runCatching {
+                    SupabaseClient.client.auth.refreshCurrentSession()
+                    SupabaseClient.client.realtime.setAuth()
+                }.isSuccess
+                if (refreshed) {
+                    subscribeWithFallback(currentUserId)
+                } else {
+                    disableRealtimeForSession()
+                    logWarn("Realtime auth refresh failed; using refresh-only fallback for this session.")
+                }
+            }
+            RealtimeRecoveryAction.RetryInvalidSubscription -> {
+                logWarn("Realtime profile subscription was rejected; retrying with bounded fallback policy.")
+                delay(reconnectPolicy.networkRetryDelayMs(0))
+                subscribeWithFallback(currentUserId)
+            }
+            RealtimeRecoveryAction.RetryNetworkLater -> {
+                val delayMs = reconnectPolicy.networkRetryDelayMs(networkRetryAttempt++)
+                logWarn("Realtime unavailable; retrying after backoff while app uses refresh fallback.")
+                delay(delayMs)
+                subscribeWithFallback(currentUserId)
+            }
+            RealtimeRecoveryAction.DisableRealtimeForSession -> {
+                disableRealtimeForSession()
+                logWarn("Realtime disabled for this session; app will continue with manual and screen refresh.")
+            }
+        }
+    }
+
+    private suspend fun clearRealtimeSubscriptions() {
+        realtimeCollectorJobs.forEach { it.cancel() }
+        realtimeCollectorJobs.clear()
+
+        val channels = realtimeChannels.toList()
+        realtimeChannels.clear()
+        channels.forEach { channel ->
+            runCatching {
+                withTimeoutOrNull(2_000L) {
+                    SupabaseClient.client.realtime.removeChannel(channel)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
@@ -149,13 +265,10 @@ class HiveRealtimeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        realtimeCollectorJob?.cancel()
         statusCollectorJob?.cancel()
         serviceScope.launch {
             try {
-                withTimeoutOrNull(2_000L) {
-                    realtimeChannel?.unsubscribe()
-                }
+                clearRealtimeSubscriptions()
                 logDebug("Unsubscribed from channel.")
             } catch (e: Exception) {
                 logError("Error during unsubscribe", e)
@@ -178,6 +291,19 @@ class HiveRealtimeService : Service() {
         }
     }
 
+    private fun logInfo(message: String) {
+        if (BuildConfig.DEBUG) {
+            AppLogger.i("HiveRealtime", LogRedactor.redact(message))
+        }
+    }
+
+    private fun disableRealtimeForSession() {
+        realtimeSetupFailures = (realtimeSetupFailures + 1).coerceAtMost(maxRealtimeSetupFailures)
+        realtimeDisabledForSession = true
+        reconnectPolicy.disableForSession()
+        isSubscribed = false
+    }
+
     private fun logError(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
             val safeMessage = LogRedactor.redact(message)
@@ -187,5 +313,10 @@ class HiveRealtimeService : Service() {
                 AppLogger.e("HiveRealtime", safeMessage)
             }
         }
+    }
+
+    private companion object {
+        private const val ENABLE_PROFILE_REALTIME = false
+        const val SUBSCRIPTION_JOIN_TIMEOUT_MS = 7_000L
     }
 }

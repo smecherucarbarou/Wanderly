@@ -31,14 +31,13 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.databinding.FragmentGemsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.UiText
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import dagger.hilt.android.AndroidEntryPoint
 import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -46,15 +45,14 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@AndroidEntryPoint
 class GemsFragment : Fragment() {
     private val logTag = "GemsFragment"
 
     private var _binding: FragmentGemsBinding? = null
     private val binding get() = _binding!!
 
-    private val viewModel: GemsViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
+    private val viewModel: GemsViewModel by viewModels()
 
     private var gemsAdapter: GemsAdapter? = null
     private val locationPermissionController = LocationPermissionController(this)

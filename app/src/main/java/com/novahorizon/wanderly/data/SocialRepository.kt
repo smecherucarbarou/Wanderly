@@ -1,31 +1,29 @@
 package com.novahorizon.wanderly.data
 
-import com.novahorizon.wanderly.observability.AppLogger
-
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+
+@Serializable
+private data class FriendCodeLookupParams(
+    val code: String
+)
 
 class SocialRepository {
     suspend fun getLeaderboard(): List<Profile> = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
-            val currentUserId = session.user?.id ?: return@withContext emptyList()
-            val relevantIds = getAcceptedFriendIds().toMutableList().apply { add(currentUserId) }
+            session.user?.id ?: return@withContext emptyList()
 
-            SupabaseClient.client.postgrest["profiles_public"]
-                .select {
-                    filter {
-                        isIn("id", relevantIds)
-                    }
-                    order("honey", Order.DESCENDING)
-                }
+            SupabaseClient.client.postgrest
+                .rpc("get_social_leaderboard")
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
@@ -41,8 +39,8 @@ class SocialRepository {
             val normalizedCode = normalizeFriendCode(friendCode)
                 ?: return@withContext "Friend code must be 6 letters or digits"
 
-            val targetUsers = SupabaseClient.client.postgrest["profiles_public"]
-                .select { filter { eq("friend_code", normalizedCode) } }
+            val targetUsers = SupabaseClient.client.postgrest
+                .rpc("find_profile_by_friend_code", FriendCodeLookupParams(normalizedCode))
                 .decodeList<Profile>()
 
             if (targetUsers.isEmpty()) return@withContext "Friend code not found"
@@ -58,7 +56,8 @@ class SocialRepository {
             if (e.message?.contains("duplicate key") == true || e.message?.contains("unique constraint") == true) {
                 "Already requested or friends with this user"
             } else {
-                "Failed to add friend: ${e.message}"
+                logError("Error adding friend", e)
+                "Could not add friend. Please try again."
             }
         }
     }
@@ -95,12 +94,8 @@ class SocialRepository {
 
             if (friendIds.isEmpty()) return@withContext emptyList()
 
-            SupabaseClient.client.postgrest["profiles_public"]
-                .select {
-                    filter {
-                        isIn("id", friendIds)
-                    }
-                }
+            SupabaseClient.client.postgrest
+                .rpc("get_accepted_friend_profiles")
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {

@@ -13,9 +13,14 @@ import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class MapViewModel(private val repository: WanderlyRepository) : ViewModel() {
+@HiltViewModel
+class MapViewModel @Inject constructor(
+    private val repository: WanderlyRepository
+) : ViewModel() {
     private val _activeMission = MutableLiveData<Mission?>()
     val activeMission: LiveData<Mission?> = _activeMission
 
@@ -50,7 +55,7 @@ class MapViewModel(private val repository: WanderlyRepository) : ViewModel() {
                 Location.distanceBetween(lastLat, lastLng, lat, lng, results)
 
                 if (results[0] > 50.0 || profile.last_lat == null) {
-                    repository.updateProfile(profile.copy(last_lat = lat, last_lng = lng))
+                    repository.updateProfileLocation(lat, lng)
                 }
             } catch (e: Exception) {
                 CrashReporter.recordNonFatal(

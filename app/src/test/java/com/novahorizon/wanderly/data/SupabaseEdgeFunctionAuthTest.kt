@@ -16,6 +16,24 @@ class SupabaseEdgeFunctionAuthTest {
         assertVerifiesJwt("supabase/functions/google-places-proxy/index.ts")
     }
 
+    @Test
+    fun `gemini proxy consumes user quota before upstream fetch`() {
+        assertQuotaBeforeProviderFetch(
+            relativePath = "supabase/functions/gemini-proxy/index.ts",
+            provider = "gemini",
+            upstream = "generativelanguage.googleapis.com"
+        )
+    }
+
+    @Test
+    fun `google places proxy consumes user quota before upstream fetch`() {
+        assertQuotaBeforeProviderFetch(
+            relativePath = "supabase/functions/google-places-proxy/index.ts",
+            provider = "places",
+            upstream = "places.googleapis.com"
+        )
+    }
+
     private fun assertVerifiesJwt(relativePath: String) {
         val source = projectFile(relativePath).readText()
 
@@ -25,6 +43,25 @@ class SupabaseEdgeFunctionAuthTest {
         assertTrue(source.contains("verifyAuth"))
         assertTrue(source.contains("auth.getUser(token)"))
         assertTrue(source.contains("Invalid bearer token"))
+    }
+
+    private fun assertQuotaBeforeProviderFetch(relativePath: String, provider: String, upstream: String) {
+        val source = projectFile(relativePath).readText()
+        val quotaIndex = source.indexOf("consumeApiQuota(req, auth, \"$provider\"")
+        val exhaustedIndex = source.indexOf("Quota exhausted")
+        val upstreamFetchIndex = if (provider == "gemini") {
+            source.indexOf("callGemini(geminiApiKey, geminiModel")
+        } else {
+            source.indexOf(upstream)
+        }
+
+        assertTrue(source.contains("consume_api_quota"))
+        assertTrue(source.contains("return jsonResponse(req, { error: \"Quota exhausted\" }, 429)"))
+        assertTrue(source.contains("maxRequestsPerDay"))
+        assertTrue(quotaIndex >= 0)
+        assertTrue(exhaustedIndex > quotaIndex)
+        assertTrue(upstreamFetchIndex > quotaIndex)
+        assertTrue(source.contains("upstream request failed") || source.contains("model_unavailable_or_bad_endpoint"))
     }
 
     private fun projectFile(relativePath: String): File {

@@ -20,25 +20,24 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.tabs.TabLayout
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.RankUiFormatter
-import com.novahorizon.wanderly.ui.common.WanderlyViewModelFactory
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Locale
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class SocialFragment : Fragment() {
 
-    private val viewModel: SocialViewModel by viewModels {
-        WanderlyViewModelFactory(WanderlyGraph.repository(requireContext()))
-    }
-    private val repository by lazy(LazyThreadSafetyMode.NONE) {
-        WanderlyGraph.repository(requireContext())
-    }
+    private val viewModel: SocialViewModel by viewModels()
+    @Inject
+    lateinit var repository: WanderlyRepository
     
     private lateinit var socialTabs: TabLayout
     private lateinit var socialRecycler: RecyclerView

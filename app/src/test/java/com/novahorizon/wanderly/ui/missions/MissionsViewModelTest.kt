@@ -10,10 +10,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.MissionDetailsRepository
+import com.novahorizon.wanderly.data.MissionCompletionResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.data.mission.MissionCandidateProvider
+import com.novahorizon.wanderly.data.mission.MissionPlaceCandidate
+import com.novahorizon.wanderly.data.mission.MissionPlaceSelectionResult
+import com.novahorizon.wanderly.data.mission.MissionPlaceSelecting
+import com.novahorizon.wanderly.data.mission.ValidatedMissionPlace
 import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -52,10 +59,12 @@ class MissionsViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         context = ApplicationProvider.getApplicationContext()
+        WanderlyGraph.resetTestOverrides()
     }
 
     @After
     fun tearDown() {
+        WanderlyGraph.resetTestOverrides()
         Dispatchers.resetMain()
     }
 
@@ -121,9 +130,230 @@ class MissionsViewModelTest {
         viewModel.missionState.removeObserver(states.observer)
     }
 
+    @Test
+    fun `generateMission stores verified destination mission when resolution succeeds`() = runTest {
+        val candidateProvider = FakeMissionCandidateProvider(
+            candidates = listOf(
+                MissionPlaceCandidate(
+                    name = "Test Cafe",
+                    query = "Test Cafe Bucharest Romania"
+                )
+            )
+        )
+        val selector = FakeMissionPlaceSelector(
+            result = MissionPlaceSelectionResult.Success(
+                validatedPlace(
+                    candidate = candidateProvider.candidates.single(),
+                    name = "Verified Cafe",
+                    lat = 44.427,
+                    lng = 26.103
+                )
+            )
+        )
+        val repository = TestWanderlyRepository(
+            context = context,
+            nearbyPlaces = listOf("Test Cafe")
+        )
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = candidateProvider,
+            placeSelector = selector
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            val received = states.last() as MissionsViewModel.MissionState.MissionReceived
+            assertTrue(received.text.contains("Verified Cafe"))
+            assertEquals("Verified Cafe", repository.savedMission?.target)
+            assertEquals(44.427, repository.savedMission?.targetLat)
+            assertEquals(26.103, repository.savedMission?.targetLng)
+            assertFalse(received.text.contains("Could not verify a specific destination"))
+            assertEquals(1, candidateProvider.calls)
+            assertEquals(1, selector.requests.single().candidates.size)
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `generateMission succeeds when second candidate validates`() = runTest {
+        val first = MissionPlaceCandidate(name = "Too Far Monument", query = "Too Far Monument Bucharest Romania")
+        val second = MissionPlaceCandidate(name = "The Infinity Column", query = "The Infinity Column Bucharest Romania")
+        val candidateProvider = FakeMissionCandidateProvider(candidates = listOf(first, second))
+        val selector = FakeMissionPlaceSelector(
+            result = MissionPlaceSelectionResult.Success(
+                validatedPlace(candidate = second, name = "The Infinity Column")
+            )
+        )
+        val repository = TestWanderlyRepository(context = context, nearbyPlaces = emptyList())
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = candidateProvider,
+            placeSelector = selector
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            val received = states.last() as MissionsViewModel.MissionState.MissionReceived
+            assertTrue(received.text.contains("The Infinity Column"))
+            assertEquals("The Infinity Column", repository.savedMission?.target)
+            assertEquals(listOf(first, second), selector.requests.single().candidates)
+            assertFalse(states.any { it is MissionsViewModel.MissionState.Error })
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `generateMission falls back when all candidates fail validation`() = runTest {
+        val candidateProvider = FakeMissionCandidateProvider(
+            candidates = listOf(MissionPlaceCandidate(name = "Missing Place", query = "Missing Place Bucharest Romania"))
+        )
+        val selector = FakeMissionPlaceSelector(
+            result = MissionPlaceSelectionResult.Fallback("all candidates rejected")
+        )
+        val repository = TestWanderlyRepository(context = context, nearbyPlaces = emptyList())
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = candidateProvider,
+            placeSelector = selector
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            val received = states.last() as MissionsViewModel.MissionState.MissionReceived
+            assertTrue(received.text.contains("Could not verify a specific destination"))
+            assertTrue(received.text.contains("Explore a nearby public place in Bucharest"))
+            assertEquals(MissionsViewModel.FALLBACK_MISSION_TARGET, repository.savedMission?.target)
+            assertEquals(44.4268, repository.savedMission?.targetLat)
+            assertEquals(26.1025, repository.savedMission?.targetLng)
+            assertEquals(0, repository.completeMissionCalls)
+            assertFalse(states.any { it is MissionsViewModel.MissionState.Error })
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `generateMission falls back when candidate provider throws without surfacing raw error`() = runTest {
+        val candidateProvider = FakeMissionCandidateProvider(error = IOException("places quota exhausted"))
+        val repository = TestWanderlyRepository(context = context)
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = candidateProvider,
+            placeSelector = FakeMissionPlaceSelector(MissionPlaceSelectionResult.Fallback("unused"))
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, null)
+            advanceUntilIdle()
+
+            val received = states.last() as MissionsViewModel.MissionState.MissionReceived
+            assertTrue(received.text.contains("Could not verify a specific destination"))
+            assertTrue(received.text.contains("Explore your nearby area"))
+            assertEquals(MissionsViewModel.FALLBACK_MISSION_TARGET, repository.savedMission?.target)
+            assertFalse(states.any { it is MissionsViewModel.MissionState.Error })
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `generateMission tries deterministic selector fallback when ai returns no candidates`() = runTest {
+        val candidateProvider = FakeMissionCandidateProvider(candidates = emptyList())
+        val selector = FakeMissionPlaceSelector(
+            result = MissionPlaceSelectionResult.Success(
+                validatedPlace(
+                    candidate = MissionPlaceCandidate(
+                        name = "parks in Bucharest",
+                        query = "parks in Bucharest Romania"
+                    ),
+                    name = "Cismigiu Gardens"
+                )
+            )
+        )
+        val repository = TestWanderlyRepository(context = context)
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = candidateProvider,
+            placeSelector = selector
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            val received = states.last() as MissionsViewModel.MissionState.MissionReceived
+            assertTrue(received.text.contains("Cismigiu Gardens"))
+            assertEquals("Cismigiu Gardens", repository.savedMission?.target)
+            assertTrue(selector.requests.single().candidates.isEmpty())
+            assertFalse(states.any { it is MissionsViewModel.MissionState.Error })
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `fallback mission cannot complete before photo verification succeeds`() = runTest {
+        val repository = TestWanderlyRepository(context = context)
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            candidateProvider = FakeMissionCandidateProvider(candidates = emptyList()),
+            placeSelector = FakeMissionPlaceSelector(MissionPlaceSelectionResult.Fallback("no places"))
+        )
+        val states = viewModel.observeMissionStates()
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            viewModel.completeMission()
+            advanceUntilIdle()
+
+            assertEquals(0, repository.completeMissionCalls)
+            assertTrue(states.last() is MissionsViewModel.MissionState.Error)
+        } finally {
+            store.clear()
+            viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
     private fun createViewModel(
         detailsRepository: MissionDetailsRepository,
-        repository: TestWanderlyRepository = TestWanderlyRepository(context)
+        repository: TestWanderlyRepository = TestWanderlyRepository(context),
+        candidateProvider: MissionCandidateProvider = FakeMissionCandidateProvider(
+            candidates = listOf(MissionPlaceCandidate(name = "Test Cafe", query = "Test Cafe Bucharest Romania"))
+        ),
+        placeSelector: MissionPlaceSelecting = FakeMissionPlaceSelector(
+            MissionPlaceSelectionResult.Success(
+                validatedPlace(
+                    candidate = MissionPlaceCandidate(name = "Test Cafe", query = "Test Cafe Bucharest Romania"),
+                    name = "Test Cafe"
+                )
+            )
+        )
     ): Pair<MissionsViewModel, ViewModelStore> {
         val store = ViewModelStore()
         val factory = object : ViewModelProvider.Factory {
@@ -133,7 +363,9 @@ class MissionsViewModelTest {
                     repository,
                     SavedStateHandle(),
                     ProfileStateProvider(repository),
-                    detailsRepository
+                    detailsRepository,
+                    candidateProvider,
+                    placeSelector
                 ) as T
             }
         }
@@ -150,16 +382,127 @@ class MissionsViewModelTest {
         val observer = Observer<MissionsViewModel.MissionState> { add(it) }
     }
 
-    private class TestWanderlyRepository(context: Context) : WanderlyRepository(context) {
+    private class TestWanderlyRepository(
+        context: Context,
+        private val nearbyPlaces: List<String> = emptyList()
+    ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow<Profile?>(null)
+        var savedMission: SavedMission? = null
+            private set
+        var completeMissionCalls = 0
+            private set
 
         override val currentProfile: StateFlow<Profile?> = profileFlow
 
         override suspend fun getCurrentProfile(): Profile? = profileFlow.value
 
+        override suspend fun fetchNearbyPlaces(lat: Double, lng: Double, radius: Int): List<String> =
+            nearbyPlaces
+
+        override suspend fun getMissionHistory(): String = ""
+
         override suspend fun getMissionTarget(): String = "Test Cafe"
 
         override suspend fun getMissionCity(): String = "Bucharest"
+
+        override suspend fun saveMissionData(
+            text: String,
+            target: String,
+            history: String,
+            city: String?,
+            targetLat: Double,
+            targetLng: Double
+        ) {
+            savedMission = SavedMission(text, target, history, city, targetLat, targetLng)
+        }
+
+        override suspend fun completeMission(): MissionCompletionResult {
+            completeMissionCalls++
+            return MissionCompletionResult.Completed(
+                honey = 10,
+                streakCount = 1,
+                lastMissionDate = "2026-04-29",
+                rewardHoney = 10,
+                streakBonusHoney = 0
+            )
+        }
+    }
+
+    private data class SavedMission(
+        val text: String,
+        val target: String,
+        val history: String,
+        val city: String?,
+        val targetLat: Double,
+        val targetLng: Double
+    )
+
+    private class FakeMissionCandidateProvider(
+        val candidates: List<MissionPlaceCandidate> = emptyList(),
+        private val error: Exception? = null
+    ) : MissionCandidateProvider {
+        var calls = 0
+            private set
+
+        override suspend fun generateCandidates(
+            city: String,
+            latitude: Double,
+            longitude: Double,
+            radiusKm: Double,
+            missionType: String
+        ): List<MissionPlaceCandidate> {
+            calls++
+            error?.let { throw it }
+            return candidates
+        }
+    }
+
+    private class FakeMissionPlaceSelector(
+        private val result: MissionPlaceSelectionResult
+    ) : MissionPlaceSelecting {
+        val requests = mutableListOf<Request>()
+
+        override suspend fun selectBestMissionPlace(
+            userLat: Double,
+            userLng: Double,
+            city: String,
+            countryRegion: String?,
+            missionType: String,
+            candidates: List<MissionPlaceCandidate>
+        ): MissionPlaceSelectionResult {
+            requests += Request(userLat, userLng, city, countryRegion, missionType, candidates)
+            return result
+        }
+
+        data class Request(
+            val userLat: Double,
+            val userLng: Double,
+            val city: String,
+            val countryRegion: String?,
+            val missionType: String,
+            val candidates: List<MissionPlaceCandidate>
+        )
+    }
+
+    private companion object {
+        fun validatedPlace(
+            candidate: MissionPlaceCandidate,
+            name: String,
+            lat: Double = 44.427,
+            lng: Double = 26.103
+        ): ValidatedMissionPlace = ValidatedMissionPlace(
+            originalCandidate = candidate,
+            placesName = name,
+            placesId = "places-$name",
+            latitude = lat,
+            longitude = lng,
+            distanceMeters = 120.0,
+            locality = "Bucharest",
+            formattedAddress = "Bucharest, Romania",
+            rating = 4.6,
+            userRatingsTotal = 100,
+            confidenceScore = 0.9
+        )
     }
 
     private class FakeMissionDetailsRepository(

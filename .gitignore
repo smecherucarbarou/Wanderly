@@ -19,7 +19,11 @@
 
 # Log file
 *.log
-logs/*.txt
+
+# Local notes, text exports, and SQL dumps
+*.txt
+*.md
+*.sql
 
 # Runtime QA captures and local generated previews
 /*.png
@@ -68,20 +72,16 @@ replay_pid*
 !/supabase/functions/google-places-proxy/
 !/supabase/functions/google-places-proxy/index.ts
 !/supabase/migrations/
+!/supabase/migrations/*.sql
 !/supabase/migrations/20260424_add_friend_code_unique_index.sql
 !/supabase/migrations/20260424_add_friendships_indexes.sql
+!/supabase/tests/
+!/supabase/tests/*.sql
 /supabase/.temp/
 /supabase/functions/supabase/
-codex.md
-context.md
-fixesandimprov.md
-fixesandimprovs.md
-AUDIT.md
-continue.md
-supabase.txt
+/audit/
+/audit-artifacts/
 supabase/.temp/
-docs/superpowers/specs/2026-04-22-streak-widget-profile-design.md
-docs/superpowers/plans/2026-04-22-streak-widget-profile-refresh.md
 app/google-services.json
 google-services.json
 keystore/
