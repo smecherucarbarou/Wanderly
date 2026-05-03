@@ -46,12 +46,44 @@ function diagnosticId(): string {
   return crypto.randomUUID()
 }
 
+function redactSecretsForLog(value: string): string {
+  let redacted = value
+    .replace(/([?&]key=)[^&\s)]+/gi, "$1<redacted>")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer <redacted>")
+
+  for (const secretName of ["GEMINI_API_KEY", "SUPABASE_ANON_KEY"]) {
+    const secretValue = Deno.env.get(secretName)
+    if (secretValue) {
+      redacted = redacted.replaceAll(secretValue, "<redacted>")
+    }
+  }
+
+  return redacted
+}
+
+function truncateForLog(value: string, maxLength = 1200): string {
+  if (!value) return ""
+  const safeValue = redactSecretsForLog(value)
+  return safeValue.length > maxLength ? `${safeValue.slice(0, maxLength)}...<truncated>` : safeValue
+}
+
 function sanitizedUpstreamBody(responseText: string): string {
   return responseText.length > 0 ? "[redacted]" : ""
 }
 
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.name : typeof error
+function errorToLog(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: truncateForLog(error.message, 1000),
+      stack: error.stack ? truncateForLog(error.stack, 2000) : undefined,
+    }
+  }
+
+  return {
+    type: typeof error,
+    value: truncateForLog(String(error), 1000),
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -207,6 +239,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
   }
 
+  let requestPhase = "reading_request_body"
   try {
     const requestBody = await req.text()
     if (requestBody.length === 0 || requestBody.length > MAX_BODY_BYTES) {
@@ -214,16 +247,19 @@ Deno.serve(async (req: Request) => {
     }
 
     let payload: unknown
+    requestPhase = "parsing_json_body"
     try {
       payload = JSON.parse(requestBody)
     } catch {
       return jsonResponse(req, { error: "Malformed JSON body" }, 400)
     }
 
+    requestPhase = "validating_gemini_payload"
     if (!isValidGeminiPayload(payload)) {
       return jsonResponse(req, { error: "contents array is required" }, 400)
     }
 
+    requestPhase = "checking_gemini_quota"
     const quotaAllowed = await consumeApiQuota(req, auth, "gemini", maxRequestsPerDay("GEMINI_DAILY_QUOTA", 50))
     if (!quotaAllowed) {
       return jsonResponse(req, { error: "Quota exhausted" }, 429)
@@ -232,16 +268,26 @@ Deno.serve(async (req: Request) => {
     const geminiModel = Deno.env.get("GEMINI_MODEL") ?? DEFAULT_GEMINI_MODEL
     const geminiFallbackModel = Deno.env.get("GEMINI_FALLBACK_MODEL") ?? DEFAULT_GEMINI_FALLBACK_MODEL
     const hardenedPayload = withServerSystemInstruction(payload as Record<string, unknown>)
+    requestPhase = "calling_primary_gemini_model"
     let geminiResponse = await callGemini(geminiApiKey, geminiModel, hardenedPayload)
     if (!geminiResponse.ok && isModelFallbackStatus(geminiResponse.status)) {
       console.warn(`Primary model ${geminiModel} failed with ${geminiResponse.status}; retrying fallback model ${geminiFallbackModel}`)
+      requestPhase = "calling_fallback_gemini_model"
       geminiResponse = await callGemini(geminiApiKey, geminiFallbackModel, hardenedPayload)
     }
 
+    requestPhase = "reading_gemini_response"
     const responseText = await geminiResponse.text()
     if (!geminiResponse.ok) {
       const errorId = diagnosticId()
-      console.error(`Gemini upstream error id=${errorId} status=${geminiResponse.status} body_bytes=${responseText.length}`)
+      console.error("Gemini upstream request failed", {
+        id: errorId,
+        phase: requestPhase,
+        status: geminiResponse.status,
+        statusText: geminiResponse.statusText,
+        model: geminiResponse.url.includes(geminiFallbackModel) ? geminiFallbackModel : geminiModel,
+        body: truncateForLog(responseText),
+      })
       return jsonResponse(req, {
         ok: false,
         error: {
@@ -261,7 +307,15 @@ Deno.serve(async (req: Request) => {
     })
   } catch (error) {
     const errorId = diagnosticId()
-    console.error(`Gemini proxy internal error id=${errorId} kind=${describeError(error)}`)
-    return jsonResponse(req, { error: "Gemini proxy request failed", detail: "Internal error" }, 502)
+    console.error("Gemini proxy internal error", {
+      id: errorId,
+      phase: requestPhase,
+      ...errorToLog(error),
+    })
+    return jsonResponse(req, {
+      error: "Gemini proxy request failed",
+      detail: "Internal error",
+      id: errorId,
+    }, 502)
   }
 })
