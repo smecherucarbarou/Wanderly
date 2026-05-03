@@ -27,10 +27,18 @@ class GeminiProxySourceTest {
 
         assertTrue(source.contains("MAX_PROMPT_TEXT_CHARS"))
         assertTrue(source.contains("system_instruction"))
-        assertTrue(source.contains("model_unavailable_or_bad_endpoint"))
+        assertTrue(source.contains("gemini_upstream_request_failed"))
         assertTrue(validateIndex >= 0)
         assertTrue(quotaIndex > validateIndex)
         assertTrue(upstreamIndex > quotaIndex)
+    }
+
+    @Test
+    fun `gemini proxy falls back for transient upstream statuses`() {
+        val source = projectFile("supabase/functions/gemini-proxy/index.ts").readText()
+
+        assertTrue(source.contains("function isModelFallbackStatus(status: number): boolean"))
+        assertTrue(source.contains("[404, 408, 409, 429, 500, 502, 503, 504].includes(status)"))
     }
 
     private fun projectFile(relativePath: String): File {

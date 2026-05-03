@@ -47,7 +47,9 @@ fun resolveBuildSetting(vararg names: String): String =
         ?: ""
 
 fun resolveReleaseSecretSetting(vararg names: String): String =
-    names.firstNotNullOfOrNull { name -> nonBlank(providers.environmentVariable(name).orNull) }
+    names.firstNotNullOfOrNull { name -> nonBlank(System.getenv(name)) }
+        ?: names.firstNotNullOfOrNull { name -> nonBlank(project.findProperty(name)?.toString()) }
+        ?: names.firstNotNullOfOrNull { name -> nonBlank(localProperties.getProperty(name)) }
         ?: ""
 
 fun buildConfigString(value: String): String =
@@ -60,7 +62,7 @@ val supabaseAnonKey = resolveBuildSetting("SUPABASE_ANON_KEY")
 val geminiProxyUrl = resolveBuildSetting("GEMINI_PROXY_URL").ifBlank {
     if (supabaseUrl.isBlank()) "" else "${supabaseUrl.trimEnd('/')}/functions/v1/gemini-proxy"
 }
-val placesProxyUrl = resolveBuildSetting("PLACES_PROXY_URL").ifBlank {
+val placesProxyUrl = resolveBuildSetting("PLACES_PROXY_URL", "GOOGLE_PLACES_PROXY_URL").ifBlank {
     if (supabaseUrl.isBlank()) "" else "${supabaseUrl.trimEnd('/')}/functions/v1/google-places-proxy"
 }
 val androidTestEmail = resolveBuildSetting("WANDERLY_ANDROID_TEST_EMAIL")
@@ -239,8 +241,8 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseSigningConfig) {
-            create("release") {
+        create("release") {
+            if (hasReleaseSigningConfig) {
                 storeFile = releaseStoreFile
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
@@ -268,9 +270,7 @@ android {
             buildConfigField("String", "PLACES_PROXY_URL", buildConfigString(placesProxyUrl))
             buildConfigField("Boolean", "CRASH_REPORTING_CONFIGURED", hasGoogleServicesJson.toString())
             manifestPlaceholders["crashlyticsCollectionEnabled"] = hasGoogleServicesJson.toString()
-            if (hasReleaseSigningConfig) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -388,6 +388,7 @@ dependencies {
 
     // Glide
     implementation(libs.glide)
+    ksp(libs.glide.ksp)
     
     // UCrop for image cropping
     implementation(libs.ucrop)

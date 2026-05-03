@@ -8,12 +8,16 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.AuthRepository
+import com.novahorizon.wanderly.data.AvatarUploadResult
 import com.novahorizon.wanderly.data.LogoutCoordinator
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ProfileError
 import com.novahorizon.wanderly.data.ProfileStateProvider
+import com.novahorizon.wanderly.data.ProfileUpdateResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -71,6 +75,7 @@ class ProfileViewModel @Inject constructor(
                 val profile = profileStateProvider.refreshProfile()
                 if (profile == null) {
                     _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
+                    _profileEvent.postValue(ProfileEvent.LoggedOut)
                     return@launch
                 }
                 _profile.postValue(profile)
@@ -79,7 +84,8 @@ class ProfileViewModel @Inject constructor(
                     hasCheckedBadgesThisSession = true
                     checkAndUnlockBadges(profile)
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
             }
         }
@@ -88,13 +94,52 @@ class ProfileViewModel @Inject constructor(
     fun uploadAvatar(profile: Profile, uri: Uri) {
         viewModelScope.launch {
             try {
-                val avatarUrl = repository.uploadAvatar(uri, profile.id)
+                val avatarUrl = when (val uploadResult = repository.uploadAvatar(uri, profile.id)) {
+                    is AvatarUploadResult.Success -> uploadResult.path
+                    is AvatarUploadResult.Error -> {
+                        _profileEvent.postValue(
+                            ProfileEvent.ShowMessage(
+                                UiText.DynamicString(uploadResult.message),
+                                isError = true
+                            )
+                        )
+                        return@launch
+                    }
+                    AvatarUploadResult.FileTooLarge -> {
+                        _profileEvent.postValue(
+                            ProfileEvent.ShowMessage(
+                                UiText.resource(R.string.profile_avatar_upload_failed),
+                                isError = true
+                            )
+                        )
+                        return@launch
+                    }
+                    AvatarUploadResult.UnsupportedFormat -> {
+                        _profileEvent.postValue(
+                            ProfileEvent.ShowMessage(
+                                UiText.resource(R.string.profile_avatar_upload_failed),
+                                isError = true
+                            )
+                        )
+                        return@launch
+                    }
+                }
                 val updatedProfile = profile.copy(avatar_url = avatarUrl)
-                if (!repository.updateProfile(updatedProfile)) {
-                    throw IllegalStateException("Avatar uploaded but profile update failed")
+                when (repository.updateProfileDetailed(updatedProfile)) {
+                    is ProfileUpdateResult.Success -> Unit
+                    is ProfileUpdateResult.Error -> {
+                        _profileEvent.postValue(
+                            ProfileEvent.ShowMessage(
+                                UiText.resource(R.string.profile_avatar_upload_failed),
+                                isError = true
+                            )
+                        )
+                        return@launch
+                    }
                 }
                 _profileEvent.postValue(ProfileEvent.AvatarUpdated(avatarUrl))
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
                         UiText.resource(R.string.profile_avatar_upload_failed),
@@ -108,9 +153,43 @@ class ProfileViewModel @Inject constructor(
     fun updateUsername(profile: Profile, newUsername: String) {
         viewModelScope.launch {
             try {
-                val updatedProfile = profile.copy(username = newUsername)
-                if (!repository.updateProfile(updatedProfile)) {
-                    throw IllegalStateException("Profile update failed")
+                when (val result = repository.updateUsername(newUsername)) {
+                    is ProfileUpdateResult.Success -> {
+                        _profile.postValue(result.profile)
+                        _profileState.postValue(ProfileUiState.Loaded(result.profile))
+                    }
+                    is ProfileUpdateResult.Error -> {
+                        when (result.error) {
+                            ProfileError.UsernameTaken -> {
+                                _profileEvent.postValue(
+                                    ProfileEvent.ShowMessage(
+                                        UiText.resource(R.string.profile_username_taken),
+                                        isError = true
+                                    )
+                                )
+                            }
+                            ProfileError.InvalidUsername -> {
+                                _profileEvent.postValue(
+                                    ProfileEvent.ShowMessage(
+                                        UiText.resource(R.string.profile_username_invalid),
+                                        isError = true
+                                    )
+                                )
+                            }
+                            ProfileError.Unauthenticated -> {
+                                _profileEvent.postValue(ProfileEvent.LoggedOut)
+                            }
+                            else -> {
+                                _profileEvent.postValue(
+                                    ProfileEvent.ShowMessage(
+                                        UiText.resource(R.string.profile_username_update_failed),
+                                        isError = true
+                                    )
+                                )
+                            }
+                        }
+                        return@launch
+                    }
                 }
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
@@ -118,7 +197,8 @@ class ProfileViewModel @Inject constructor(
                         isError = false
                     )
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
                         UiText.resource(R.string.profile_username_update_failed),
@@ -131,11 +211,21 @@ class ProfileViewModel @Inject constructor(
 
     fun confirmClassSelection(profile: Profile, className: String) {
         viewModelScope.launch {
-            val updated = profile.copy(explorer_class = className)
-            val success = repository.updateProfile(updated)
-            if (success) {
-                _profileEvent.postValue(ProfileEvent.ClassLocked(className))
-            } else {
+            try {
+                val updated = profile.copy(explorer_class = className)
+                val success = repository.updateProfile(updated)
+                if (success) {
+                    _profileEvent.postValue(ProfileEvent.ClassLocked(className))
+                } else {
+                    _profileEvent.postValue(
+                        ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_class_lock_failed),
+                            isError = true
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
                         UiText.resource(R.string.profile_class_lock_failed),
@@ -161,7 +251,8 @@ class ProfileViewModel @Inject constructor(
                         )
                     )
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _profileEvent.postValue(
                     ProfileEvent.ShowMessage(
                         UiText.resource(R.string.profile_logout_failed),

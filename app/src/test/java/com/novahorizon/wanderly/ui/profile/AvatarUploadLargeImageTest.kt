@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.AvatarRepository
+import com.novahorizon.wanderly.data.AvatarUploadResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -113,11 +114,11 @@ class AvatarUploadLargeImageTest {
 
         override suspend fun getCurrentProfile(): Profile? = profileFlow.value
 
-        override suspend fun uploadAvatar(uri: Uri, profileId: String): String {
+        override suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
             if (bitmap.byteCount > AvatarRepository.MAX_AVATAR_UPLOAD_BYTES) {
-                throw IllegalArgumentException("raw avatar too large: ${bitmap.byteCount}")
+                return AvatarUploadResult.FileTooLarge
             }
-            return "profiles/$profileId/avatar.jpg"
+            return AvatarUploadResult.Success("profiles/$profileId/avatar.jpg")
         }
     }
 

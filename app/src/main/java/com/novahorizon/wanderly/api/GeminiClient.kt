@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -24,8 +25,8 @@ import kotlin.random.Random
 object GeminiClient {
     private const val TAG = "GeminiClient"
     private const val API_URL = "/functions/v1/gemini-proxy"
-    private const val PRIMARY_MODEL = "gemini-3-flash-preview"
-    private const val FALLBACK_MODEL = "gemini-2.5-flash"
+    private const val MAX_ATTEMPTS = 3
+    private val RETRYABLE_HTTP_CODES = setOf(429, 503)
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val req = chain.request()
@@ -111,8 +112,8 @@ object GeminiClient {
         var accessToken = auth.currentAccessTokenOrNull()
             ?: throw Exception("Authentication required for Gemini proxy")
 
-        val finalUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}$API_URL"
-        logDebug { "Starting Gemini $logLabel request model=$PRIMARY_MODEL fallback=$FALLBACK_MODEL bodyLength=${body.toString().length}" }
+        val finalUrl = resolveProxyUrl()
+        logDebug { "Starting Gemini $logLabel proxy request bodyLength=${body.toString().length}" }
 
         val buildRequest = { token: String ->
             Request.Builder()
@@ -144,6 +145,7 @@ object GeminiClient {
                                 throw Exception("Failed to refresh token or token unchanged")
                             }
                         } catch (refreshError: Exception) {
+                            if (refreshError is CancellationException) throw refreshError
                             if (BuildConfig.DEBUG) {
                                 AppLogger.e(TAG, "Session refresh failed: ${LogRedactor.redact(refreshError.message)}")
                             }
@@ -157,7 +159,10 @@ object GeminiClient {
                         if (!resp.isSuccessful) {
                             AppLogger.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
                             logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
-                            throw GeminiHttpException(resp.code, "Proxy call failed: ${resp.code}")
+                            throw GeminiHttpException(
+                                resp.code,
+                                "Proxy call failed: ${resp.code} ${responseBody.take(ERROR_BODY_LOG_LIMIT)}".trim()
+                            )
                         }
                         parseStructuredError(responseBody)?.let { error ->
                             AppLogger.w(TAG, "Gemini $logLabel failed: type=${error.type} status=${error.status}")
@@ -167,6 +172,7 @@ object GeminiClient {
                         extractText(responseBody).getOrElse { throw it }
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     logException(e)
                     throw e
                 }
@@ -232,7 +238,7 @@ object GeminiClient {
     }
 
     internal suspend fun <T> withRetry(
-        maxAttempts: Int = 3,
+        maxAttempts: Int = MAX_ATTEMPTS,
         initialDelayMs: Long = 500,
         jitterMs: (Long) -> Long = { delayMs -> Random.nextLong(delayMs / 2) },
         block: suspend () -> T
@@ -242,6 +248,7 @@ object GeminiClient {
             try {
                 return block()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (!e.isRetryableGeminiFailure()) {
                     throw e
                 }
@@ -253,11 +260,22 @@ object GeminiClient {
     }
 
     private fun Exception.isRetryableGeminiFailure(): Boolean {
-        return this is GeminiHttpException && code in setOf(429, 500, 502, 503, 504)
+        return this is GeminiHttpException && code in RETRYABLE_HTTP_CODES
     }
 
     internal class GeminiHttpException(
         val code: Int,
         message: String
     ) : Exception(message)
+
+    internal fun resolveProxyUrl(
+        configuredProxyUrl: String = BuildConfig.GEMINI_PROXY_URL,
+        supabaseUrl: String = BuildConfig.SUPABASE_URL
+    ): String {
+        return configuredProxyUrl.trim().ifBlank {
+            "${supabaseUrl.trimEnd('/')}$API_URL"
+        }
+    }
+
+    private const val ERROR_BODY_LOG_LIMIT = 512
 }

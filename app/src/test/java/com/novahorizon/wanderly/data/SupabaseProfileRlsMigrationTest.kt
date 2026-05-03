@@ -55,6 +55,32 @@ class SupabaseProfileRlsMigrationTest {
         assertTrue(verification.contains("updated_at"))
     }
 
+    @Test
+    fun `profile rls migration adds admin select and update policies`() {
+        val migration = readMigration("add_admin_profile_policies")
+
+        assertTrue(migration.contains("CREATE INDEX IF NOT EXISTS idx_profiles_admin_role"))
+        assertTrue(migration.contains("WHERE admin_role = true"))
+        assertTrue(migration.contains("CREATE POLICY \"admins_select_all_profiles\""))
+        assertTrue(migration.contains("FOR SELECT"))
+        assertTrue(migration.contains("CREATE POLICY \"admins_update_any_profile\""))
+        assertTrue(migration.contains("FOR UPDATE"))
+        assertTrue(migration.contains("p.id = auth.uid()"))
+        assertTrue(migration.contains("p.admin_role = true"))
+        assertTrue(migration.contains("WITH CHECK"))
+        assertFalse(migration.contains("SET admin_role"))
+    }
+
+    @Test
+    fun `profile rls verification script covers admin update bypass`() {
+        val verification = readProjectFile("supabase/tests/profile_rls_isolation.sql")
+
+        assertTrue(verification.contains("admin_user"))
+        assertTrue(verification.contains("Admin can SELECT User B profile"))
+        assertTrue(verification.contains("Admin can UPDATE User B progress"))
+        assertTrue(verification.contains("admin_role remains protected"))
+    }
+
     private fun readMigration(description: String): String {
         val migrationsDir = projectRoot().resolve("supabase/migrations")
         val migration = migrationsDir.listFiles()

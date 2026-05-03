@@ -108,6 +108,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS friendships_pair_unique_idx
 CREATE INDEX IF NOT EXISTS idx_friendships_user_id
     ON public.friendships USING btree (user_id);
 
+CREATE INDEX IF NOT EXISTS idx_profiles_admin_role
+    ON public.profiles USING btree (id)
+    WHERE admin_role = true;
+
 -- ============================================================
 -- SECTION 4 - ROW LEVEL SECURITY
 -- ============================================================
@@ -122,6 +126,27 @@ DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users read own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users insert own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "admins_select_all_profiles" ON public.profiles;
+DROP POLICY IF EXISTS "admins_update_any_profile" ON public.profiles;
+
+CREATE OR REPLACE FUNCTION public.is_current_profile_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public, pg_temp
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.profiles AS p
+        WHERE p.id = auth.uid()
+          AND p.admin_role = true
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_current_profile_admin() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_current_profile_admin() FROM anon;
+GRANT EXECUTE ON FUNCTION public.is_current_profile_admin() TO authenticated;
 
 CREATE POLICY "Users read own profile"
   ON public.profiles FOR SELECT
@@ -138,6 +163,17 @@ CREATE POLICY "Users update own profile"
   TO authenticated
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "admins_select_all_profiles"
+  ON public.profiles FOR SELECT
+  TO authenticated
+  USING (public.is_current_profile_admin());
+
+CREATE POLICY "admins_update_any_profile"
+  ON public.profiles FOR UPDATE
+  TO authenticated
+  USING (public.is_current_profile_admin())
+  WITH CHECK (public.is_current_profile_admin());
 
 -- AUDIT FIX CRIT-02: friendships use pending request plus recipient action.
 ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;

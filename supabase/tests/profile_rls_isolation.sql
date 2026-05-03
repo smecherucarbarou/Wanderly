@@ -5,10 +5,12 @@
 --   psql "$DATABASE_URL" \
 --     --set=user_a='00000000-0000-0000-0000-000000000001' \
 --     --set=user_b='00000000-0000-0000-0000-000000000002' \
+--     --set=admin_user='00000000-0000-0000-0000-000000000003' \
 --     --set=user_b_friend_code='ABC123' \
 --     --file supabase/tests/profile_rls_isolation.sql
 --
 -- The supplied users must already exist in auth.users and public.profiles.
+-- admin_user must have public.profiles.admin_role = true before running.
 -- The expected result is every "pass" column returning true and no exceptions.
 
 \if :{?user_a}
@@ -19,6 +21,11 @@
 \if :{?user_b}
 \else
   \error 'Missing required psql variable: user_b'
+\endif
+
+\if :{?admin_user}
+\else
+  \error 'Missing required psql variable: admin_user'
 \endif
 
 \if :{?user_b_friend_code}
@@ -85,6 +92,39 @@ SELECT
     count(*) = 1 AS pass
 FROM friend_lookup
 WHERE id = :'user_b'::uuid;
+
+-- Admin can SELECT and UPDATE another user's progress, but cannot change admin_role.
+SELECT set_config('request.jwt.claim.sub', :'admin_user', true);
+
+SELECT
+    'Admin can SELECT User B profile' AS check_name,
+    count(*) = 1 AS pass
+FROM public.profiles
+WHERE id = :'user_b'::uuid;
+
+WITH attempted_admin_update AS (
+    UPDATE public.profiles
+    SET
+        honey = COALESCE(honey, 0) + 1,
+        streak_count = COALESCE(streak_count, 0) + 1
+    WHERE id = :'user_b'::uuid
+    RETURNING id
+)
+SELECT
+    'Admin can UPDATE User B progress' AS check_name,
+    count(*) = 1 AS pass
+FROM attempted_admin_update;
+
+WITH attempted_admin_role_update AS (
+    UPDATE public.profiles
+    SET admin_role = true
+    WHERE id = :'user_b'::uuid
+    RETURNING admin_role
+)
+SELECT
+    'admin_role remains protected' AS check_name,
+    count(*) = 1 AND bool_and(admin_role = false) AS pass
+FROM attempted_admin_role_update;
 
 -- Unauthenticated access is denied.
 RESET ROLE;

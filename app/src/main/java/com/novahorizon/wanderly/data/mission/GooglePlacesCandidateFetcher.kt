@@ -3,6 +3,7 @@ package com.novahorizon.wanderly.data.mission
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -23,12 +24,18 @@ open class GooglePlacesCandidateFetcher @Inject constructor(
         queries.forEachIndexed { index, query ->
             logDebug("Places query[${index + 1}/${queries.size}]=\"$query\" radius=$radius")
             val results = try {
-                if (searchService is GooglePlacesMissionPlaceSearchService) {
+                if (searchService is GooglePlacesSearchService) {
+                    when (val result = searchService.searchTextResult(query, userLat, userLng, radius)) {
+                        is PlacesSearchResult.Success -> result.places
+                        is PlacesSearchResult.Error -> emptyList()
+                    }
+                } else if (searchService is GooglePlacesMissionPlaceSearchService) {
                     searchService.searchText(query, userLat, userLng, radius)
                 } else {
                     searchService.searchText(query)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 logWarning("Places query failed query=\"$query\"", e)
                 emptyList()
             }

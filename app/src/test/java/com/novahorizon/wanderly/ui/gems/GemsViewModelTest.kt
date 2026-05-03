@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.data.HiddenGemCandidateResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
@@ -109,6 +110,37 @@ class GemsViewModelTest {
     }
 
     @Test
+    fun `loadGems maps typed places error to visible error state`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            candidateResult = HiddenGemCandidateResult.Error(
+                reason = HiddenGemCandidateResult.Reason.Server,
+                statusCode = 500,
+                message = "proxy failure"
+            )
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val states = viewModel.observeGemStates()
+        val messages = viewModel.observeMessages()
+
+        try {
+            viewModel.loadGems(44.0, 26.0, "Bucharest")
+            advanceUntilIdle()
+
+            assertEquals(
+                GemsViewModel.GemsState.Error(UiText.StringResource(R.string.gems_loading_failed)),
+                states.last()
+            )
+            assertEquals(UiText.StringResource(R.string.gems_loading_failed), messages.last())
+            assertEquals(0, repository.curateCalls)
+        } finally {
+            store.clear()
+            viewModel.gemsState.removeObserver(states.observer)
+            viewModel.message.removeObserver(messages.observer)
+        }
+    }
+
+    @Test
     fun `loadGems emits empty state when no fresh candidates are available`() = runTest {
         val repository = TestWanderlyRepository(context = context, candidates = emptyList())
         val (viewModel, store) = createViewModel(repository)
@@ -169,6 +201,7 @@ class GemsViewModelTest {
         context: Context,
         private val candidates: List<DiscoveredPlace> = emptyList(),
         private val gems: List<Gem> = emptyList(),
+        private val candidateResult: HiddenGemCandidateResult? = null,
         private val fetchError: Exception? = null
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow<Profile?>(null)
@@ -187,6 +220,17 @@ class GemsViewModelTest {
         ): List<DiscoveredPlace> {
             fetchError?.let { throw it }
             return candidates
+        }
+
+        override suspend fun fetchHiddenGemCandidatesResult(
+            lat: Double,
+            lng: Double,
+            radius: Int,
+            city: String?
+        ): HiddenGemCandidateResult {
+            candidateResult?.let { return it }
+            fetchError?.let { throw it }
+            return HiddenGemCandidateResult.Success(candidates)
         }
 
         override suspend fun curateHiddenGems(

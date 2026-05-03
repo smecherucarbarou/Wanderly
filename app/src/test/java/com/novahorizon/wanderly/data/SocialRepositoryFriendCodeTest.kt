@@ -39,7 +39,8 @@ class SocialRepositoryFriendCodeTest {
         assertFalse(addFriend.contains("\"Failed to add friend: ${'$'}{e.message}\""))
         assertFalse(addFriend.contains("e.message}"))
         assertTrue(addFriend.contains("logError(\"Error adding friend\", e)"))
-        assertTrue(addFriend.contains("\"Could not add friend. Please try again.\""))
+        assertTrue(addFriend.contains("AddFriendResult.Failure"))
+        assertTrue(source.contains("Failure -> \"Could not add friend. Please try again.\""))
     }
 
     private fun readSocialRepositorySource(): String {

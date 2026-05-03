@@ -33,6 +33,7 @@ import com.novahorizon.wanderly.ui.common.RankUiFormatter
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -85,7 +86,8 @@ class MissionsFragment : Fragment() {
                     }
                     _binding ?: return@launch
                     viewModel.verifyPhoto(bitmap)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     _binding ?: return@launch
                     showSnackbar(getString(R.string.mission_photo_process_failed), isError = true)
                 }
@@ -269,6 +271,7 @@ class MissionsFragment : Fragment() {
                         logDebug("City from geocoder: $cityName")
                         viewModel.generateMission(location.latitude, location.longitude, cityName)
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         logError("Error getting city name", e)
                         viewModel.generateMission(location.latitude, location.longitude, null)
                     }
@@ -378,7 +381,8 @@ class MissionsFragment : Fragment() {
                 tempImageFile = tempFile
                 tempImageUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
                 takePhotoLauncher.launch(tempImageUri)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 showSnackbar(getString(R.string.mission_camera_start_failed), isError = true)
             }
         }

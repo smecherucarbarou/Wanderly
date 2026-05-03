@@ -42,6 +42,18 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
   })
 }
 
+function diagnosticId(): string {
+  return crypto.randomUUID()
+}
+
+function sanitizedUpstreamBody(responseText: string): string {
+  return responseText.length > 0 ? "[redacted]" : ""
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -145,7 +157,7 @@ async function consumeApiQuota(
 }
 
 function isModelFallbackStatus(status: number): boolean {
-  return status === 404 || status === 503
+  return [404, 408, 409, 429, 500, 502, 503, 504].includes(status)
 }
 
 async function callGemini(
@@ -184,7 +196,7 @@ Deno.serve(async (req: Request) => {
   try {
     auth = await verifyAuth(req)
   } catch {
-    return jsonResponse(req, { error: "Missing Supabase auth config" }, 500)
+    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
   }
   if (!auth) {
     return jsonResponse(req, { error: "Invalid bearer token" }, 401)
@@ -192,7 +204,7 @@ Deno.serve(async (req: Request) => {
 
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY")
   if (!geminiApiKey) {
-    return jsonResponse(req, { error: "Missing GEMINI_API_KEY secret" }, 500)
+    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
   }
 
   try {
@@ -228,21 +240,28 @@ Deno.serve(async (req: Request) => {
 
     const responseText = await geminiResponse.text()
     if (!geminiResponse.ok) {
+      const errorId = diagnosticId()
+      console.error(`Gemini upstream error id=${errorId} status=${geminiResponse.status} body_bytes=${responseText.length}`)
       return jsonResponse(req, {
         ok: false,
         error: {
-          type: "model_unavailable_or_bad_endpoint",
+          type: "gemini_upstream_request_failed",
           status: geminiResponse.status,
-          message: `Gemini model or endpoint unavailable (tried: ${geminiModel}, ${geminiFallbackModel})`,
+          upstream_status: geminiResponse.status,
+          message: "Gemini upstream request failed",
+          upstream_body: sanitizedUpstreamBody(responseText),
+          diagnostic_id: errorId,
         },
-      }, 200)
+      }, geminiResponse.status)
     }
 
     return new Response(responseText, {
       status: geminiResponse.status,
       headers: corsHeaders,
     })
-  } catch {
-    return jsonResponse(req, { error: "Gemini proxy request failed" }, 500)
+  } catch (error) {
+    const errorId = diagnosticId()
+    console.error(`Gemini proxy internal error id=${errorId} kind=${describeError(error)}`)
+    return jsonResponse(req, { error: "Gemini proxy request failed", detail: "Internal error" }, 502)
   }
 })

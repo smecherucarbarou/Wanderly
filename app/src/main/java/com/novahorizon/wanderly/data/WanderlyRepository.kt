@@ -22,6 +22,15 @@ open class WanderlyRepository(context: Context) {
 
     open suspend fun updateProfile(profile: Profile): Boolean = profileRepository.updateProfile(profile)
 
+    open suspend fun updateProfileDetailed(profile: Profile): ProfileUpdateResult =
+        profileRepository.updateProfileDetailed(profile)
+
+    open suspend fun updateUsername(username: String): ProfileUpdateResult =
+        profileRepository.updateUsername(username)
+
+    open suspend fun adminUpdateProfileStats(profileId: String, honey: Int, streakCount: Int): Boolean =
+        profileRepository.adminUpdateProfileStats(profileId, honey, streakCount)
+
     open suspend fun completeMission(): MissionCompletionResult = profileRepository.completeMission()
 
     open suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
@@ -36,6 +45,18 @@ open class WanderlyRepository(context: Context) {
 
     open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)
 
+    open suspend fun addFriendByCodeResult(friendCode: String): AddFriendResult =
+        socialRepository.addFriendByCodeResult(friendCode)
+
+    open suspend fun getIncomingFriendRequests(): List<Profile> =
+        socialRepository.getIncomingFriendRequests()
+
+    open suspend fun acceptFriendRequest(requesterId: String): FriendRequestActionResult =
+        socialRepository.acceptFriendRequest(requesterId)
+
+    open suspend fun rejectFriendRequest(requesterId: String): FriendRequestActionResult =
+        socialRepository.rejectFriendRequest(requesterId)
+
     open suspend fun removeFriend(friendId: String): Boolean = socialRepository.removeFriend(friendId)
 
     open suspend fun getFriends(): List<Profile> = socialRepository.getFriends()
@@ -48,6 +69,14 @@ open class WanderlyRepository(context: Context) {
 
     open suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> =
         discoveryRepository.fetchHiddenGemCandidates(lat, lng, radius, city)
+
+    open suspend fun fetchHiddenGemCandidatesResult(
+        lat: Double,
+        lng: Double,
+        radius: Int,
+        city: String? = null
+    ): HiddenGemCandidateResult =
+        discoveryRepository.fetchHiddenGemCandidatesResult(lat, lng, radius, city)
 
     open suspend fun curateHiddenGems(
         city: String,
@@ -115,7 +144,7 @@ open class WanderlyRepository(context: Context) {
 
     suspend fun clearLocalState() = preferencesStore.clearAll()
 
-    open suspend fun uploadAvatar(uri: Uri, profileId: String): String =
+    open suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult =
         profileRepository.uploadAvatar(uri, profileId)
 
     fun preferencesStore(): PreferencesStore = preferencesStore

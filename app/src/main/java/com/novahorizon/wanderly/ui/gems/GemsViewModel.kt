@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.data.HiddenGemCandidateResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -48,7 +49,15 @@ class GemsViewModel @Inject constructor(
                     )
                 )
 
-                val candidates = repository.fetchHiddenGemCandidates(lat, lng, 2500, city)
+                val candidates = when (
+                    val result = repository.fetchHiddenGemCandidatesResult(lat, lng, 2500, city)
+                ) {
+                    is HiddenGemCandidateResult.Success -> result.candidates
+                    is HiddenGemCandidateResult.Error -> {
+                        handleCandidateLoadError(result)
+                        return@launch
+                    }
+                }
                     .filterNot { seenGemsHistory.contains(it.name) }
                     .take(40)
 
@@ -90,5 +99,23 @@ class GemsViewModel @Inject constructor(
 
     fun clearMessage() {
         _message.value = null
+    }
+
+    private fun handleCandidateLoadError(error: HiddenGemCandidateResult.Error) {
+        val exception = IllegalStateException(
+            "Hidden gem candidate load failed: ${error.reason}, status=${error.statusCode}"
+        )
+        CrashReporter.recordNonFatal(
+            CrashEvent.GEMS_LOAD_FAILED,
+            exception,
+            CrashKey.COMPONENT to "gems",
+            CrashKey.OPERATION to "load_candidates"
+        )
+        if (BuildConfig.DEBUG) {
+            AppLogger.e("GemsViewModel", "Hidden gem candidate load failed [${error.reason}, status=${error.statusCode}]")
+        }
+        val message = UiText.resource(R.string.gems_loading_failed)
+        _gemsState.postValue(GemsState.Error(message))
+        _message.postValue(message)
     }
 }

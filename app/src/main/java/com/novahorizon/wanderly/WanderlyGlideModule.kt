@@ -1,4 +1,4 @@
-package com.novahorizon.wanderly.ui
+package com.novahorizon.wanderly
 
 import com.bumptech.glide.annotation.GlideModule
 import com.bumptech.glide.module.AppGlideModule

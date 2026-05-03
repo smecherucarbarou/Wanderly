@@ -9,6 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.StrictModeInitializer
 import com.novahorizon.wanderly.workers.StreakWorker
@@ -17,7 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import org.osmdroid.config.Configuration
 import java.util.concurrent.TimeUnit
 import dagger.hilt.android.HiltAndroidApp
 
@@ -32,6 +32,7 @@ class WanderlyApplication : Application() {
         
         // Initialize Supabase
         com.novahorizon.wanderly.api.SupabaseClient.init(this)
+        WanderlyNotificationManager.createNotificationChannel(this)
 
         initOsmdroidAsync()
 
@@ -42,13 +43,7 @@ class WanderlyApplication : Application() {
     }
 
     private fun initOsmdroidAsync() {
-        appScope.launch(Dispatchers.IO) {
-            Configuration.getInstance().load(
-                applicationContext,
-                applicationContext.getSharedPreferences("osmdroid", MODE_PRIVATE)
-            )
-            Configuration.getInstance().userAgentValue = packageName
-        }
+        OsmdroidInitializer.start(this, appScope)
     }
 
     private fun setupBackgroundWorkers() {

@@ -2,14 +2,18 @@ package com.novahorizon.wanderly.notifications
 
 import com.novahorizon.wanderly.observability.AppLogger
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
@@ -43,6 +47,10 @@ object WanderlyNotificationManager {
     private const val OVERTAKEN_COOLDOWN_MS = 45 * 60 * 1000L
     private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
     internal var clock: Clock = SystemClock
+    @Volatile
+    private var permissionWarningLogged = false
+    @Volatile
+    private var systemDisabledWarningLogged = false
 
     private suspend fun isNotificationCooldownActive(context: Context, key: String): Boolean {
         val preferencesStore = PreferencesStore(context)
@@ -99,8 +107,16 @@ object WanderlyNotificationManager {
         dedupKey: String? = null,
         bypassCooldown: Boolean = false
     ): Boolean {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            logWarnOnce(NotificationWarning.Permission, "POST_NOTIFICATIONS permission not granted")
+            return false
+        }
+
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            logWarn("Notifications are disabled. Cannot show alert.")
+            logWarnOnce(NotificationWarning.SystemDisabled, "Notifications disabled by user in system settings")
             return false
         }
 
@@ -267,9 +283,28 @@ object WanderlyNotificationManager {
         }
     }
 
+    private fun logWarnOnce(type: NotificationWarning, message: String) {
+        when (type) {
+            NotificationWarning.Permission -> {
+                if (permissionWarningLogged) return
+                permissionWarningLogged = true
+            }
+            NotificationWarning.SystemDisabled -> {
+                if (systemDisabledWarningLogged) return
+                systemDisabledWarningLogged = true
+            }
+        }
+        logWarn(message)
+    }
+
     private fun logError(message: String) {
         if (BuildConfig.DEBUG) {
             AppLogger.e(LOG_TAG, LogRedactor.redact(message))
         }
+    }
+
+    private enum class NotificationWarning {
+        Permission,
+        SystemDisabled
     }
 }

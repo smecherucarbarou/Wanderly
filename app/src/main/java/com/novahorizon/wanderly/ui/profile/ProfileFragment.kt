@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
@@ -93,20 +94,43 @@ class ProfileFragment : Fragment() {
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         _binding ?: return@registerForActivityResult
-        if (uri != null) {
-            val destinationFile = File.createTempFile("avatar_crop_", ".jpg", requireContext().cacheDir)
-            pendingAvatarDestinationUri = Uri.fromFile(destinationFile)
-            val destinationUri = pendingAvatarDestinationUri ?: return@registerForActivityResult
-            val uCropIntent = UCrop.of(uri, destinationUri)
-                .withAspectRatio(1f, 1f)
-                .withMaxResultSize(400, 400)
-                .withOptions(UCrop.Options().apply {
+
+        if (uri == null) return@registerForActivityResult
+
+        val imageCacheDir = File(requireContext().cacheDir, "images").apply {
+            mkdirs()
+        }
+
+        val destinationFile = File.createTempFile(
+            "avatar_crop_",
+            ".jpg",
+            imageCacheDir
+        )
+
+        val destinationUri = FileProvider.getUriForFile(
+            requireContext(),
+            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            destinationFile
+        )
+
+        pendingAvatarDestinationUri = destinationUri
+
+        val uCropIntent = UCrop.of(uri, destinationUri)
+            .withAspectRatio(1f, 1f)
+            .withMaxResultSize(400, 400)
+            .withOptions(
+                UCrop.Options().apply {
                     setCircleDimmedLayer(true)
                     setShowCropGrid(false)
-                })
-                .getIntent(requireContext())
-            cropImage.launch(uCropIntent)
-        }
+                }
+            )
+            .getIntent(requireContext())
+            .apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
+        cropImage.launch(uCropIntent)
     }
 
     override fun onCreateView(

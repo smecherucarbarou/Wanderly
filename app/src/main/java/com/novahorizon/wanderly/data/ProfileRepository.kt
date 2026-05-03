@@ -11,11 +11,14 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.plugins.HttpRequestTimeoutException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,14 +26,26 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import java.io.IOException
-import java.util.UUID
+
+sealed class ProfileError {
+    object SchemaCache : ProfileError()
+    object MissingProfile : ProfileError()
+    object Unauthenticated : ProfileError()
+    object UsernameTaken : ProfileError()
+    object InvalidUsername : ProfileError()
+    object Unknown : ProfileError()
+}
+
+sealed class ProfileUpdateResult {
+    data class Success(val profile: Profile) : ProfileUpdateResult()
+    data class Error(val error: ProfileError, val message: String? = null) : ProfileUpdateResult()
+}
 
 class ProfileRepository(
     private val context: Context,
     private val preferencesStore: PreferencesStore
 ) {
     internal data class ClientProfileUpdate(
-        val username: String?,
         val badges: List<String>?,
         val cities_visited: List<String>?,
         val avatar_url: String?,
@@ -38,11 +53,10 @@ class ProfileRepository(
         val explorer_class: String?
     )
 
-    @Serializable
-    internal data class ClientProfileInsert(
-        val id: String,
-        val username: String?,
-        val friend_code: String?
+    internal data class AdminProfileStatsUpdate(
+        val honey: Int,
+        val streak_count: Int,
+        val hive_rank: Int
     )
 
     @Serializable
@@ -77,6 +91,13 @@ class ProfileRepository(
         val last_mission_date: String? = null
     )
 
+    @Serializable
+    private data class UsernameUpdateRpcResponse(
+        val success: Boolean,
+        val error_code: String? = null,
+        val error_message: String? = null
+    )
+
     private val _currentProfile = MutableStateFlow<Profile?>(null)
     val currentProfile: StateFlow<Profile?> = _currentProfile.asStateFlow()
 
@@ -91,38 +112,23 @@ class ProfileRepository(
 
             val userId = session.user?.id
                 ?: return@withContext null
-            val loadedProfile = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
-                .select { filter { eq("id", userId) } }
-                .decodeSingleOrNull<Profile>()
-
-            var profile = loadedProfile
-            val userEmail = session.user?.email
-
-            if (profile == null) {
-                val userMetadata = session.user?.userMetadata
-                val signupUsername = userMetadata?.get("username")?.toString()?.replace("\"", "")
-                val defaultName = signupUsername ?: userEmail?.substringBefore("@") ?: "Explorer"
-
-                val newProfile = Profile(
-                    id = userId,
-                    username = defaultName,
-                    honey = 0,
-                    hive_rank = HiveRank.fromHoney(0),
-                    friend_code = UUID.randomUUID().toString().substring(0, 6).uppercase(),
-                    streak_count = 0
+            val loadedProfile = selectProfileWithSchemaRetry(userId)
+            if (loadedProfile == null) {
+                val error = IllegalStateException("Authenticated user has no profile row.")
+                CrashReporter.recordNonFatal(
+                    CrashEvent.PROFILE_SYNC_FAILED,
+                    error,
+                    CrashKey.COMPONENT to "profile_repository",
+                    CrashKey.OPERATION to "missing_profile"
                 )
-                SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].upsert(
-                    ClientProfileInsert(
-                        id = newProfile.id,
-                        username = newProfile.username,
-                        friend_code = newProfile.friend_code
-                    )
-                )
-                profile = newProfile
+                logError("Authenticated profile row missing; signing out.", error)
+                signOutForFatalProfileError()
+                _currentProfile.value = null
+                return@withContext null
             }
 
-            profile = normalizeProfile(profile)
-            if (loadedProfile != null && loadedProfile.hive_rank != profile.hive_rank) {
+            var profile = normalizeProfile(loadedProfile)
+            if (loadedProfile.hive_rank != profile.hive_rank) {
                 persistProfile(profile)
             }
 
@@ -133,6 +139,7 @@ class ProfileRepository(
             )
             profile
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             CrashReporter.recordNonFatal(
                 CrashEvent.PROFILE_SYNC_FAILED,
                 e,
@@ -145,16 +152,29 @@ class ProfileRepository(
     }
 
     suspend fun updateProfile(profile: Profile): Boolean = withContext(Dispatchers.IO) {
+        when (updateProfileDetailed(profile)) {
+            is ProfileUpdateResult.Success -> true
+            is ProfileUpdateResult.Error -> false
+        }
+    }
+
+    suspend fun updateProfileDetailed(profile: Profile): ProfileUpdateResult = withContext(Dispatchers.IO) {
         try {
-            val normalizedProfile = normalizeProfile(profile)
-            persistProfile(normalizedProfile)
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+                ?: return@withContext ProfileUpdateResult.Error(ProfileError.Unauthenticated)
+            val userId = session.user?.id
+                ?: return@withContext ProfileUpdateResult.Error(ProfileError.Unauthenticated)
+            val normalizedProfile = normalizeProfile(profile.copy(id = userId))
+            persistProfile(normalizedProfile, userId)
             _currentProfile.value = normalizedProfile
             preferencesStore.cacheProfileStreakState(
                 lastMissionDate = normalizedProfile.last_mission_date,
                 streakCount = normalizedProfile.streak_count
             )
-            true
+            ProfileUpdateResult.Success(normalizedProfile)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            val profileError = if (isPostgrestSchemaCacheError(e)) ProfileError.SchemaCache else ProfileError.Unknown
             CrashReporter.recordNonFatal(
                 CrashEvent.PROFILE_SYNC_FAILED,
                 e,
@@ -162,6 +182,109 @@ class ProfileRepository(
                 CrashKey.OPERATION to "update_profile"
             )
             logError("Update profile failed: ${e.message}", e)
+            ProfileUpdateResult.Error(profileError, e.message)
+        }
+    }
+
+    suspend fun updateUsername(newUsername: String): ProfileUpdateResult = withContext(Dispatchers.IO) {
+        try {
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+                ?: return@withContext ProfileUpdateResult.Error(ProfileError.Unauthenticated)
+            val userId = session.user?.id
+                ?: return@withContext ProfileUpdateResult.Error(ProfileError.Unauthenticated)
+
+            val response = withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest
+                    .rpc("update_profile_username", mapOf("p_username" to newUsername))
+                    .decodeSingle<UsernameUpdateRpcResponse>()
+            }
+
+            if (!response.success) {
+                val error = mapUsernameRpcErrorCode(response.error_code)
+                if (error == ProfileError.Unauthenticated) {
+                    signOutForFatalProfileError()
+                }
+                if (error == ProfileError.Unknown) {
+                    CrashReporter.recordNonFatal(
+                        CrashEvent.PROFILE_SYNC_FAILED,
+                        IllegalStateException("Username RPC failed: ${response.error_code} ${response.error_message}"),
+                        CrashKey.COMPONENT to "profile_repository",
+                        CrashKey.OPERATION to "update_username"
+                    )
+                }
+                return@withContext ProfileUpdateResult.Error(error, response.error_message)
+            }
+
+            val refreshed = selectProfileWithSchemaRetry(userId)
+            if (refreshed == null) {
+                signOutForFatalProfileError()
+                _currentProfile.value = null
+                return@withContext ProfileUpdateResult.Error(ProfileError.MissingProfile)
+            }
+
+            val normalized = normalizeProfile(refreshed)
+            _currentProfile.value = normalized
+            preferencesStore.cacheProfileStreakState(
+                lastMissionDate = normalized.last_mission_date,
+                streakCount = normalized.streak_count
+            )
+            ProfileUpdateResult.Success(normalized)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            val profileError = if (isPostgrestSchemaCacheError(e)) ProfileError.SchemaCache else ProfileError.Unknown
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_SYNC_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "update_username"
+            )
+            logError("Username update failed: ${e.message}", e)
+            ProfileUpdateResult.Error(profileError, e.message)
+        }
+    }
+
+    suspend fun adminUpdateProfileStats(
+        profileId: String,
+        honey: Int,
+        streakCount: Int
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val payload = toAdminProfileStatsUpdate(honey, streakCount)
+            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
+                Profile::honey setTo payload.honey
+                Profile::streak_count setTo payload.streak_count
+                Profile::hive_rank setTo payload.hive_rank
+            }) {
+                filter { eq("id", profileId) }
+            }
+
+            val refreshed = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
+                .select { filter { eq("id", profileId) } }
+                .decodeSingleOrNull<Profile>()
+                ?.let(::normalizeProfile)
+
+            if (refreshed == null || refreshed.honey != payload.honey || refreshed.streak_count != payload.streak_count) {
+                logWarn("Admin stats update did not persist for profile.")
+                return@withContext false
+            }
+
+            if (_currentProfile.value?.id == profileId) {
+                _currentProfile.value = refreshed
+                preferencesStore.cacheProfileStreakState(
+                    lastMissionDate = refreshed.last_mission_date,
+                    streakCount = refreshed.streak_count
+                )
+            }
+            true
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            CrashReporter.recordNonFatal(
+                CrashEvent.PROFILE_SYNC_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "admin_update_profile_stats"
+            )
+            logError("Admin stats update failed: ${e.message}", e)
             false
         }
     }
@@ -204,6 +327,7 @@ class ProfileRepository(
                 MissionCompletionResult.ServerFailure
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             mapMissionCompletionFailure(e)
         }
     }
@@ -221,6 +345,7 @@ class ProfileRepository(
                 _currentProfile.value = _currentProfile.value?.copy(last_lat = lat, last_lng = lng)
                 SensitiveProfileMutationResult.Success(_currentProfile.value)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 mapSensitiveProfileMutationFailure(e)
             }
         }
@@ -245,6 +370,7 @@ class ProfileRepository(
                 SensitiveProfileMutationResult.Rejected("not_hard_lost")
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             mapSensitiveProfileMutationFailure(e)
         }
     }
@@ -269,6 +395,7 @@ class ProfileRepository(
                 SensitiveProfileMutationResult.Rejected(response.reason ?: "not_restored")
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             mapSensitiveProfileMutationFailure(e)
         }
     }
@@ -278,6 +405,7 @@ class ProfileRepository(
             val profile = getCurrentProfile() ?: return@withContext false
             updateProfile(profile.copy(last_mission_date = "2000-01-01"))
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             CrashReporter.recordNonFatal(
                 CrashEvent.PROFILE_SYNC_FAILED,
                 e,
@@ -289,7 +417,8 @@ class ProfileRepository(
         }
     }
 
-    suspend fun uploadAvatar(uri: Uri, profileId: String): String = avatarRepository.uploadAvatar(uri, profileId)
+    suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult =
+        avatarRepository.uploadAvatar(uri, profileId)
 
     suspend fun onVisitDateUpdated(date: String) {
         preferencesStore.updateLastVisitDate(date)
@@ -301,19 +430,56 @@ class ProfileRepository(
         ).withDerivedHiveRank()
     }
 
-    private suspend fun persistProfile(profile: Profile) {
+    private suspend fun persistProfile(profile: Profile, userId: String = profile.id) {
         val payload = toClientProfileUpdate(profile)
 
         // Only user-editable profile columns are patched directly; server-owned fields use RPCs.
-        SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
-            Profile::username setTo payload.username
-            Profile::badges setTo payload.badges
-            Profile::cities_visited setTo payload.cities_visited
-            Profile::avatar_url setTo payload.avatar_url
-            Profile::friend_code setTo payload.friend_code
-            Profile::explorer_class setTo payload.explorer_class
-        }) {
-            filter { eq("id", profile.id) }
+        withPostgrestSchemaCacheRetry {
+            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
+                Profile::badges setTo payload.badges
+                Profile::cities_visited setTo payload.cities_visited
+                Profile::avatar_url setTo payload.avatar_url
+                Profile::friend_code setTo payload.friend_code
+                Profile::explorer_class setTo payload.explorer_class
+            }) {
+                filter { eq("id", userId) }
+            }
+        }
+    }
+
+    private suspend fun selectProfileWithSchemaRetry(userId: String): Profile? =
+        withPostgrestSchemaCacheRetry {
+            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
+                .select { filter { eq("id", userId) } }
+                .decodeSingleOrNull<Profile>()
+        }
+
+    private suspend fun <T> withPostgrestSchemaCacheRetry(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (!isPostgrestSchemaCacheError(e)) {
+                throw e
+            }
+            delay(POSTGREST_SCHEMA_CACHE_RETRY_DELAY_MS)
+            block()
+        }
+    }
+
+    private suspend fun signOutForFatalProfileError() {
+        try {
+            SupabaseClient.client.auth.signOut()
+            preferencesStore.clearAll()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            CrashReporter.recordNonFatal(
+                CrashEvent.AUTH_SIGN_OUT_FAILED,
+                e,
+                CrashKey.COMPONENT to "profile_repository",
+                CrashKey.OPERATION to "fatal_profile_sign_out"
+            )
+            logError("Fatal profile sign-out failed: ${e.message}", e)
         }
     }
 
@@ -375,12 +541,37 @@ class ProfileRepository(
 
         internal fun toClientProfileUpdate(profile: Profile): ClientProfileUpdate {
             return ClientProfileUpdate(
-                username = profile.username,
                 badges = profile.badges,
                 cities_visited = profile.cities_visited,
                 avatar_url = normalizeAvatarUrl(profile.avatar_url),
                 friend_code = profile.friend_code,
                 explorer_class = profile.explorer_class
+            )
+        }
+
+        internal fun mapUsernameRpcErrorCode(errorCode: String?): ProfileError {
+            return when (errorCode) {
+                "username_taken" -> ProfileError.UsernameTaken
+                "invalid_username" -> ProfileError.InvalidUsername
+                "not_authenticated" -> ProfileError.Unauthenticated
+                else -> ProfileError.Unknown
+            }
+        }
+
+        internal fun isPostgrestSchemaCacheError(error: Throwable): Boolean {
+            return generateSequence(error) { it.cause }.any { throwable ->
+                val message = throwable.message?.lowercase().orEmpty()
+                message.contains("pgrst002")
+            }
+        }
+
+        internal fun toAdminProfileStatsUpdate(honey: Int, streakCount: Int): AdminProfileStatsUpdate {
+            val safeHoney = honey.coerceAtLeast(0)
+            val safeStreakCount = streakCount.coerceAtLeast(0)
+            return AdminProfileStatsUpdate(
+                honey = safeHoney,
+                streak_count = safeStreakCount,
+                hive_rank = HiveRank.fromHoney(safeHoney)
             )
         }
 
@@ -400,6 +591,8 @@ class ProfileRepository(
 
         internal fun isAvatarFileUsable(exists: Boolean, length: Long): Boolean =
             AvatarRepository.isAvatarFileUsable(exists, length)
+
+        private const val POSTGREST_SCHEMA_CACHE_RETRY_DELAY_MS = 1_500L
     }
 
     private fun logDebug(message: String) {

@@ -3,8 +3,6 @@ package com.novahorizon.wanderly.data
 import com.novahorizon.wanderly.observability.AppLogger
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
@@ -17,15 +15,13 @@ import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.Clock
 import com.novahorizon.wanderly.util.SystemClock
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
 
 class AvatarRepository(
@@ -86,25 +82,25 @@ class AvatarRepository(
             logDebug("Upload success bucket=$bucket path=${target.filePath}")
             AvatarUploadResult.Success(target.filePath)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Upload failed bucket=$bucket path=${target.filePath} error=${e.message}", e)
             AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
         }
     }
 
-    suspend fun uploadAvatar(uri: Uri, profileId: String): String = withContext(Dispatchers.IO) {
+    suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult = withContext(Dispatchers.IO) {
         val auth = SupabaseClient.client.auth
         val accessToken = auth.currentAccessTokenOrNull() ?: run {
             logError("No access token available for avatar upload")
-            throw IllegalStateException("No access token available for avatar upload")
+            return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
         }
 
         logDebug("Uploading avatar")
 
         try {
-            val avatarBytes = buildAvatarBytes(uri) ?: run {
-                logError("Could not read image bytes from: $uri")
-                throw IllegalStateException("Could not read image bytes from: $uri")
-            }
+            val avatarBytes = readAvatarBytes(uri)
+            val mimeType = resolveAvatarMimeType(uri)
+            validateAvatarPayload(avatarBytes, mimeType)?.let { return@withContext it }
 
             val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
             val bucket = Constants.STORAGE_BUCKET_AVATARS
@@ -113,7 +109,7 @@ class AvatarRepository(
                 bucket = bucket,
                 profileId = profileId,
                 versionToken = clock.nowMillis().toString(),
-                mimeType = "image/jpeg"
+                mimeType = mimeType
             )
 
             logDebug("Target upload URL: ${target.uploadUrl}")
@@ -123,7 +119,7 @@ class AvatarRepository(
                 .addHeader("Authorization", "Bearer $accessToken")
                 .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
                 .apply { if (target.useUpsert) addHeader("x-upsert", "true") }
-                .post(avatarBytes.toRequestBody("image/jpeg".toMediaType()))
+                .post(avatarBytes.toRequestBody(mimeType.toMediaType()))
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -131,14 +127,24 @@ class AvatarRepository(
                 if (!response.isSuccessful) {
                     val message = buildAvatarUploadFailureMessage(response.code, responseBody)
                     logError(message)
-                    throw IllegalStateException(message)
+                    val error = toAvatarUploadError(response.code, responseBody)
+                    if (!error.isRetryable) {
+                        CrashReporter.recordNonFatal(
+                            CrashEvent.PROFILE_AVATAR_UPLOAD_FAILED,
+                            IllegalStateException(message),
+                            CrashKey.COMPONENT to "profile",
+                            CrashKey.OPERATION to "avatar_upload_http"
+                        )
+                    }
+                    return@withContext error
                 }
                 logDebug("Avatar upload successful")
             }
 
             logDebug("Generated avatar storage path")
-            target.filePath
+            AvatarUploadResult.Success(target.filePath)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             CrashReporter.recordNonFatal(
                 CrashEvent.PROFILE_AVATAR_UPLOAD_FAILED,
                 e,
@@ -146,61 +152,18 @@ class AvatarRepository(
                 CrashKey.OPERATION to "avatar_upload"
             )
             logError("Exception during avatar upload", e)
-            throw e
+            AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
         }
     }
 
-    private fun buildAvatarBytes(uri: Uri): ByteArray? {
-        val localFilePath = extractLocalFilePath(uri.scheme, uri.path)
-        if (localFilePath != null) {
-            val avatarFile = File(localFilePath)
-            if (!isAvatarFileUsable(avatarFile.exists(), avatarFile.length())) {
-                return null
-            }
-            return avatarFile.readBytes()
-        }
-
-        val bounds = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-        }
-        openAvatarInputStream(uri)?.use { inputStream ->
-            BitmapFactory.decodeStream(inputStream, null, bounds)
-        } ?: return null
-
-        val decodeOptions = BitmapFactory.Options().apply {
-            inSampleSize = calculateInSampleSize(bounds, reqWidth = 512, reqHeight = 512)
-        }
-        val bitmap = openAvatarInputStream(uri)?.use { inputStream ->
-            BitmapFactory.decodeStream(inputStream, null, decodeOptions)
-        } ?: return null
-
-        return ByteArrayOutputStream().use { outputStream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
-            outputStream.toByteArray()
-        }
+    private fun readAvatarBytes(uri: Uri): ByteArray {
+        return context.contentResolver.openInputStream(uri)?.use { input ->
+            input.readBytes()
+        } ?: throw IllegalStateException("Could not open avatar input stream")
     }
 
-    private fun openAvatarInputStream(uri: Uri) = extractLocalFilePath(uri.scheme, uri.path)?.let { FileInputStream(it) }
-        ?: context.contentResolver.openInputStream(uri)
-
-    private fun calculateInSampleSize(
-        options: BitmapFactory.Options,
-        reqWidth: Int,
-        reqHeight: Int
-    ): Int {
-        val (height, width) = options.outHeight to options.outWidth
-        var inSampleSize = 1
-
-        if (height > reqHeight || width > reqWidth) {
-            var halfHeight = height / 2
-            var halfWidth = width / 2
-
-            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
-                inSampleSize *= 2
-            }
-        }
-
-        return inSampleSize
+    private fun resolveAvatarMimeType(uri: Uri): String {
+        return context.contentResolver.getType(uri) ?: "image/jpeg"
     }
 
     private fun logDebug(message: String) {
@@ -275,6 +238,20 @@ class AvatarRepository(
             }
         }
 
+        internal fun toAvatarUploadError(code: Int, responseBody: String): AvatarUploadResult.Error {
+            return if (code == 544 || responseBody.contains("DatabaseTimeout", ignoreCase = true)) {
+                AvatarUploadResult.Error(
+                    message = "Upload failed. Please try again.",
+                    isRetryable = true
+                )
+            } else {
+                AvatarUploadResult.Error(
+                    message = "Could not upload avatar. Please try another image.",
+                    isRetryable = false
+                )
+            }
+        }
+
         internal fun extractLocalFilePath(scheme: String?, path: String?): String? {
             return path?.takeIf { scheme.equals("file", ignoreCase = true) && it.isNotBlank() }
         }
@@ -287,7 +264,7 @@ class AvatarRepository(
 
 sealed class AvatarUploadResult {
     data class Success(val path: String) : AvatarUploadResult()
-    data class Error(val message: String) : AvatarUploadResult()
+    data class Error(val message: String, val isRetryable: Boolean = false) : AvatarUploadResult()
     object UnsupportedFormat : AvatarUploadResult()
     object FileTooLarge : AvatarUploadResult()
 }

@@ -271,6 +271,7 @@ class MissionsViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 postGenericMissionError("Mission verification failed", e)
             }
         }
@@ -351,6 +352,7 @@ class MissionsViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 postGenericMissionError("Mission completion failed", e)
             }
         }

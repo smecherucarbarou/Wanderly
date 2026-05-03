@@ -2,6 +2,7 @@ package com.novahorizon.wanderly.api
 
 import com.novahorizon.wanderly.BuildConfig
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,7 +27,7 @@ object PlacesProxyClient {
         var accessToken = auth.currentAccessTokenOrNull()
             ?: return@withContext NetworkResult.HttpError(401, "Authentication required for Places proxy")
         
-        val finalUrl = "${BuildConfig.SUPABASE_URL.trimEnd('/')}$API_URL"
+        val finalUrl = resolveProxyUrl()
         val payload = JSONObject().apply {
             put("fieldMask", fieldMask)
             put("body", body)
@@ -55,7 +56,8 @@ object PlacesProxyClient {
                     } else {
                         return@withContext NetworkResult.HttpError(401, "Refresh failed")
                     }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     return@withContext NetworkResult.HttpError(401, "Refresh failed")
                 }
             }
@@ -76,7 +78,17 @@ object PlacesProxyClient {
         } catch (e: IOException) {
             NetworkResult.NetworkError(e)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             NetworkResult.ParseError(e)
+        }
+    }
+
+    internal fun resolveProxyUrl(
+        configuredProxyUrl: String = BuildConfig.PLACES_PROXY_URL,
+        supabaseUrl: String = BuildConfig.SUPABASE_URL
+    ): String {
+        return configuredProxyUrl.trim().ifBlank {
+            "${supabaseUrl.trimEnd('/')}$API_URL"
         }
     }
 }

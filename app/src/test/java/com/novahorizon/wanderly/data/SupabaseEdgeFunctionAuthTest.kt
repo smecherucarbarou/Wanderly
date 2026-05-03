@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.data
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,6 +35,39 @@ class SupabaseEdgeFunctionAuthTest {
         )
     }
 
+    @Test
+    fun `gemini proxy propagates status without raw upstream or internal detail`() {
+        val source = projectFile("supabase/functions/gemini-proxy/index.ts").readText()
+
+        assertTrue(source.contains("status: geminiResponse.status"))
+        assertTrue(source.contains("upstream_status: geminiResponse.status"))
+        assertTrue(source.contains("upstream_body: sanitizedUpstreamBody(responseText)"))
+        assertTrue(source.contains("detail: \"Internal error\""))
+        assertFalse(source.contains("upstream_body: responseText"))
+        assertFalse(source.contains("detail: String(error)"))
+        assertFalse(source.contains("console.error(`Gemini upstream error ${'$'}{geminiResponse.status}:`, responseText)"))
+        assertFalse(source.contains("console.error(\"Proxy internal error:\", error)"))
+        assertTrue(source.contains("}, 502)"))
+        assertFalse(source.contains("model_unavailable_or_bad_endpoint"))
+    }
+
+    @Test
+    fun `google places proxy propagates status without raw query upstream or internal detail`() {
+        val source = projectFile("supabase/functions/google-places-proxy/index.ts").readText()
+
+        assertTrue(source.contains("response.status"))
+        assertTrue(source.contains("responseText"))
+        assertTrue(source.contains("upstream_body"))
+        assertTrue(source.contains("sanitizedUpstreamBody(responseText)"))
+        assertTrue(source.contains("detail: \"Internal error\""))
+        assertFalse(source.contains("query=\"${'$'}{body.textQuery.trim()}\""))
+        assertFalse(source.contains("upstream_body: responseText"))
+        assertFalse(source.contains("detail: String(error)"))
+        assertFalse(source.contains("console.error(`Places upstream error ${'$'}{response.status}:`, responseText)"))
+        assertFalse(source.contains("console.error(\"Proxy internal error:\", error)"))
+        assertTrue(source.contains("}, 502)"))
+    }
+
     private fun assertVerifiesJwt(relativePath: String) {
         val source = projectFile(relativePath).readText()
 
@@ -61,7 +95,7 @@ class SupabaseEdgeFunctionAuthTest {
         assertTrue(quotaIndex >= 0)
         assertTrue(exhaustedIndex > quotaIndex)
         assertTrue(upstreamFetchIndex > quotaIndex)
-        assertTrue(source.contains("upstream request failed") || source.contains("model_unavailable_or_bad_endpoint"))
+        assertTrue(source.contains("upstream request failed") || source.contains("gemini_upstream_request_failed"))
     }
 
     private fun projectFile(relativePath: String): File {

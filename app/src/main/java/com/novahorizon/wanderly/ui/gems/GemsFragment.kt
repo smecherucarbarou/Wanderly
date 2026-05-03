@@ -40,6 +40,7 @@ import com.novahorizon.wanderly.ui.common.showSnackbar
 import dagger.hilt.android.AndroidEntryPoint
 import java.text.Normalizer
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
@@ -258,7 +259,8 @@ class GemsFragment : Fragment() {
                         )
 
                         resolveSearchCity(address)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         "this area"
                     }
 

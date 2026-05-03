@@ -17,16 +17,37 @@ class DiscoveryRepository(
     }
 
     suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> = withContext(Dispatchers.IO) {
+        when (val result = fetchHiddenGemCandidatesResult(lat, lng, radius, city)) {
+            is HiddenGemCandidateResult.Success -> result.candidates
+            is HiddenGemCandidateResult.Error -> emptyList()
+        }
+    }
+
+    suspend fun fetchHiddenGemCandidatesResult(
+        lat: Double,
+        lng: Double,
+        radius: Int,
+        city: String? = null
+    ): HiddenGemCandidateResult = withContext(Dispatchers.IO) {
         if (city.isNullOrBlank()) {
             val overpassOnly = overpassDataSource.fetchHiddenGemCandidates(lat, lng, radius)
                 .filter(::isCandidateUserFriendly)
-            return@withContext rankCandidates(overpassOnly, lat, lng).take(12)
+            return@withContext HiddenGemCandidateResult.Success(
+                rankCandidates(overpassOnly, lat, lng).take(12)
+            )
         }
 
-        val googleCandidates = googlePlacesDataSource.fetchHiddenGemCandidates(lat, lng, radius, city)
+        val googleResult = googlePlacesDataSource.fetchHiddenGemCandidatesResult(lat, lng, radius, city)
+        if (googleResult is HiddenGemCandidateResult.Error) {
+            return@withContext googleResult
+        }
+
+        val googleCandidates = (googleResult as HiddenGemCandidateResult.Success).candidates
             .filter(::isCandidateUserFriendly)
         if (googleCandidates.size >= 6) {
-            return@withContext rankCandidates(googleCandidates, lat, lng).take(12)
+            return@withContext HiddenGemCandidateResult.Success(
+                rankCandidates(googleCandidates, lat, lng).take(12)
+            )
         }
 
         val overpassCandidates = overpassDataSource.fetchHiddenGemCandidates(lat, lng, radius)
@@ -35,9 +56,11 @@ class DiscoveryRepository(
             googleCandidates.none { google -> google.name.equals(overpass.name, ignoreCase = true) }
         }
 
-        rankCandidates(merged, lat, lng)
-            .distinctBy { it.name.lowercase() }
-            .take(16)
+        HiddenGemCandidateResult.Success(
+            rankCandidates(merged, lat, lng)
+                .distinctBy { it.name.lowercase() }
+                .take(16)
+        )
     }
 
     private fun isCandidateUserFriendly(place: DiscoveredPlace): Boolean {

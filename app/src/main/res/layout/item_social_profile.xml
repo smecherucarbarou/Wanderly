@@ -100,7 +100,7 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/remove_friend_btn"
+            app:layout_constraintEnd_toStartOf="@id/social_action_layout"
             app:layout_constraintTop_toTopOf="parent">
 
             <TextView
@@ -121,19 +121,49 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/remove_friend_btn"
-            android:layout_width="48dp"
+        <LinearLayout
+            android:id="@+id/social_action_layout"
+            android:layout_width="wrap_content"
             android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/social_remove_friend_title"
-            android:padding="12dp"
-            android:src="@drawable/ic_remove_friend"
-            app:tint="@color/error"
-            android:visibility="gone"
+            android:gravity="center"
+            android:orientation="horizontal"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/accept_friend_request_btn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/social_friend_request_accept"
+                android:padding="12dp"
+                android:src="@drawable/ic_accept_friend"
+                android:visibility="gone"
+                app:tint="@color/primary" />
+
+            <ImageView
+                android:id="@+id/reject_friend_request_btn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/social_friend_request_reject"
+                android:padding="12dp"
+                android:src="@drawable/ic_reject_friend"
+                android:visibility="gone"
+                app:tint="@color/error" />
+
+            <ImageView
+                android:id="@+id/remove_friend_btn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/social_remove_friend_title"
+                android:padding="12dp"
+                android:src="@drawable/ic_remove_friend"
+                android:visibility="gone"
+                app:tint="@color/error" />
+        </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

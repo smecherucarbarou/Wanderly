@@ -10,8 +10,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.AvatarUploadResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
+import com.novahorizon.wanderly.data.ProfileUpdateResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
@@ -107,7 +109,7 @@ class ProfileViewModelTest {
         val repository = TestWanderlyRepository(
             context = context,
             initialProfile = profile,
-            uploadResult = REMOTE_AVATAR_PATH
+            uploadResult = AvatarUploadResult.Success(REMOTE_AVATAR_PATH)
         )
         val (viewModel, store) = createViewModel(repository)
         val events = viewModel.observeProfileEvents()
@@ -134,7 +136,7 @@ class ProfileViewModelTest {
             TestWanderlyRepository(
                 context = context,
                 initialProfile = profile,
-                uploadError = IOException("raw avatar failure")
+                uploadResult = AvatarUploadResult.Error("Upload failed. Please try again.", isRetryable = true)
             )
         )
         val events = viewModel.observeProfileEvents()
@@ -144,7 +146,7 @@ class ProfileViewModelTest {
             advanceUntilIdle()
 
             val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
-            assertEquals(UiText.StringResource(R.string.profile_avatar_upload_failed), event.message)
+            assertEquals(UiText.DynamicString("Upload failed. Please try again."), event.message)
             assertTrue(event.isError)
         } finally {
             store.clear()
@@ -189,7 +191,7 @@ class ProfileViewModelTest {
         context: Context,
         initialProfile: Profile? = null,
         private val refreshError: Exception? = null,
-        private val uploadResult: String = REMOTE_AVATAR_PATH,
+        private val uploadResult: AvatarUploadResult = AvatarUploadResult.Success(REMOTE_AVATAR_PATH),
         private val uploadError: Exception? = null,
         private val updateSucceeds: Boolean = true
     ) : WanderlyRepository(context) {
@@ -212,7 +214,15 @@ class ProfileViewModelTest {
             return updateSucceeds
         }
 
-        override suspend fun uploadAvatar(uri: Uri, profileId: String): String {
+        override suspend fun updateProfileDetailed(profile: Profile): ProfileUpdateResult {
+            return if (updateProfile(profile)) {
+                ProfileUpdateResult.Success(profile)
+            } else {
+                ProfileUpdateResult.Error(com.novahorizon.wanderly.data.ProfileError.Unknown)
+            }
+        }
+
+        override suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
             uploadError?.let { throw it }
             return uploadResult
         }

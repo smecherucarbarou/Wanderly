@@ -4,7 +4,7 @@ import com.novahorizon.wanderly.data.mission.DefaultGeminiCandidateTextClient
 import com.novahorizon.wanderly.data.mission.DefaultGeminiQueryTextClient
 import com.novahorizon.wanderly.data.mission.GeminiCandidateTextClient
 import com.novahorizon.wanderly.data.mission.GeminiQueryTextClient
-import com.novahorizon.wanderly.data.mission.GooglePlacesMissionPlaceSearchService
+import com.novahorizon.wanderly.data.mission.GooglePlacesSearchService
 import com.novahorizon.wanderly.data.mission.MissionPlaceSearchService
 import dagger.Module
 import dagger.Provides
@@ -25,5 +25,5 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideMissionPlaceSearchService(): MissionPlaceSearchService = GooglePlacesMissionPlaceSearchService()
+    fun provideMissionPlaceSearchService(): MissionPlaceSearchService = GooglePlacesSearchService()
 }

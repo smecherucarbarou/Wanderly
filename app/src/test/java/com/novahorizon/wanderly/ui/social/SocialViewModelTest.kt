@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.AddFriendResult
+import com.novahorizon.wanderly.data.FriendRequestActionResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
@@ -78,6 +80,37 @@ class SocialViewModelTest {
     }
 
     @Test
+    fun `loadFriends emits incoming requests with accepted friends`() = runTest {
+        val friend = testProfile("friend", "Friend Bee", honey = 120)
+        val requester = testProfile("requester", "Request Bee", honey = 90)
+        val (viewModel, store) = createViewModel(
+            TestWanderlyRepository(
+                context = context,
+                friends = listOf(friend),
+                incomingFriendRequests = listOf(requester)
+            )
+        )
+
+        try {
+            viewModel.loadFriends()
+            advanceUntilIdle()
+
+            assertEquals(listOf(friend), viewModel.friends.value)
+            assertEquals(listOf(requester), viewModel.incomingFriendRequests.value)
+            assertEquals(
+                SocialViewModel.SocialUiState.Loaded(
+                    friends = listOf(friend),
+                    incomingRequests = listOf(requester),
+                    leaderboard = emptyList()
+                ),
+                viewModel.state.value
+            )
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
     fun `loadLeaderboard emits empty state`() = runTest {
         val (viewModel, store) = createViewModel(TestWanderlyRepository(context))
 
@@ -115,25 +148,32 @@ class SocialViewModelTest {
     }
 
     @Test
-    fun `addFriend success refreshes friends`() = runTest {
+    fun `addFriend request success keeps accepted friends state`() = runTest {
         val friends = listOf(testProfile("friend", "Friend Bee", honey = 120))
-        val (viewModel, store) = createViewModel(
-            TestWanderlyRepository(
-                context = context,
-                friends = friends,
-                addFriendResult = "Friend added successfully!"
-            )
+        val repository = TestWanderlyRepository(
+            context = context,
+            friends = friends,
+            addFriendResult = AddFriendResult.FriendRequestSent
         )
+        val (viewModel, store) = createViewModel(repository)
 
         try {
+            viewModel.loadFriends()
+            advanceUntilIdle()
+            val loadCountBeforeAdd = repository.getFriendsCallCount
+
             viewModel.addFriend("ABC123")
             advanceUntilIdle()
 
             assertEquals(
-                UiText.DynamicString("Friend added successfully!"),
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_request_sent),
+                    isError = false
+                ),
                 viewModel.addFriendResult.value
             )
             assertEquals(friends, viewModel.friends.value)
+            assertEquals(loadCountBeforeAdd, repository.getFriendsCallCount)
             assertEquals(
                 SocialViewModel.SocialUiState.Loaded(
                     friends = friends,
@@ -147,11 +187,11 @@ class SocialViewModelTest {
     }
 
     @Test
-    fun `addFriend already friends shows specific error`() = runTest {
+    fun `addFriend pending request state is informational`() = runTest {
         val (viewModel, store) = createViewModel(
             TestWanderlyRepository(
                 context = context,
-                addFriendResult = "Already friends with this user"
+                addFriendResult = AddFriendResult.AlreadyRequestedOrFriends
             )
         )
 
@@ -160,11 +200,40 @@ class SocialViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                UiText.StringResource(R.string.social_friend_already_added),
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_request_pending),
+                    isError = false
+                ),
+                viewModel.addFriendResult.value
+            )
+            assertEquals(SocialViewModel.SocialUiState.Empty, viewModel.state.value)
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `addFriend result failure emits error state`() = runTest {
+        val (viewModel, store) = createViewModel(
+            TestWanderlyRepository(
+                context = context,
+                addFriendResult = AddFriendResult.Failure
+            )
+        )
+
+        try {
+            viewModel.addFriend("ABC123")
+            advanceUntilIdle()
+
+            assertEquals(
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_add_friend_failed),
+                    isError = true
+                ),
                 viewModel.addFriendResult.value
             )
             assertEquals(
-                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.social_friend_already_added)),
+                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.social_add_friend_failed)),
                 viewModel.state.value
             )
         } finally {
@@ -185,11 +254,113 @@ class SocialViewModelTest {
             viewModel.addFriend("ABC123")
             advanceUntilIdle()
 
-            val message = requireNotNull(viewModel.addFriendResult.value)
-            assertEquals(UiText.StringResource(R.string.social_add_friend_failed), message)
-            assertFalse(message.asString(context).contains("raw add friend"))
+            val result = requireNotNull(viewModel.addFriendResult.value)
+            assertEquals(UiText.StringResource(R.string.social_add_friend_failed), result.message)
+            assertEquals(true, result.isError)
+            assertFalse(result.message.asString(context).contains("raw add friend"))
             assertEquals(
                 SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.error_network)),
+                viewModel.state.value
+            )
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `acceptFriendRequest success refreshes social lifecycle state`() = runTest {
+        val requester = testProfile("requester", "Request Bee", honey = 90)
+        val accepted = testProfile("requester", "Request Bee", honey = 90)
+        val repository = TestWanderlyRepository(
+            context = context,
+            incomingFriendRequests = listOf(requester),
+            friendsAfterAction = listOf(accepted),
+            incomingAfterAction = emptyList(),
+            acceptResult = FriendRequestActionResult.Accepted
+        )
+        val (viewModel, store) = createViewModel(repository)
+
+        try {
+            viewModel.acceptFriendRequest("requester")
+            advanceUntilIdle()
+
+            assertEquals(listOf("requester"), repository.acceptedRequestIds)
+            assertEquals(
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_request_accepted),
+                    isError = false
+                ),
+                viewModel.addFriendResult.value
+            )
+            assertEquals(listOf(accepted), viewModel.friends.value)
+            assertEquals(emptyList<Profile>(), viewModel.incomingFriendRequests.value)
+            assertEquals(
+                SocialViewModel.SocialUiState.Loaded(
+                    friends = listOf(accepted),
+                    incomingRequests = emptyList(),
+                    leaderboard = emptyList()
+                ),
+                viewModel.state.value
+            )
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `rejectFriendRequest success removes incoming request`() = runTest {
+        val requester = testProfile("requester", "Request Bee", honey = 90)
+        val repository = TestWanderlyRepository(
+            context = context,
+            incomingFriendRequests = listOf(requester),
+            incomingAfterAction = emptyList(),
+            rejectResult = FriendRequestActionResult.Rejected
+        )
+        val (viewModel, store) = createViewModel(repository)
+
+        try {
+            viewModel.rejectFriendRequest("requester")
+            advanceUntilIdle()
+
+            assertEquals(listOf("requester"), repository.rejectedRequestIds)
+            assertEquals(
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_request_rejected),
+                    isError = false
+                ),
+                viewModel.addFriendResult.value
+            )
+            assertEquals(emptyList<Profile>(), viewModel.incomingFriendRequests.value)
+            assertEquals(SocialViewModel.SocialUiState.Empty, viewModel.state.value)
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `acceptFriendRequest failure remains an error`() = runTest {
+        val requester = testProfile("requester", "Request Bee", honey = 90)
+        val (viewModel, store) = createViewModel(
+            TestWanderlyRepository(
+                context = context,
+                incomingFriendRequests = listOf(requester),
+                acceptResult = FriendRequestActionResult.Failure
+            )
+        )
+
+        try {
+            viewModel.acceptFriendRequest("requester")
+            advanceUntilIdle()
+
+            assertEquals(
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_request_action_failed),
+                    isError = true
+                ),
+                viewModel.addFriendResult.value
+            )
+            assertEquals(
+                SocialViewModel.SocialUiState.Error(UiText.StringResource(R.string.social_friend_request_action_failed)),
                 viewModel.state.value
             )
         } finally {
@@ -214,11 +385,21 @@ class SocialViewModelTest {
         context: Context,
         private val leaderboard: List<Profile> = emptyList(),
         private val friends: List<Profile> = emptyList(),
+        private val incomingFriendRequests: List<Profile> = emptyList(),
+        private val friendsAfterAction: List<Profile> = friends,
+        private val incomingAfterAction: List<Profile> = incomingFriendRequests,
         private val leaderboardError: Exception? = null,
-        private val addFriendResult: String = "Friend added successfully!",
-        private val addFriendError: Exception? = null
+        private val addFriendResult: AddFriendResult = AddFriendResult.FriendRequestSent,
+        private val addFriendError: Exception? = null,
+        private val acceptResult: FriendRequestActionResult = FriendRequestActionResult.Accepted,
+        private val rejectResult: FriendRequestActionResult = FriendRequestActionResult.Rejected
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow<Profile?>(null)
+        private var actionCompleted = false
+        var getFriendsCallCount: Int = 0
+            private set
+        val acceptedRequestIds = mutableListOf<String>()
+        val rejectedRequestIds = mutableListOf<String>()
 
         override val currentProfile: StateFlow<Profile?> = profileFlow
 
@@ -229,11 +410,30 @@ class SocialViewModelTest {
             return leaderboard
         }
 
-        override suspend fun getFriends(): List<Profile> = friends
+        override suspend fun getFriends(): List<Profile> {
+            getFriendsCallCount += 1
+            return if (actionCompleted) friendsAfterAction else friends
+        }
 
-        override suspend fun addFriendByCode(friendCode: String): String {
+        override suspend fun getIncomingFriendRequests(): List<Profile> {
+            return if (actionCompleted) incomingAfterAction else incomingFriendRequests
+        }
+
+        override suspend fun addFriendByCodeResult(friendCode: String): AddFriendResult {
             addFriendError?.let { throw it }
             return addFriendResult
+        }
+
+        override suspend fun acceptFriendRequest(requesterId: String): FriendRequestActionResult {
+            acceptedRequestIds += requesterId
+            actionCompleted = acceptResult == FriendRequestActionResult.Accepted
+            return acceptResult
+        }
+
+        override suspend fun rejectFriendRequest(requesterId: String): FriendRequestActionResult {
+            rejectedRequestIds += requesterId
+            actionCompleted = rejectResult == FriendRequestActionResult.Rejected
+            return rejectResult
         }
     }
 

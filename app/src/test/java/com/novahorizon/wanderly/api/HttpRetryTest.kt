@@ -33,7 +33,7 @@ class HttpRetryTest {
     }
 
     @Test
-    fun `500 response is retried`() = runTest {
+    fun `500 response is not retried`() = runTest {
         var attempts = 0
 
         val error = expectGeminiHttpException {
@@ -44,7 +44,24 @@ class HttpRetryTest {
         }
 
         assertEquals(500, error.code)
-        assertEquals(3, attempts)
+        assertEquals(1, attempts)
+        assertEquals(0L, currentTime)
+    }
+
+    @Test
+    fun `502 response is not retried`() = runTest {
+        var attempts = 0
+
+        val error = expectGeminiHttpException {
+            GeminiClient.withRetry(initialDelayMs = 100, jitterMs = { 0L }) {
+                attempts++
+                throw GeminiClient.GeminiHttpException(502, "proxy failure")
+            }
+        }
+
+        assertEquals(502, error.code)
+        assertEquals(1, attempts)
+        assertEquals(0L, currentTime)
     }
 
     @Test

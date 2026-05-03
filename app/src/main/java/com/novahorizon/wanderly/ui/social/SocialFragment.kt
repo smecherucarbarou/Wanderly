@@ -48,9 +48,11 @@ class SocialFragment : Fragment() {
     private lateinit var emptyStateText: TextView
     private var formattingFriendCode = false
 
-    private val socialAdapter = SocialAdapter { profile ->
-        showRemoveFriendDialog(profile)
-    }
+    private val socialAdapter = SocialAdapter(
+        onRemoveClick = { profile -> showRemoveFriendDialog(profile) },
+        onAcceptClick = { profile -> viewModel.acceptFriendRequest(profile.id) },
+        onRejectClick = { profile -> viewModel.rejectFriendRequest(profile.id) }
+    )
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -150,7 +152,7 @@ class SocialFragment : Fragment() {
 
         viewModel.leaderboard.observe(viewLifecycleOwner) { profiles ->
             if (socialTabs.selectedTabPosition == 0) {
-                socialAdapter.submitProfiles(profiles, showRank = true, canRemove = false)
+                socialAdapter.submitLeaderboard(profiles)
                 renderEmptyState(
                     profiles = profiles,
                     emptyMessage = R.string.social_empty_leaderboard
@@ -160,19 +162,20 @@ class SocialFragment : Fragment() {
 
         viewModel.friends.observe(viewLifecycleOwner) { profiles ->
             if (socialTabs.selectedTabPosition == 1) {
-                socialAdapter.submitProfiles(profiles, showRank = false, canRemove = true)
-                renderEmptyState(
-                    profiles = profiles,
-                    emptyMessage = R.string.social_empty_friends
-                )
+                renderFriendsTab()
+            }
+        }
+
+        viewModel.incomingFriendRequests.observe(viewLifecycleOwner) {
+            if (socialTabs.selectedTabPosition == 1) {
+                renderFriendsTab()
             }
         }
 
         viewModel.addFriendResult.observe(viewLifecycleOwner) { result ->
             result?.let {
-                val message = it.asString(requireContext())
-                val isError = !message.contains("successfully", ignoreCase = true)
-                showSnackbar(message, isError = isError)
+                val message = it.message.asString(requireContext())
+                showSnackbar(message, isError = it.isError)
                 viewModel.clearAddFriendResult()
             }
         }
@@ -189,11 +192,14 @@ class SocialFragment : Fragment() {
             is SocialViewModel.SocialUiState.Loaded -> {
                 loadingIndicator.visibility = View.GONE
                 if (socialTabs.selectedTabPosition == 0) {
-                    socialAdapter.submitProfiles(state.leaderboard, showRank = true, canRemove = false)
+                    socialAdapter.submitLeaderboard(state.leaderboard)
                     renderEmptyState(state.leaderboard, R.string.social_empty_leaderboard)
                 } else {
-                    socialAdapter.submitProfiles(state.friends, showRank = false, canRemove = true)
-                    renderEmptyState(state.friends, R.string.social_empty_friends)
+                    socialAdapter.submitFriends(
+                        friends = state.friends,
+                        incomingRequests = state.incomingRequests
+                    )
+                    renderEmptyState(state.friends + state.incomingRequests, R.string.social_empty_friends)
                 }
             }
 
@@ -238,6 +244,19 @@ class SocialFragment : Fragment() {
         }
     }
 
+    private fun renderFriendsTab() {
+        val acceptedFriends = viewModel.friends.value.orEmpty()
+        val incomingRequests = viewModel.incomingFriendRequests.value.orEmpty()
+        socialAdapter.submitFriends(
+            friends = acceptedFriends,
+            incomingRequests = incomingRequests
+        )
+        renderEmptyState(
+            profiles = incomingRequests + acceptedFriends,
+            emptyMessage = R.string.social_empty_friends
+        )
+    }
+
     private fun selectedEmptyMessage(): Int {
         return if (socialTabs.selectedTabPosition == 1) {
             R.string.social_empty_friends
@@ -254,18 +273,27 @@ class SocialFragment : Fragment() {
     }
 }
 
-class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<Profile, SocialAdapter.ViewHolder>(ProfileDiffCallback()) {
-    private var showRank = true
-    private var canRemove = false
+class SocialAdapter(
+    private val onRemoveClick: (Profile) -> Unit,
+    private val onAcceptClick: (Profile) -> Unit,
+    private val onRejectClick: (Profile) -> Unit
+) : ListAdapter<SocialAdapter.SocialRow, SocialAdapter.ViewHolder>(SocialRowDiffCallback()) {
 
-    fun submitProfiles(list: List<Profile>, showRank: Boolean, canRemove: Boolean) {
-        val displayModeChanged = this.showRank != showRank || this.canRemove != canRemove
-        this.showRank = showRank
-        this.canRemove = canRemove
-        submitList(list.toList())
-        if (displayModeChanged && itemCount > 0) {
-            notifyItemRangeChanged(0, itemCount)
-        }
+    sealed class SocialRow(open val profile: Profile) {
+        data class Leaderboard(override val profile: Profile, val rank: Int) : SocialRow(profile)
+        data class Friend(override val profile: Profile) : SocialRow(profile)
+        data class IncomingRequest(override val profile: Profile) : SocialRow(profile)
+    }
+
+    fun submitLeaderboard(list: List<Profile>) {
+        submitList(list.mapIndexed { index, profile -> SocialRow.Leaderboard(profile, index + 1) })
+    }
+
+    fun submitFriends(friends: List<Profile>, incomingRequests: List<Profile>) {
+        submitList(
+            incomingRequests.map { SocialRow.IncomingRequest(it) } +
+                friends.map { SocialRow.Friend(it) }
+        )
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -276,6 +304,8 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
         val avatarInitial: TextView = view.findViewById(R.id.avatar_initial)
         val avatarImage: ImageView = view.findViewById(R.id.avatar_image)
         val removeBtn: ImageView = view.findViewById(R.id.remove_friend_btn)
+        val acceptBtn: ImageView = view.findViewById(R.id.accept_friend_request_btn)
+        val rejectBtn: ImageView = view.findViewById(R.id.reject_friend_request_btn)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -284,24 +314,33 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val profile = getItem(position)
+        val row = getItem(position)
+        val profile = row.profile
 
-        holder.rankNumber.visibility = if (showRank) View.VISIBLE else View.GONE
-        holder.rankNumber.text = holder.itemView.context.getString(R.string.rank_number_format, position + 1)
+        if (row is SocialRow.Leaderboard) {
+            holder.rankNumber.visibility = View.VISIBLE
+            holder.rankNumber.text = holder.itemView.context.getString(R.string.rank_number_format, row.rank)
+        } else {
+            holder.rankNumber.visibility = View.GONE
+            holder.rankNumber.text = ""
+        }
 
         holder.username.text = profile.username ?: holder.itemView.context.getString(R.string.unknown_explorer)
         holder.honeyAmount.text = String.format(Locale.getDefault(), "%d", profile.honey ?: 0)
         
         val rank = HiveRank.fromHoney(profile.honey)
-        holder.rankName.text = holder.itemView.context.getString(RankUiFormatter.rankNameRes(rank))
-
-        if (canRemove) {
-            holder.removeBtn.visibility = View.VISIBLE
-            holder.removeBtn.setOnClickListener { onRemoveClick(profile) }
+        holder.rankName.text = if (row is SocialRow.IncomingRequest) {
+            holder.itemView.context.getString(R.string.social_friend_request_label)
         } else {
-            holder.removeBtn.visibility = View.GONE
-            holder.removeBtn.setOnClickListener(null)
+            holder.itemView.context.getString(RankUiFormatter.rankNameRes(rank))
         }
+
+        holder.removeBtn.visibility = if (row is SocialRow.Friend) View.VISIBLE else View.GONE
+        holder.removeBtn.setOnClickListener(if (row is SocialRow.Friend) View.OnClickListener { onRemoveClick(profile) } else null)
+        holder.acceptBtn.visibility = if (row is SocialRow.IncomingRequest) View.VISIBLE else View.GONE
+        holder.acceptBtn.setOnClickListener(if (row is SocialRow.IncomingRequest) View.OnClickListener { onAcceptClick(profile) } else null)
+        holder.rejectBtn.visibility = if (row is SocialRow.IncomingRequest) View.VISIBLE else View.GONE
+        holder.rejectBtn.setOnClickListener(if (row is SocialRow.IncomingRequest) View.OnClickListener { onRejectClick(profile) } else null)
 
         AvatarLoader.loadAvatar(
             holder.avatarImage,
@@ -311,9 +350,10 @@ class SocialAdapter(private val onRemoveClick: (Profile) -> Unit) : ListAdapter<
         )
     }
 
-    private class ProfileDiffCallback : DiffUtil.ItemCallback<Profile>() {
-        override fun areItemsTheSame(oldItem: Profile, newItem: Profile): Boolean = oldItem.id == newItem.id
+    private class SocialRowDiffCallback : DiffUtil.ItemCallback<SocialRow>() {
+        override fun areItemsTheSame(oldItem: SocialRow, newItem: SocialRow): Boolean =
+            oldItem::class == newItem::class && oldItem.profile.id == newItem.profile.id
 
-        override fun areContentsTheSame(oldItem: Profile, newItem: Profile): Boolean = oldItem == newItem
+        override fun areContentsTheSame(oldItem: SocialRow, newItem: SocialRow): Boolean = oldItem == newItem
     }
 }

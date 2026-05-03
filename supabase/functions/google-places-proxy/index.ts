@@ -11,6 +11,7 @@ interface PlacesErrorResponse {
     type: string
     status: number
     message: string
+    upstream_body?: string
   }
 }
 
@@ -47,15 +48,28 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
   })
 }
 
+function diagnosticId(): string {
+  return crypto.randomUUID()
+}
+
+function sanitizedUpstreamBody(responseText: string): string {
+  return responseText.length > 0 ? "[redacted]" : ""
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error
+}
+
 function placesError(
   req: Request,
   type: string,
   status: number,
   message: string,
+  upstreamBody?: string,
 ): Response {
   const body: PlacesErrorResponse = {
     ok: false,
-    error: { type, status, message },
+    error: { type, status, message, upstream_body: upstreamBody },
   }
   return jsonResponse(req, body as unknown as Record<string, unknown>, status)
 }
@@ -134,7 +148,7 @@ Deno.serve(async (req: Request) => {
   try {
     auth = await verifyAuth(req)
   } catch {
-    return jsonResponse(req, { error: "Missing Supabase auth config" }, 500)
+    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
   }
   if (!auth) {
     return jsonResponse(req, { error: "Invalid bearer token" }, 401)
@@ -142,7 +156,7 @@ Deno.serve(async (req: Request) => {
 
   const placesApiKey = Deno.env.get("MAPS_API_KEY")
   if (!placesApiKey) {
-    return jsonResponse(req, { error: "Missing MAPS_API_KEY secret" }, 500)
+    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
   }
 
   try {
@@ -183,7 +197,9 @@ Deno.serve(async (req: Request) => {
     const radius = isRecord(circle)
       ? circle.radius
       : null
-    console.log(`Places text search query="${body.textQuery.trim()}" radius=${typeof radius === "number" ? radius : "none"}`)
+    console.log(
+      `Places text search request query_length=${body.textQuery.trim().length} field_mask_length=${fieldMask.length} radius=${typeof radius === "number" ? radius : "none"}`,
+    )
 
     const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
@@ -197,11 +213,14 @@ Deno.serve(async (req: Request) => {
 
     const responseText = await response.text()
     if (!response.ok) {
+      const errorId = diagnosticId()
+      console.error(`Places upstream error id=${errorId} status=${response.status} body_bytes=${responseText.length}`)
       return placesError(
         req,
         "places_upstream_request_failed",
         response.status,
         "Places upstream request failed",
+        sanitizedUpstreamBody(responseText),
       )
     }
 
@@ -217,7 +236,9 @@ Deno.serve(async (req: Request) => {
       status: response.status,
       headers: corsHeaders,
     })
-  } catch {
-    return jsonResponse(req, { error: "Places proxy request failed" }, 500)
+  } catch (error) {
+    const errorId = diagnosticId()
+    console.error(`Places proxy internal error id=${errorId} kind=${describeError(error)}`)
+    return jsonResponse(req, { error: "Places proxy request failed", detail: "Internal error" }, 502)
   }
 })

@@ -2,6 +2,12 @@ SUPABASE_URL=https://your-supabase-url.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
 MAPS_API_KEY=your-google-maps-api-key
 
+# Optional proxy URL overrides. Leave blank to use SUPABASE_URL/functions/v1 defaults.
+GEMINI_PROXY_URL=
+PLACES_PROXY_URL=
+# CI also supports GOOGLE_PLACES_PROXY_URL for the Places proxy override.
+GOOGLE_PLACES_PROXY_URL=
+
 # Optional instrumentation-test credentials. Use a disposable test account only.
 # These values are passed to androidTest as runner arguments and are never written to BuildConfig.
 WANDERLY_ANDROID_TEST_EMAIL=your-disposable-test-account@example.com

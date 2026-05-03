@@ -313,16 +313,14 @@ class DevDashboardFragment : Fragment() {
                 return@launch
             }
 
-            val newHoney = editHoney ?: if (editFlights != null) editFlights * 50 else profile.honey
+            val newHoney = editHoney ?: if (editFlights != null) editFlights * 50 else (profile.honey ?: 0)
             val newStreak = parsedStreak?.coerceAtLeast(0) ?: (profile.streak_count ?: 0)
 
-            val updated = profile.copy(
-                honey = newHoney,
-                streak_count = newStreak
-            )
-
-            if (repository.updateProfile(updated)) {
-                val refreshed = repository.getCurrentProfile() ?: updated
+            if (repository.adminUpdateProfileStats(profile.id, newHoney, newStreak)) {
+                val refreshed = repository.getCurrentProfile() ?: profile.copy(
+                    honey = newHoney,
+                    streak_count = newStreak
+                )
                 _binding ?: return@launch
                 showSnackbar(
                     getString(

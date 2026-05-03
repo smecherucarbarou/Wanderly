@@ -20,12 +20,17 @@ class MissionCameraFileProviderTest {
     }
 
     @Test
-    fun `file provider roots remain narrow`() {
+    fun `file provider roots support cache images and external cache`() {
         val xml = readProjectFile("app/src/main/res/xml/file_paths.xml")
 
-        assertTrue(xml.contains("<cache-path name=\"my_images\" path=\"images/\""))
+        assertTrue(xml.contains("<cache-path"))
+        assertTrue(xml.contains("name=\"cache\""))
+        assertTrue(xml.contains("path=\".\""))
+        assertTrue(xml.contains("name=\"images\""))
+        assertTrue(xml.contains("path=\"images/\""))
+        assertTrue(xml.contains("<external-cache-path"))
+        assertTrue(xml.contains("name=\"external_cache\""))
         assertFalse(xml.contains("<root-path"))
-        assertFalse(xml.contains("path=\".\""))
     }
 
     private fun readProjectFile(path: String): String {
