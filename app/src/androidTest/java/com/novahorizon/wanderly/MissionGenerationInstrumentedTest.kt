@@ -43,6 +43,8 @@ class MissionGenerationInstrumentedTest {
 
     @Before
     fun setUp() {
+        AndroidTestCredentialProvider.requireCredentials()
+
         val context = ApplicationProvider.getApplicationContext<Context>()
         fakeRepository = FakeWanderlyRepository(context)
 

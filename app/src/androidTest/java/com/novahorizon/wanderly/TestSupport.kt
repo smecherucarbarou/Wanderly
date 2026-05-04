@@ -160,6 +160,7 @@ fun waitFor(matcher: Matcher<View>, timeoutMs: Long = 5_000L): ViewAction {
             } while (System.currentTimeMillis() < deadline)
 
             throw PerformException.Builder()
+                .withActionDescription("wait for view matching $matcher during $timeoutMs ms")
                 .withCause(TimeoutException("Timed out waiting for $matcher"))
                 .withViewDescription(view.toString())
                 .build()
