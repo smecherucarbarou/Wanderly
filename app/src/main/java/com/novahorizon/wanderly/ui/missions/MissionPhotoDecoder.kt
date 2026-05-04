@@ -90,7 +90,12 @@ object MissionPhotoDecoder {
             header[9] == 0x45.toByte() &&
             header[10] == 0x42.toByte() &&
             header[11] == 0x50.toByte()
+        val isHeif = bytesRead >= 12 &&
+            header[4] == 0x66.toByte() &&
+            header[5] == 0x74.toByte() &&
+            header[6] == 0x79.toByte() &&
+            header[7] == 0x70.toByte()
 
-        return isJpeg || isPng || isWebp
+        return isJpeg || isPng || isWebp || isHeif
     }
 }

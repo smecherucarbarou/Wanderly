@@ -1,24 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="13dp"
-        android:height="13dp"
-        android:top="6dp"
-        android:right="32dp"
+        android:width="12dp"
+        android:height="12dp"
+        android:top="1dp"
+        android:right="3dp"
         android:gravity="top|end"
-        android:drawable="@drawable/bg_profile_ember_50" />
-    <item
-        android:width="11dp"
-        android:height="11dp"
-        android:left="20dp"
-        android:top="52dp"
-        android:gravity="start|top"
         android:drawable="@drawable/bg_profile_ember_50" />
     <item
         android:width="10dp"
         android:height="10dp"
-        android:right="18dp"
-        android:bottom="38dp"
+        android:left="1dp"
+        android:bottom="8dp"
+        android:gravity="start|bottom"
+        android:drawable="@drawable/bg_profile_ember_50" />
+    <item
+        android:width="9dp"
+        android:height="9dp"
+        android:right="4dp"
+        android:bottom="1dp"
         android:gravity="end|bottom"
+        android:drawable="@drawable/bg_profile_ember_50" />
+    <item
+        android:width="7dp"
+        android:height="7dp"
+        android:left="4dp"
+        android:top="14dp"
+        android:gravity="start|top"
+        android:drawable="@drawable/bg_profile_ember_50" />
+    <item
+        android:width="6dp"
+        android:height="6dp"
+        android:top="1dp"
+        android:left="20dp"
+        android:gravity="start|top"
         android:drawable="@drawable/bg_profile_ember_50" />
 </layer-list>

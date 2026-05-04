@@ -17,6 +17,11 @@ import java.util.concurrent.TimeUnit
 object PlacesProxyClient {
     private const val API_URL = "/functions/v1/google-places-proxy"
     private val client = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val req = chain.request()
+            require(req.url.isHttps) { "Non-HTTPS request blocked: ${req.url.host}" }
+            chain.proceed(req)
+        }
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -65,7 +70,9 @@ object PlacesProxyClient {
             response.use { resp ->
                 val responseBody = resp.body.string()
                 if (!resp.isSuccessful) {
-                    return@withContext NetworkResult.HttpError(resp.code, responseBody)
+                    val safeMessage = parseProxyErrorMessage(responseBody)
+                        ?: "Places proxy failed: ${resp.code}"
+                    return@withContext NetworkResult.HttpError(resp.code, safeMessage)
                 }
                 runCatching { JSONObject(responseBody) }
                     .fold(
@@ -81,6 +88,19 @@ object PlacesProxyClient {
             if (e is CancellationException) throw e
             NetworkResult.ParseError(e)
         }
+    }
+
+    private fun parseProxyErrorMessage(responseBody: String): String? {
+        val json = runCatching { JSONObject(responseBody) }.getOrNull() ?: return null
+
+        val directMessage = json.optString("message").takeIf { it.isNotBlank() }
+        if (directMessage != null) return directMessage
+
+        val nestedMessage = json.optJSONObject("error")
+            ?.optString("message")
+            ?.takeIf { it.isNotBlank() }
+
+        return nestedMessage
     }
 
     internal fun resolveProxyUrl(

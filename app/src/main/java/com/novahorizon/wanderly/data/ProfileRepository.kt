@@ -77,6 +77,22 @@ class ProfileRepository(
     )
 
     @Serializable
+    private data class AdminStatsUpdateParams(
+        val target_profile_id: String,
+        val new_honey: Int,
+        val new_streak_count: Int,
+        val new_hive_rank: Int
+    )
+
+    @Serializable
+    private data class AdminStatsUpdateResponse(
+        val success: Boolean,
+        val honey: Int,
+        val streak_count: Int,
+        val hive_rank: Int
+    )
+
+    @Serializable
     private data class RestoreStreakParams(
         val cost: Int
     )
@@ -250,29 +266,33 @@ class ProfileRepository(
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val payload = toAdminProfileStatsUpdate(honey, streakCount)
-            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
-                Profile::honey setTo payload.honey
-                Profile::streak_count setTo payload.streak_count
-                Profile::hive_rank setTo payload.hive_rank
-            }) {
-                filter { eq("id", profileId) }
-            }
+            val response = SupabaseClient.client.postgrest
+                .rpc(
+                    "admin_update_profile_stats",
+                    AdminStatsUpdateParams(
+                        target_profile_id = profileId,
+                        new_honey = payload.honey,
+                        new_streak_count = payload.streak_count,
+                        new_hive_rank = payload.hive_rank
+                    )
+                )
+                .decodeSingle<AdminStatsUpdateResponse>()
 
-            val refreshed = SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
-                .select { filter { eq("id", profileId) } }
-                .decodeSingleOrNull<Profile>()
-                ?.let(::normalizeProfile)
-
-            if (refreshed == null || refreshed.honey != payload.honey || refreshed.streak_count != payload.streak_count) {
+            if (!response.success) {
                 logWarn("Admin stats update did not persist for profile.")
                 return@withContext false
             }
 
             if (_currentProfile.value?.id == profileId) {
+                val refreshed = _currentProfile.value?.copy(
+                    honey = response.honey,
+                    streak_count = response.streak_count,
+                    hive_rank = response.hive_rank
+                )
                 _currentProfile.value = refreshed
                 preferencesStore.cacheProfileStreakState(
-                    lastMissionDate = refreshed.last_mission_date,
-                    streakCount = refreshed.streak_count
+                    lastMissionDate = refreshed?.last_mission_date,
+                    streakCount = refreshed?.streak_count
                 )
             }
             true
@@ -417,8 +437,14 @@ class ProfileRepository(
         }
     }
 
-    suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult =
-        avatarRepository.uploadAvatar(uri, profileId)
+    suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
+        val result = avatarRepository.uploadAvatar(uri, profileId)
+        if (result is AvatarUploadResult.Success && _currentProfile.value?.id == profileId) {
+            // Avatar upload now returns the public URL so profile state refreshes with the cache-busted image.
+            _currentProfile.value = _currentProfile.value?.copy(avatar_url = result.avatarUrl)
+        }
+        return result
+    }
 
     suspend fun onVisitDateUpdated(date: String) {
         preferencesStore.updateLastVisitDate(date)

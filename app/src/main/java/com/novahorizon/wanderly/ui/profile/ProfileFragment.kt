@@ -165,7 +165,18 @@ class ProfileFragment : Fragment() {
                 }
 
                 is ProfileViewModel.ProfileEvent.AvatarUpdated -> {
-                    pendingAvatarRemotePath = event.remotePath
+                val avatarUrl = event.avatarUrl
+
+                // Upload success persists avatar_url in the repository; update local UI immediately.
+                pendingAvatarPreviewSource = null
+                pendingAvatarRemotePath = AvatarLoader.extractSupabaseStoragePath(avatarUrl) ?: avatarUrl
+
+                currentProfile = currentProfile?.copy(avatar_url = avatarUrl)
+                updateAvatarDisplay(
+                    avatarUrl,
+                    currentProfile?.username ?: getString(R.string.profile_default_name)
+                )
+
                     showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
                     viewModel.clearProfileEvent()
                 }

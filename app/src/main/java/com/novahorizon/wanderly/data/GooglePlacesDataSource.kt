@@ -66,7 +66,8 @@ class GooglePlacesDataSource(
         val blockingError = errors.firstOrNull {
             it.reason == HiddenGemCandidateResult.Reason.BadRequest ||
                 it.reason == HiddenGemCandidateResult.Reason.Unauthorized ||
-                it.reason == HiddenGemCandidateResult.Reason.Forbidden
+                it.reason == HiddenGemCandidateResult.Reason.Forbidden ||
+                it.statusCode == 429
         }
         if (blockingError != null) {
             return@withContext blockingError

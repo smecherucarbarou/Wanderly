@@ -19,8 +19,18 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://raw.githubusercontent.com/onepf/OPF-mvn-repo/master/") }
-        maven { url = uri("https://jitpack.io") }
+        maven {
+            url = uri("https://raw.githubusercontent.com/onepf/OPF-mvn-repo/master/")
+            content {
+                includeGroupByRegex("org\\.onepf.*")
+            }
+        }
+        maven {
+            url = uri("https://jitpack.io")
+            content {
+                includeGroupByRegex("com\\.github.*")
+            }
+        }
     }
 }
 

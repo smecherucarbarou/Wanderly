@@ -159,10 +159,11 @@ object GeminiClient {
                         if (!resp.isSuccessful) {
                             AppLogger.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
                             logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
-                            throw GeminiHttpException(
-                                resp.code,
-                                "Proxy call failed: ${resp.code} ${responseBody.take(ERROR_BODY_LOG_LIMIT)}".trim()
-                            )
+
+                            val safeMessage = parseProxyErrorMessage(responseBody)
+                                ?: "Proxy call failed: ${resp.code}"
+
+                            throw GeminiHttpException(resp.code, safeMessage)
                         }
                         parseStructuredError(responseBody)?.let { error ->
                             AppLogger.w(TAG, "Gemini $logLabel failed: type=${error.type} status=${error.status}")
@@ -196,6 +197,19 @@ object GeminiClient {
             message = error?.optString("message")?.takeIf { it.isNotBlank() }
                 ?: "Gemini proxy returned a structured error"
         )
+    }
+
+    private fun parseProxyErrorMessage(responseBody: String): String? {
+        val json = runCatching { JSONObject(responseBody) }.getOrNull() ?: return null
+
+        val directMessage = json.optString("message").takeIf { it.isNotBlank() }
+        if (directMessage != null) return directMessage
+
+        val nestedMessage = json.optJSONObject("error")
+            ?.optString("message")
+            ?.takeIf { it.isNotBlank() }
+
+        return nestedMessage
     }
 
     private fun extractText(responseBody: String): Result<String> {
@@ -261,6 +275,26 @@ object GeminiClient {
 
     private fun Exception.isRetryableGeminiFailure(): Boolean {
         return this is GeminiHttpException && code in RETRYABLE_HTTP_CODES
+    }
+
+    sealed class GeminiClientException(
+        message: String,
+        cause: Throwable? = null
+    ) : Exception(message, cause) {
+        class Unauthorized(message: String = "Authentication required for Gemini.") :
+            GeminiClientException(message)
+
+        class QuotaExceeded(message: String = "Daily Gemini limit reached.") :
+            GeminiClientException(message)
+
+        class ServerError(code: Int, message: String) :
+            GeminiClientException("Gemini proxy server error $code: $message")
+
+        class HttpError(val code: Int, message: String) :
+            GeminiClientException(message)
+
+        class InvalidResponse(message: String, cause: Throwable? = null) :
+            GeminiClientException(message, cause)
     }
 
     internal class GeminiHttpException(

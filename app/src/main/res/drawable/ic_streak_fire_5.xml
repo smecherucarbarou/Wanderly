@@ -3,23 +3,37 @@
     android:height="96dp"
     android:viewportWidth="96"
     android:viewportHeight="96">
+    <!-- Soft outer ambient glow -->
     <path
-        android:fillAlpha="0.24"
-        android:fillColor="#FFB02E"
-        android:pathData="M48,3 C58,15 73,22 79,39 C86,40 91,49 91,60 C91,79 72,92 48,95 C24,92 5,79 5,60 C5,45 15,34 27,35 C31,21 39,11 48,3 Z" />
+        android:fillAlpha="0.18"
+        android:fillColor="#FF6D00"
+        android:pathData="M48,4 C52,12 58,18 63,24 C72,36 80,48 78,62 C76,78 64,90 48,92 C32,90 20,78 18,62 C16,48 24,36 33,24 C38,18 44,12 48,4 Z" />
+    <!-- Deep red outer flame -->
     <path
-        android:fillColor="#E34A0B"
-        android:pathData="M48,5 C58,16 71,21 76,37 C80,31 87,37 87,49 C87,68 69,83 48,92 C27,83 9,68 9,49 C9,36 18,30 24,38 C28,22 38,13 48,5 Z" />
+        android:fillColor="#C62828"
+        android:pathData="M48,10 C52,16 56,20 61,27 C64,32 70,38 73,47 C76,56 74,66 70,73 C65,81 57,86 48,87 C39,86 31,81 26,73 C22,66 20,56 23,47 C26,38 32,32 35,27 C40,20 44,16 48,10 Z" />
+    <!-- Bright orange mid-flame -->
     <path
-        android:fillColor="#FF8B1A"
-        android:pathData="M48,16 C57,24 65,32 65,45 C65,56 58,67 48,81 C38,67 31,56 31,45 C31,32 39,24 48,16 Z" />
+        android:fillColor="#F4511E"
+        android:pathData="M48,20 C51,25 55,30 59,36 C63,43 66,50 66,58 C66,67 62,74 56,78 C52,80 48,81 44,80 C38,78 33,73 31,67 C29,60 30,53 33,46 C36,39 41,32 44,26 C46,23 47,21 48,20 Z" />
+    <!-- Vivid orange inner body -->
     <path
-        android:fillColor="#FFD25C"
-        android:pathData="M48,30 C54,36 59,44 59,53 C59,62 53,69 48,75 C43,69 37,62 37,53 C37,44 42,36 48,30 Z" />
+        android:fillColor="#FF8F00"
+        android:pathData="M48,32 C50,35 53,39 56,44 C59,49 61,54 61,60 C61,66 58,71 54,74 C51,76 48,76 45,75 C41,73 37,69 36,64 C35,58 36,53 39,48 C42,42 45,37 48,32 Z" />
+    <!-- Golden core flame -->
     <path
-        android:fillColor="#FFF7C7"
-        android:pathData="M48,43 C52,48 55,53 55,59 C55,64 51,68 48,72 C45,68 41,64 41,59 C41,53 44,48 48,43 Z" />
+        android:fillColor="#FFB300"
+        android:pathData="M48,43 C50,46 52,50 54,54 C56,58 56,61 56,64 C56,68 53,72 48,72 C43,72 40,68 40,64 C40,61 40,58 42,54 C44,50 46,46 48,43 Z" />
+    <!-- Bright yellow inner glow -->
     <path
-        android:fillColor="#FFEAA0"
-        android:pathData="M18,24 L21,30 L27,33 L21,36 L18,42 L15,36 L9,33 L15,30 Z" />
+        android:fillColor="#FFD54F"
+        android:pathData="M48,53 C49,55 51,58 52,61 C53,63 52,66 50,68 C49,69 47,69 46,68 C44,66 43,63 44,61 C45,58 47,55 48,53 Z" />
+    <!-- White-hot tip -->
+    <path
+        android:fillColor="#FFF8E1"
+        android:pathData="M48,60 C49,62 50,64 49,66 C49,67 48,67 47,66 C46,64 47,62 48,60 Z" />
+    <!-- Sparkle -->
+    <path
+        android:fillColor="#FFF59D"
+        android:pathData="M22,28 L24,33 L29,35 L24,37 L22,42 L20,37 L15,35 L20,33 Z" />
 </vector>

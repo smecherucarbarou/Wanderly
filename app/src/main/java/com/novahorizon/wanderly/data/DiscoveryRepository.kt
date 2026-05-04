@@ -19,7 +19,12 @@ class DiscoveryRepository(
     suspend fun fetchHiddenGemCandidates(lat: Double, lng: Double, radius: Int, city: String? = null): List<DiscoveredPlace> = withContext(Dispatchers.IO) {
         when (val result = fetchHiddenGemCandidatesResult(lat, lng, radius, city)) {
             is HiddenGemCandidateResult.Success -> result.candidates
-            is HiddenGemCandidateResult.Error -> emptyList()
+            is HiddenGemCandidateResult.Error -> {
+                // Return empty list only if not a blocking error that should have been bubbled up.
+                // In this repository, we usually want the candidates even if one source failed,
+                // but fetchHiddenGemCandidatesResult handles the blocking logic.
+                emptyList()
+            }
         }
     }
 

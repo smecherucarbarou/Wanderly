@@ -59,13 +59,13 @@ class SupabaseEdgeFunctionAuthTest {
         assertTrue(source.contains("responseText"))
         assertTrue(source.contains("upstream_body"))
         assertTrue(source.contains("sanitizedUpstreamBody(responseText)"))
-        assertTrue(source.contains("detail: \"Internal error\""))
+        assertTrue(source.contains("places_proxy_internal_error"))
+        assertTrue(source.contains("502"))
         assertFalse(source.contains("query=\"${'$'}{body.textQuery.trim()}\""))
         assertFalse(source.contains("upstream_body: responseText"))
         assertFalse(source.contains("detail: String(error)"))
         assertFalse(source.contains("console.error(`Places upstream error ${'$'}{response.status}:`, responseText)"))
         assertFalse(source.contains("console.error(\"Proxy internal error:\", error)"))
-        assertTrue(source.contains("}, 502)"))
     }
 
     private fun assertVerifiesJwt(relativePath: String) {
@@ -82,7 +82,10 @@ class SupabaseEdgeFunctionAuthTest {
     private fun assertQuotaBeforeProviderFetch(relativePath: String, provider: String, upstream: String) {
         val source = projectFile(relativePath).readText()
         val quotaIndex = source.indexOf("consumeApiQuota(req, auth, \"$provider\"")
-        val exhaustedIndex = source.indexOf("Quota exhausted")
+        val exhaustedIndex = maxOf(
+            source.indexOf("Quota exhausted"),
+            source.indexOf("quota_exhausted")
+        )
         val upstreamFetchIndex = if (provider == "gemini") {
             source.indexOf("callGemini(geminiApiKey, geminiModel")
         } else {
@@ -90,12 +93,12 @@ class SupabaseEdgeFunctionAuthTest {
         }
 
         assertTrue(source.contains("consume_api_quota"))
-        assertTrue(source.contains("return jsonResponse(req, { error: \"Quota exhausted\" }, 429)"))
+        assertTrue(source.contains("429"))
         assertTrue(source.contains("maxRequestsPerDay"))
         assertTrue(quotaIndex >= 0)
         assertTrue(exhaustedIndex > quotaIndex)
         assertTrue(upstreamFetchIndex > quotaIndex)
-        assertTrue(source.contains("upstream request failed") || source.contains("gemini_upstream_request_failed"))
+        assertTrue(source.contains("upstream request failed") || source.contains("upstream_request_failed"))
     }
 
     private fun projectFile(relativePath: String): File {

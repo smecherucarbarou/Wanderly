@@ -3,6 +3,8 @@ package com.novahorizon.wanderly.data
 import com.novahorizon.wanderly.observability.AppLogger
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
@@ -15,9 +17,11 @@ import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.Clock
 import com.novahorizon.wanderly.util.SystemClock
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,6 +50,9 @@ class AvatarRepository(
         mimeType: String
     ): AvatarUploadResult = withContext(Dispatchers.IO) {
         validateAvatarPayload(imageBytes, mimeType)?.let { return@withContext it }
+        val processedBytes = try { recompressAsJpeg(imageBytes) } catch (_: Exception) {
+            return@withContext AvatarUploadResult.Error("Could not process avatar image")
+        }
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
             ?: return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
         val uid = session.user?.id
@@ -67,7 +74,7 @@ class AvatarRepository(
                 .addHeader("Authorization", "Bearer $accessToken")
                 .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
                 .addHeader("x-upsert", "true")
-                .post(imageBytes.toRequestBody(mimeType.toMediaType()))
+                .post(processedBytes.toRequestBody(AVATAR_MIME_TYPE.toMediaType()))
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -80,7 +87,7 @@ class AvatarRepository(
             }
 
             logDebug("Upload success bucket=$bucket path=${target.filePath}")
-            AvatarUploadResult.Success(target.filePath)
+            AvatarUploadResult.Success(target.publicUrl)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Upload failed bucket=$bucket path=${target.filePath} error=${e.message}", e)
@@ -89,21 +96,28 @@ class AvatarRepository(
     }
 
     suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult = withContext(Dispatchers.IO) {
-        val auth = SupabaseClient.client.auth
-        val accessToken = auth.currentAccessTokenOrNull() ?: run {
-            logError("No access token available for avatar upload")
-            return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
-        }
-
-        logDebug("Uploading avatar")
-
+        var stage = "read_bytes"
         try {
             val avatarBytes = readAvatarBytes(uri)
             val mimeType = resolveAvatarMimeType(uri)
             validateAvatarPayload(avatarBytes, mimeType)?.let { return@withContext it }
 
+            stage = "validate_user"
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            val currentUserId = session?.user?.id
+            require(!currentUserId.isNullOrBlank()) {
+                "No authenticated Supabase user for avatar upload"
+            }
+            require(currentUserId == profileId) {
+                "Avatar upload user mismatch currentUser=$currentUserId profileId=$profileId"
+            }
+            val accessToken = SupabaseClient.client.auth.currentAccessTokenOrNull()
+            require(!accessToken.isNullOrBlank()) {
+                "No authenticated Supabase user for avatar upload"
+            }
+
             val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
-            val bucket = Constants.STORAGE_BUCKET_AVATARS
+            val bucket = AVATAR_BUCKET
             val target = buildAvatarStorageTarget(
                 baseUrl = baseUrl,
                 bucket = bucket,
@@ -112,8 +126,12 @@ class AvatarRepository(
                 mimeType = mimeType
             )
 
-            logDebug("Target upload URL: ${target.uploadUrl}")
+            logDebug(
+                "Avatar upload start currentUser=$currentUserId profileId=$profileId " +
+                    "bucket=$bucket objectPath=${target.filePath} mimeType=$mimeType bytes=${avatarBytes.size}"
+            )
 
+            stage = "storage_upload"
             val request = Request.Builder()
                 .url(target.uploadUrl)
                 .addHeader("Authorization", "Bearer $accessToken")
@@ -126,45 +144,92 @@ class AvatarRepository(
                 val responseBody = response.body.string()
                 if (!response.isSuccessful) {
                     val message = buildAvatarUploadFailureMessage(response.code, responseBody)
-                    logError(message)
+                    val failure = IllegalStateException(message)
+                    logStageFailure(stage, failure)
                     val error = toAvatarUploadError(response.code, responseBody)
                     if (!error.isRetryable) {
                         CrashReporter.recordNonFatal(
                             CrashEvent.PROFILE_AVATAR_UPLOAD_FAILED,
-                            IllegalStateException(message),
+                            failure,
                             CrashKey.COMPONENT to "profile",
                             CrashKey.OPERATION to "avatar_upload_http"
                         )
                     }
-                    return@withContext error
+                    return@withContext AvatarUploadResult.Error(
+                        message = stageFailureMessage(stage, error.isRetryable),
+                        isRetryable = error.isRetryable
+                    )
                 }
-                logDebug("Avatar upload successful")
             }
 
-            logDebug("Generated avatar storage path")
-            AvatarUploadResult.Success(target.filePath)
+            stage = "public_url"
+            val publicUrl = target.publicUrl.takeIf { it.isNotBlank() }
+                ?: error("Could not build public avatar URL")
+
+            stage = "profile_update"
+            SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
+                Profile::avatar_url setTo publicUrl
+            }) {
+                filter { eq("id", profileId) }
+            }
+
+            logDebug("Avatar upload success currentUser=$currentUserId profileId=$profileId bucket=$bucket objectPath=${target.filePath}")
+            AvatarUploadResult.Success(target.publicUrl)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
+            logStageFailure(stage, e)
             CrashReporter.recordNonFatal(
                 CrashEvent.PROFILE_AVATAR_UPLOAD_FAILED,
                 e,
                 CrashKey.COMPONENT to "profile",
-                CrashKey.OPERATION to "avatar_upload"
+                CrashKey.OPERATION to "avatar_upload_$stage"
             )
-            logError("Exception during avatar upload", e)
-            AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
+            AvatarUploadResult.Error(stageFailureMessage(stage))
         }
     }
 
     private fun readAvatarBytes(uri: Uri): ByteArray {
-        return context.contentResolver.openInputStream(uri)?.use { input ->
+        val rawBytes = context.contentResolver.openInputStream(uri)?.use { input ->
             input.readBytes()
-        } ?: throw IllegalStateException("Could not open avatar input stream")
+        } ?: throw IllegalStateException("Could not read avatar image bytes")
+        return recompressAsJpeg(rawBytes)
     }
 
-    private fun resolveAvatarMimeType(uri: Uri): String {
-        return context.contentResolver.getType(uri) ?: "image/jpeg"
+    private fun recompressAsJpeg(rawBytes: ByteArray): ByteArray {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, options)
+        if (options.outWidth <= 0 || options.outHeight <= 0) {
+            throw IllegalStateException("Could not decode avatar image")
+        }
+        val maxDim = MAX_AVATAR_DIMENSION
+        val sampleSize = maxOf(options.outWidth / maxDim, options.outHeight / maxDim, 1)
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val sampled = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, decodeOptions)
+            ?: throw IllegalStateException("Could not decode avatar image")
+        val bitmap = if (sampled.width > maxDim || sampled.height > maxDim) {
+            val scale = maxDim.toFloat() / maxOf(sampled.width, sampled.height)
+            val scaled = Bitmap.createScaledBitmap(
+                sampled,
+                (sampled.width * scale).toInt().coerceAtLeast(1),
+                (sampled.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+            if (scaled !== sampled) sampled.recycle()
+            scaled
+        } else {
+            sampled
+        }
+        return try {
+            ByteArrayOutputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+                out.toByteArray()
+            }
+        } finally {
+            bitmap.recycle()
+        }
     }
+
+    private fun resolveAvatarMimeType(uri: Uri): String = AVATAR_MIME_TYPE
 
     private fun logDebug(message: String) {
         if (BuildConfig.DEBUG) {
@@ -186,11 +251,30 @@ class AvatarRepository(
         }
     }
 
+    private fun logStageFailure(stage: String, throwable: Throwable) {
+        logDebug(
+            "Avatar upload failed stage=$stage type=${throwable::class.simpleName} " +
+                "message=${throwable.message}"
+        )
+    }
+
+    private fun stageFailureMessage(stage: String, retryable: Boolean = false): String {
+        return if (retryable) {
+            "Avatar upload failed at $stage. Please try again."
+        } else {
+            "Avatar upload failed at $stage. Please try another image."
+        }
+    }
+
     companion object {
+        private const val AVATAR_BUCKET = "avatars"
+        private const val AVATAR_MIME_TYPE = "image/jpeg"
         private const val UPLOAD_AVATAR_URL_MARKER = "/storage/v1/object/avatars/"
         private const val PUBLIC_AVATAR_URL_MARKER = "/storage/v1/object/public/avatars/"
         private const val AUTHENTICATED_AVATAR_URL_MARKER = "/storage/v1/object/authenticated/avatars/"
         internal const val MAX_AVATAR_UPLOAD_BYTES = 2L * 1024L * 1024L
+        private const val MAX_AVATAR_DIMENSION = 512
+        private const val JPEG_QUALITY = 80
         private val ALLOWED_MIME = setOf("image/jpeg", "image/png", "image/webp")
 
         internal fun validateAvatarPayload(imageBytes: ByteArray, mimeType: String): AvatarUploadResult? {
@@ -213,21 +297,25 @@ class AvatarRepository(
         }
 
         internal fun buildAvatarStorageTarget(
-            baseUrl: String,
-            bucket: String,
-            profileId: String,
-            versionToken: String,
-            mimeType: String = "image/jpeg"
-        ): AvatarStorageTarget {
-            val normalizedBaseUrl = baseUrl.trimEnd('/')
-            val filePath = AvatarPathBuilder.build(profileId, mimeType)
-            return AvatarStorageTarget(
-                filePath = filePath,
-                uploadUrl = "$normalizedBaseUrl/storage/v1/object/$bucket/$filePath",
-                publicUrl = "$normalizedBaseUrl/storage/v1/object/public/$bucket/$filePath?v=$versionToken",
-                useUpsert = true
-            )
-        }
+    baseUrl: String,
+    bucket: String,
+    profileId: String,
+    versionToken: String,
+    mimeType: String = "image/jpeg"
+): AvatarStorageTarget {
+    val normalizedBaseUrl = baseUrl.trimEnd('/')
+    // Keep avatar path aligned with Storage RLS: profiles/<auth.uid()>/avatar.jpg.
+    val objectPath = "profiles/$profileId/avatar.jpg"
+    val cacheBustedPublicUrl =
+        "$normalizedBaseUrl/storage/v1/object/public/$bucket/$objectPath?v=$versionToken"
+
+    return AvatarStorageTarget(
+        filePath = objectPath,
+        uploadUrl = "$normalizedBaseUrl/storage/v1/object/$bucket/$objectPath",
+        publicUrl = cacheBustedPublicUrl,
+        useUpsert = true
+    )
+}
 
         internal fun buildAvatarUploadFailureMessage(code: Int, responseBody: String): String {
             val trimmedResponse = responseBody.trim()
@@ -263,7 +351,7 @@ class AvatarRepository(
 }
 
 sealed class AvatarUploadResult {
-    data class Success(val path: String) : AvatarUploadResult()
+    data class Success(val avatarUrl: String) : AvatarUploadResult()
     data class Error(val message: String, val isRetryable: Boolean = false) : AvatarUploadResult()
     object UnsupportedFormat : AvatarUploadResult()
     object FileTooLarge : AvatarUploadResult()

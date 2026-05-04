@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.notifications
 
 import android.content.Context
+import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.util.DateUtils
 import java.text.SimpleDateFormat
@@ -18,6 +19,11 @@ object StreakNotificationRules {
         source: String,
         stateStore: NotificationStateStore
     ) {
+        if (BuildConfig.DEBUG) {
+            NotificationCheckCoordinator.log("streak", source, "Suppressed in debug build.")
+            return
+        }
+
         val profile = repository.getCurrentProfile()
         if (profile == null) {
             NotificationCheckCoordinator.log("streak", source, "Skipped: no current profile.")

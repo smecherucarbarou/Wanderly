@@ -7,12 +7,12 @@ import org.junit.Test
 class AvatarPathBuilderTest {
 
     @Test
-    fun `avatar path uses profiles uid folder`() {
+    fun `avatar path uses profiles uid folder and fixed jpg object`() {
         val uid = "00000000-0000-0000-0000-000000000000"
 
         assertEquals("profiles/$uid/avatar.jpg", AvatarPathBuilder.build(uid, "image/jpeg"))
-        assertEquals("profiles/$uid/avatar.webp", AvatarPathBuilder.build(uid, "image/webp"))
-        assertEquals("profiles/$uid/avatar.png", AvatarPathBuilder.build(uid, "image/png"))
+        assertEquals("profiles/$uid/avatar.jpg", AvatarPathBuilder.build(uid, "image/webp"))
+        assertEquals("profiles/$uid/avatar.jpg", AvatarPathBuilder.build(uid, "image/png"))
     }
 
     @Test

@@ -5,19 +5,19 @@
             <solid android:color="@android:color/transparent" />
             <stroke
                 android:width="3.5dp"
-                android:color="#E6FFD166" />
+                android:color="#E6FFD54F" />
         </shape>
     </item>
     <item
-        android:left="8dp"
-        android:top="8dp"
-        android:right="8dp"
-        android:bottom="8dp">
+        android:left="7dp"
+        android:top="7dp"
+        android:right="7dp"
+        android:bottom="7dp">
         <shape android:shape="oval">
             <solid android:color="@android:color/transparent" />
             <stroke
                 android:width="2dp"
-                android:color="#88FFF7D6" />
+                android:color="#80FFF8E1" />
         </shape>
     </item>
 </layer-list>

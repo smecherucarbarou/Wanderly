@@ -8,6 +8,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.api.GeminiClient
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.AiResponseParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -31,7 +32,7 @@ class GemCurationRepository(
         city: String,
         candidates: List<DiscoveredPlace>,
         seenGemsHistory: Set<String>
-    ): List<Gem> {
+    ): List<Gem> = try {
         val prompt = buildCuratedPrompt(city, candidates, seenGemsHistory)
         val response = geminiClient.generateWithSearch(prompt)
         val cleanJson = AiResponseParser.extractFirstJsonArray(response)
@@ -44,7 +45,7 @@ class GemCurationRepository(
             throw IllegalStateException(context.getString(R.string.gems_invalid_response))
         }
 
-        return gemPicks.mapNotNull { pick ->
+        gemPicks.mapNotNull { pick ->
             val candidate = candidates.getOrNull(pick.candidateIndex - 1) ?: return@mapNotNull null
             candidate.toGem(
                 description = pick.description,
@@ -53,6 +54,11 @@ class GemCurationRepository(
                 fallbackLocation = city
             )
         }.distinctBy { it.name.lowercase(Locale.ROOT) }
+    } catch (e: GeminiClient.GeminiHttpException) {
+        throw mapGeminiHttpException(e)
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        throw e
     }
 
     private fun buildCuratedPrompt(
@@ -155,5 +161,16 @@ class GemCurationRepository(
         if (BuildConfig.DEBUG) {
             AppLogger.d("GemCurationRepository", "Raw gem response: ${LogRedactor.redact(response)}")
         }
+    }
+
+    private fun mapGeminiHttpException(e: GeminiClient.GeminiHttpException): IllegalStateException {
+        val message = when (e.code) {
+            401 -> "Please sign in again to use AI gem curation."
+            429 -> "Daily AI gem limit reached. Try again tomorrow."
+            500, 502, 503, 504 -> "AI gem curation is temporarily unavailable. Please try again later."
+            else -> context.getString(R.string.gems_invalid_response)
+        }
+
+        return IllegalStateException(message, e)
     }
 }

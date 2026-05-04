@@ -54,7 +54,7 @@ class ProfileViewModel @Inject constructor(
 
     sealed class ProfileEvent {
         data class ShowMessage(val message: UiText, val isError: Boolean) : ProfileEvent()
-        data class AvatarUpdated(val remotePath: String) : ProfileEvent()
+        data class AvatarUpdated(val avatarUrl: String) : ProfileEvent()
         data class ClassLocked(val className: String) : ProfileEvent()
         object LoggedOut : ProfileEvent()
     }
@@ -92,62 +92,54 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun uploadAvatar(profile: Profile, uri: Uri) {
-        viewModelScope.launch {
-            try {
-                val avatarUrl = when (val uploadResult = repository.uploadAvatar(uri, profile.id)) {
-                    is AvatarUploadResult.Success -> uploadResult.path
-                    is AvatarUploadResult.Error -> {
-                        _profileEvent.postValue(
-                            ProfileEvent.ShowMessage(
-                                UiText.DynamicString(uploadResult.message),
-                                isError = true
-                            )
+    viewModelScope.launch {
+        try {
+            val avatarUrl = when (val uploadResult = repository.uploadAvatar(uri, profile.id)) {
+                is AvatarUploadResult.Success -> uploadResult.avatarUrl
+
+                is AvatarUploadResult.Error -> {
+                    _profileEvent.postValue(
+                        ProfileEvent.ShowMessage(
+                            UiText.DynamicString(uploadResult.message),
+                            isError = true
                         )
-                        return@launch
-                    }
-                    AvatarUploadResult.FileTooLarge -> {
-                        _profileEvent.postValue(
-                            ProfileEvent.ShowMessage(
-                                UiText.resource(R.string.profile_avatar_upload_failed),
-                                isError = true
-                            )
-                        )
-                        return@launch
-                    }
-                    AvatarUploadResult.UnsupportedFormat -> {
-                        _profileEvent.postValue(
-                            ProfileEvent.ShowMessage(
-                                UiText.resource(R.string.profile_avatar_upload_failed),
-                                isError = true
-                            )
-                        )
-                        return@launch
-                    }
-                }
-                val updatedProfile = profile.copy(avatar_url = avatarUrl)
-                when (repository.updateProfileDetailed(updatedProfile)) {
-                    is ProfileUpdateResult.Success -> Unit
-                    is ProfileUpdateResult.Error -> {
-                        _profileEvent.postValue(
-                            ProfileEvent.ShowMessage(
-                                UiText.resource(R.string.profile_avatar_upload_failed),
-                                isError = true
-                            )
-                        )
-                        return@launch
-                    }
-                }
-                _profileEvent.postValue(ProfileEvent.AvatarUpdated(avatarUrl))
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                _profileEvent.postValue(
-                    ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_avatar_upload_failed),
-                        isError = true
                     )
-                )
+                    return@launch
+                }
+
+                AvatarUploadResult.FileTooLarge -> {
+                    _profileEvent.postValue(
+                        ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_avatar_upload_failed),
+                            isError = true
+                        )
+                    )
+                    return@launch
+                }
+
+                AvatarUploadResult.UnsupportedFormat -> {
+                    _profileEvent.postValue(
+                        ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_avatar_upload_failed),
+                            isError = true
+                        )
+                    )
+                    return@launch
+                }
             }
+
+            // Repository already persists avatar_url; this event lets the UI refresh immediately.
+            _profileEvent.postValue(ProfileEvent.AvatarUpdated(avatarUrl))
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            _profileEvent.postValue(
+                ProfileEvent.ShowMessage(
+                    UiText.resource(R.string.profile_avatar_upload_failed),
+                    isError = true
+                )
+            )
         }
+    }
     }
 
     fun updateUsername(profile: Profile, newUsername: String) {

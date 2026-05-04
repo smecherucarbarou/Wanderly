@@ -86,8 +86,38 @@ function errorToLog(error: unknown): Record<string, unknown> {
   }
 }
 
+const UPSTREAM_TIMEOUT_MS = 30_000
+
+async function fetchWithTimeout(
+  input: string | URL | Request,
+  init: RequestInit = {},
+  timeoutMs = UPSTREAM_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function sanitizeGeminiResponse(responseText: string): string {
+  try {
+    const parsed = JSON.parse(responseText)
+    if (!isRecord(parsed)) return responseText
+    const sanitized: Record<string, unknown> = {}
+    if (Array.isArray(parsed.candidates)) sanitized.candidates = parsed.candidates
+    if (isRecord(parsed.usageMetadata)) sanitized.usageMetadata = parsed.usageMetadata
+    if (typeof parsed.modelVersion === "string") sanitized.modelVersion = parsed.modelVersion
+    return JSON.stringify(sanitized)
+  } catch {
+    return responseText
+  }
 }
 
 function isValidGeminiPayload(payload: unknown): boolean {
@@ -197,7 +227,7 @@ async function callGemini(
   model: string,
   payload: Record<string, unknown>,
 ): Promise<Response> {
-  return await fetch(
+  return await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
@@ -298,11 +328,11 @@ Deno.serve(async (req: Request) => {
           upstream_body: sanitizedUpstreamBody(responseText),
           diagnostic_id: errorId,
         },
-      }, geminiResponse.status)
+      }, 502)
     }
 
-    return new Response(responseText, {
-      status: geminiResponse.status,
+    return new Response(sanitizeGeminiResponse(responseText), {
+      status: 200,
       headers: corsHeaders,
     })
   } catch (error) {

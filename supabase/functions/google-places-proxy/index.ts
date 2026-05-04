@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const MAX_FIELD_MASK_LENGTH = 256
 const MAX_BODY_BYTES = 16 * 1024
+const MAX_RESULT_COUNT = 20
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 
@@ -74,6 +75,34 @@ function placesError(
   return jsonResponse(req, body as unknown as Record<string, unknown>, status)
 }
 
+function sanitizePlacesResponse(responseText: string): string {
+  try {
+    const parsed = JSON.parse(responseText)
+    if (!isRecord(parsed)) return responseText
+    const sanitized: Record<string, unknown> = {}
+    if (Array.isArray(parsed.places)) sanitized.places = parsed.places
+    return JSON.stringify(sanitized)
+  } catch {
+    return responseText
+  }
+}
+
+const UPSTREAM_TIMEOUT_MS = 30_000
+
+async function fetchWithTimeout(
+  input: string | URL | Request,
+  init: RequestInit = {},
+  timeoutMs = UPSTREAM_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -136,40 +165,40 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(req, { error: "Method not allowed" }, 405)
+    return placesError(req, "method_not_allowed", 405, "Method not allowed")
   }
 
   const authorization = req.headers.get("authorization") ?? ""
   if (!authorization.startsWith("Bearer ")) {
-    return jsonResponse(req, { error: "Missing bearer token" }, 401)
+    return placesError(req, "missing_bearer_token", 401, "Missing bearer token")
   }
 
   let auth: AuthContext | null
   try {
     auth = await verifyAuth(req)
   } catch {
-    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
+    return placesError(req, "missing_supabase_auth_config", 500, "Server configuration unavailable")
   }
   if (!auth) {
-    return jsonResponse(req, { error: "Invalid bearer token" }, 401)
+    return placesError(req, "invalid_bearer_token", 401, "Invalid bearer token")
   }
 
   const placesApiKey = Deno.env.get("MAPS_API_KEY")
   if (!placesApiKey) {
-    return jsonResponse(req, { error: "Server configuration unavailable" }, 500)
+    return placesError(req, "missing_maps_api_key", 500, "Server configuration unavailable")
   }
 
   try {
     const requestBody = await req.text()
     if (requestBody.length === 0 || requestBody.length > MAX_BODY_BYTES) {
-      return jsonResponse(req, { error: "Invalid request size" }, 413)
+      return placesError(req, "invalid_request_size", 413, "Invalid request size")
     }
 
     let payload: unknown
     try {
       payload = JSON.parse(requestBody)
     } catch {
-      return jsonResponse(req, { error: "Malformed JSON body" }, 400)
+      return placesError(req, "malformed_json_body", 400, "Malformed JSON body")
     }
 
     const fieldMask = isRecord(payload) && typeof payload.fieldMask === "string" ? payload.fieldMask : ""
@@ -179,36 +208,47 @@ Deno.serve(async (req: Request) => {
       !fieldMask ||
       !isRecord(body) ||
       fieldMask.length > MAX_FIELD_MASK_LENGTH ||
-      !/^[A-Za-z0-9_.,*]+$/.test(fieldMask) ||
+      !/^[A-Za-z0-9_.,]+$/.test(fieldMask) ||
       typeof body.textQuery !== "string" ||
       body.textQuery.trim().length === 0 ||
       body.textQuery.length > 200
     ) {
-      return jsonResponse(req, { error: "fieldMask and body.textQuery are required" }, 400)
+      return placesError(req, "invalid_places_request", 400, "fieldMask and body.textQuery are required")
     }
 
     const quotaAllowed = await consumeApiQuota(req, auth, "places", maxRequestsPerDay("PLACES_DAILY_QUOTA", 100))
     if (!quotaAllowed) {
-      return jsonResponse(req, { error: "Quota exhausted" }, 429)
+      return placesError(req, "quota_exhausted", 429, "Daily Google Places limit reached. Try again tomorrow.")
     }
 
-    const locationBias = body.locationBias
-    const circle = isRecord(locationBias) ? locationBias.circle : null
+    const sanitizedBody: Record<string, unknown> = {
+      textQuery: body.textQuery,
+    }
+    if (isRecord(body.locationBias)) sanitizedBody.locationBias = body.locationBias
+    if (isRecord(body.locationRestriction)) sanitizedBody.locationRestriction = body.locationRestriction
+    if (typeof body.includedType === "string") sanitizedBody.includedType = body.includedType
+    const clientMaxResults = typeof body.maxResultCount === "number" ? body.maxResultCount : 0
+    if (clientMaxResults > 0) {
+      sanitizedBody.maxResultCount = Math.min(clientMaxResults, MAX_RESULT_COUNT)
+    }
+
+    const locationBias = sanitizedBody.locationBias
+    const circle = isRecord(locationBias) ? (locationBias as Record<string, unknown>).circle : null
     const radius = isRecord(circle)
-      ? circle.radius
+      ? (circle as Record<string, unknown>).radius
       : null
     console.log(
-      `Places text search request query_length=${body.textQuery.trim().length} field_mask_length=${fieldMask.length} radius=${typeof radius === "number" ? radius : "none"}`,
+      `Places text search request query_length=${(body.textQuery as string).trim().length} field_mask_length=${fieldMask.length} radius=${typeof radius === "number" ? radius : "none"}`,
     )
 
-    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    const response = await fetchWithTimeout("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": placesApiKey,
         "X-Goog-FieldMask": fieldMask,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(sanitizedBody),
     })
 
     const responseText = await response.text()
@@ -218,27 +258,28 @@ Deno.serve(async (req: Request) => {
       return placesError(
         req,
         "places_upstream_request_failed",
-        response.status,
+        502,
         "Places upstream request failed",
         sanitizedUpstreamBody(responseText),
       )
     }
 
+    const sanitizedResponse = sanitizePlacesResponse(responseText)
     try {
-      const parsed = JSON.parse(responseText)
+      const parsed = JSON.parse(sanitizedResponse)
       const count = Array.isArray(parsed.places) ? parsed.places.length : 0
       console.log(`Places text search result count=${count}`)
     } catch {
       console.log("Places text search result count=unknown")
     }
 
-    return new Response(responseText, {
-      status: response.status,
+    return new Response(sanitizedResponse, {
+      status: 200,
       headers: corsHeaders,
     })
   } catch (error) {
     const errorId = diagnosticId()
     console.error(`Places proxy internal error id=${errorId} kind=${describeError(error)}`)
-    return jsonResponse(req, { error: "Places proxy request failed", detail: "Internal error" }, 502)
+    return placesError(req, "places_proxy_internal_error", 502, "Places proxy request failed")
   }
 })

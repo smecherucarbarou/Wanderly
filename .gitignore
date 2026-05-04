@@ -23,6 +23,8 @@
 # Local notes, text exports, and SQL dumps
 *.txt
 *.md
+!CLAUDE.md
+!context.md
 *.sql
 
 # Runtime QA captures and local generated previews
@@ -62,6 +64,7 @@ replay_pid*
 # Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
 .kotlin/
 /.worktrees/
+/.claude/
 /mds/
 /audit/
 /supabase/*

@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -122,7 +123,8 @@ class ProfileViewModelTest {
                 ProfileViewModel.ProfileEvent.AvatarUpdated(REMOTE_AVATAR_PATH),
                 events.last()
             )
-            assertEquals(REMOTE_AVATAR_PATH, repository.updatedProfile?.avatar_url)
+            assertEquals(profile.id, repository.uploadedProfileId)
+            assertNull(repository.updatedProfile)
         } finally {
             store.clear()
             viewModel.profileEvent.removeObserver(events.observer)
@@ -198,6 +200,8 @@ class ProfileViewModelTest {
         private val profileFlow = MutableStateFlow(initialProfile)
         var updatedProfile: Profile? = null
             private set
+        var uploadedProfileId: String? = null
+            private set
 
         override val currentProfile: StateFlow<Profile?> = profileFlow
 
@@ -224,6 +228,7 @@ class ProfileViewModelTest {
 
         override suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
             uploadError?.let { throw it }
+            uploadedProfileId = profileId
             return uploadResult
         }
     }

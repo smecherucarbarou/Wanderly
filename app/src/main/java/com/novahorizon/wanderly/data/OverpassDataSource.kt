@@ -82,7 +82,9 @@ class OverpassDataSource(
         if (bodyString.isBlank()) return emptyList()
         if (!response.isSuccessful || bodyString.trim().startsWith("<?xml")) return emptyList()
 
-        val elements = JSONObject(bodyString).optJSONArray("elements") ?: return emptyList()
+        val elements = runCatching {
+            JSONObject(bodyString).optJSONArray("elements")
+        }.getOrNull() ?: return emptyList()
         val places = mutableListOf<DiscoveredPlace>()
         for (i in 0 until elements.length()) {
             val element = elements.getJSONObject(i)

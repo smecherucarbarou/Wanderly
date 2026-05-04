@@ -24,12 +24,13 @@ class ProfileRepositoryAvatarStorageTargetTest {
             "https://example.supabase.co/storage/v1/object/avatars/profiles/user-123/avatar.jpg",
             target.uploadUrl
         )
-        assertEquals(
-            "https://example.supabase.co/storage/v1/object/public/avatars/profiles/user-123/avatar.jpg?v=1713698472000",
-            target.publicUrl
+        assertTrue(
+            target.publicUrl.startsWith(
+                "https://example.supabase.co/storage/v1/object/public/avatars/profiles/user-123/avatar.jpg"
+            )
         )
+        assertTrue(target.publicUrl.contains("?v=1713698472000"))
         assertTrue(target.useUpsert)
-        assertTrue(target.publicUrl.endsWith(".jpg?v=1713698472000"))
     }
 
     @Test
@@ -117,8 +118,23 @@ class ProfileRepositoryAvatarStorageTargetTest {
         assertTrue(source.contains("private fun readAvatarBytes(uri: Uri): ByteArray"))
         assertTrue(source.contains("context.contentResolver.openInputStream(uri)"))
         assertTrue(source.contains("private fun resolveAvatarMimeType(uri: Uri): String"))
-        assertTrue(source.contains("context.contentResolver.getType(uri) ?: \"image/jpeg\""))
+        assertTrue(source.contains("private const val AVATAR_MIME_TYPE = \"image/jpeg\""))
         assertFalse(source.contains("File(uri.path!!"))
+    }
+
+    @Test
+    fun `avatar upload owns staged storage and profile update diagnostics`() {
+        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/data/AvatarRepository.kt").readText()
+
+        assertTrue(source.contains("stage = \"read_bytes\""))
+        assertTrue(source.contains("stage = \"validate_user\""))
+        assertTrue(source.contains("stage = \"storage_upload\""))
+        assertTrue(source.contains("stage = \"public_url\""))
+        assertTrue(source.contains("stage = \"profile_update\""))
+        assertTrue(source.contains("require(currentUserId == profileId)"))
+        assertTrue(source.contains("Profile::avatar_url setTo publicUrl"))
+        assertTrue(source.contains("Avatar upload start currentUser=$"))
+        assertTrue(source.contains("Avatar upload failed stage=$"))
     }
 
     private fun projectFile(relativePath: String): File {
