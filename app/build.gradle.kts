@@ -91,7 +91,8 @@ val releaseSupabaseConfigUsesPlaceholders =
     supabaseUrl.contains("your-supabase-url", ignoreCase = true) ||
         supabaseAnonKey.contains("your-supabase-anon-key", ignoreCase = true)
 val canAssembleReleaseForSizeReport =
-    supabaseUrl.isNotBlank() &&
+    hasReleaseSigningConfig &&
+        supabaseUrl.isNotBlank() &&
         supabaseUrl.startsWith("https://") &&
         !releaseSupabaseConfigUsesPlaceholders
 
@@ -270,7 +271,11 @@ android {
             buildConfigField("String", "PLACES_PROXY_URL", buildConfigString(placesProxyUrl))
             buildConfigField("Boolean", "CRASH_REPORTING_CONFIGURED", hasGoogleServicesJson.toString())
             manifestPlaceholders["crashlyticsCollectionEnabled"] = hasGoogleServicesJson.toString()
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
