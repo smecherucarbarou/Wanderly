@@ -23,9 +23,8 @@
 # Local notes, text exports, and SQL dumps
 *.txt
 *.md
-!CLAUDE.md
-!context.md
 *.sql
+*.ps1
 
 # Runtime QA captures and local generated previews
 /*.png
