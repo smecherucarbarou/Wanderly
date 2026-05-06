@@ -286,7 +286,7 @@ android {
             signingConfig = if (hasReleaseSigningConfig) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                null
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -363,6 +363,38 @@ val apkSizeReport by tasks.registering(ApkSizeReportTask::class) {
 tasks.configureEach {
     if (name == "preReleaseBuild") {
         dependsOn(validateReleaseConfig, validateReleaseSigning)
+    }
+}
+
+abstract class ValidateReleaseSigningStrictTask : DefaultTask() {
+    @get:Input
+    abstract val hasUsableSigningConfig: Property<Boolean>
+
+    @TaskAction
+    fun validate() {
+        if (!hasUsableSigningConfig.get()) {
+            throw GradleException(
+                "Release signing is mandatory for release artifacts. " +
+                    "Configure release keystore (RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, " +
+                    "RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD) before assembleRelease/bundleRelease."
+            )
+        }
+    }
+}
+
+val validateReleaseSigningStrict by tasks.registering(ValidateReleaseSigningStrictTask::class) {
+    group = "verification"
+    description = "Ensures release artifacts are never debug-signed. Fails if release keystore is unavailable."
+    hasUsableSigningConfig.set(hasReleaseSigningConfig)
+}
+
+tasks.matching { it.name in listOf("assembleRelease", "bundleRelease") }.configureEach {
+    dependsOn(validateReleaseSigningStrict)
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("com.google.guava:guava:33.4.0-android")
     }
 }
 

@@ -12,15 +12,26 @@ object AuthCallbackMatcher {
 
     fun matchesCallbackUri(uri: Uri?): Boolean {
         if (!matches(uri?.scheme, uri?.host, uri?.path)) return false
-        return uri.hasAuthPayload()
+        if (uri.containsTokenFragment()) return false
+        return uri.hasCodePayload()
     }
 
-    private fun Uri?.hasAuthPayload(): Boolean {
+    fun isSecureCallback(uri: Uri?): Boolean = matchesCallbackUri(uri)
+
+    private fun Uri?.hasCodePayload(): Boolean {
+        if (this == null) return false
+        return !getQueryParameter("code").isNullOrBlank()
+    }
+
+    private fun Uri?.containsTokenFragment(): Boolean {
         if (this == null) return false
         val fragment = fragment.orEmpty()
-        return !getQueryParameter("code").isNullOrBlank() ||
+        val query = query.orEmpty()
+        return fragment.contains("access_token=") ||
+            fragment.contains("refresh_token=") ||
+            query.contains("access_token=") ||
+            query.contains("refresh_token=") ||
             !getQueryParameter("access_token").isNullOrBlank() ||
-            fragment.contains("access_token=") ||
-            fragment.contains("refresh_token=")
+            !getQueryParameter("refresh_token").isNullOrBlank()
     }
 }

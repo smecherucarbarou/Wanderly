@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4"
 
 const MAX_FIELD_MASK_LENGTH = 256
 const MAX_BODY_BYTES = 16 * 1024

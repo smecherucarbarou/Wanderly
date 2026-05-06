@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Wanderly</string>
-    <string name="auth_password_required">Password is required</string>
     <string name="generate_mission">New Flight</string>
     <string name="rank_1">Worker Bee</string>
     <string name="rank_2">Scout Bee</string>

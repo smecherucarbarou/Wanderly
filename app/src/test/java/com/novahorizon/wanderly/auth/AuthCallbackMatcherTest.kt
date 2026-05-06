@@ -29,15 +29,46 @@ class AuthCallbackMatcherTest {
     }
 
     @Test
-    fun `accepts auth callback uri with token fragment or code query`() {
+    fun `accepts valid callback with code query param`() {
         assertTrue(
+            AuthCallbackMatcher.matchesCallbackUri(
+                Uri.parse("wanderly://auth/callback?code=auth-code")
+            )
+        )
+    }
+
+    @Test
+    fun `rejects callback with access_token in fragment`() {
+        assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
                 Uri.parse("wanderly://auth/callback#access_token=token&refresh_token=refresh")
             )
         )
-        assertTrue(
+    }
+
+    @Test
+    fun `rejects callback with access_token in query`() {
+        assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
-                Uri.parse("wanderly://auth/callback?code=auth-code")
+                Uri.parse("wanderly://auth/callback?access_token=abc")
+            )
+        )
+    }
+
+    @Test
+    fun `rejects callback with refresh_token in query`() {
+        assertFalse(
+            AuthCallbackMatcher.matchesCallbackUri(
+                Uri.parse("wanderly://auth/callback?refresh_token=abc")
+            )
+        )
+    }
+
+    @Test
+    fun `rejects callback without code param`() {
+        assertFalse(
+            AuthCallbackMatcher.matchesCallbackUri(
+                Uri.parse("wanderly://auth/callback")
             )
         )
     }

@@ -107,6 +107,19 @@ jobs:
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace --console=plain
 
+      - name: Supabase RPC contract check
+        run: bash scripts/check_supabase_rpc_contract.sh
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Deno type-check Edge Functions
+        run: |
+          deno check supabase/functions/gemini-proxy/index.ts
+          deno check supabase/functions/google-places-proxy/index.ts
+
       - name: Release regression check
         run: ./gradlew :app:releaseRegressionCheck --stacktrace --console=plain
 
@@ -193,10 +206,6 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build unsigned inspection artifacts
-        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
-        run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
-
       - name: Build signed release artifacts
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
         env:
@@ -205,20 +214,6 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace --console=plain
-
-      - name: Upload unsigned inspection APK not for Play
-        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-inspection-apk-not-for-play
-          path: app/build/outputs/apk/release/*unsigned*.apk
-
-      - name: Upload unsigned inspection AAB not for Play
-        if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-inspection-aab-not-for-play
-          path: app/build/outputs/bundle/release/*.aab
 
       - name: Upload signed release APK
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4"
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024
 const MAX_PROMPT_TEXT_CHARS = 12_000

@@ -21,6 +21,12 @@
 *.log
 
 # Local notes, text exports, and SQL dumps
+/CONTEXT.md
+/context.md
+/AUDIT.md
+/audit.md
+/docs/
+/logs/
 *.txt
 *.md
 *.sql
