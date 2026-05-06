@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.firebase.crashlytics) apply false
     alias(libs.plugins.kover) apply false
     alias(libs.plugins.android.test) apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.3.20" apply false
     id("com.google.dagger.hilt.android") version "2.59.1" apply false
     id("com.google.devtools.ksp") version "2.3.6" apply false
+    id("com.github.ben-manes.versions") version "0.51.0" apply false
 }

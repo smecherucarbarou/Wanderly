@@ -10,6 +10,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.asFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
@@ -20,110 +25,82 @@ import androidx.navigation.fragment.findNavController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.data.Mission
-import com.novahorizon.wanderly.databinding.FragmentMapBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.showSnackbar
-import com.novahorizon.wanderly.ui.social.SocialViewModel
+import com.novahorizon.wanderly.ui.compose.screens.map.MapScreen
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import org.osmdroid.events.MapListener
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 @AndroidEntryPoint
 class MapFragment : Fragment() {
 
-    private var _binding: FragmentMapBinding? = null
-    private val binding get() = _binding!!
-    
-    private val viewModel: SocialViewModel by viewModels()
     private val mapViewModel: MapViewModel by viewModels()
-    
+
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var mapView: MapView? = null
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private val friendMarkers = mutableListOf<Marker>()
-    private var friendProfiles: List<com.novahorizon.wanderly.data.Profile> = emptyList()
     private var friendMarkerIcon: BitmapDrawable? = null
     private val friendClusterIcons = mutableMapOf<Int, BitmapDrawable>()
-    private var mapListener: MapListener? = null
-    private val mapView: MapView?
-        get() = _binding?.mapView
     private val locationPermissionController = LocationPermissionController(this)
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = FragmentMapBinding.inflate(inflater, container, false)
-        return binding.root
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                WanderlyTheme {
+                    val activeMission by mapViewModel.activeMission.asFlow().collectAsStateWithLifecycle(null)
+                    val isMapReady by mapViewModel.isMapReady.asFlow().collectAsStateWithLifecycle(false)
+                    MapScreen(
+                        activeMission = activeMission,
+                        isMapReady = isMapReady,
+                        onMyLocation = { handleMyLocationAction() },
+                        onNavigateToMissions = {
+                            findNavController().navigate(R.id.action_map_to_missions)
+                        },
+                        onMapViewCreated = { map -> onMapReady(map) },
+                        onMapViewDisposed = { cleanupMap() }
+                    )
+                }
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
-        binding.fabMyLocation.setOnClickListener {
-            handleMyLocationAction()
+        mapViewModel.loadActiveMission()
+
+        mapViewModel.clusters.observe(viewLifecycleOwner) {
+            renderFriendMarkers(it)
+        }
+    }
+
+    private fun onMapReady(map: MapView) {
+        mapView = map
+        mapViewModel.onMapReady()
+
+        val savedPosition = mapViewModel.cameraPosition.value
+        if (savedPosition != null) {
+            map.controller.setCenter(GeoPoint(savedPosition.latitude, savedPosition.longitude))
+            map.controller.setZoom(savedPosition.zoom)
         }
 
-        mapViewModel.activeMission.observe(viewLifecycleOwner) { mission ->
-            renderActiveMission(mission)
-        }
-        checkActiveMission()
-
-        configureMap(binding.mapView)
-        attachMapListener(binding.mapView)
-        
-        // Observe friends to display on map
-        viewModel.friends.observe(viewLifecycleOwner) { friends ->
-            friendProfiles = friends.filter { it.last_lat != null && it.last_lng != null }
-            renderFriendMarkers()
-        }
-
-        renderActiveMission(mapViewModel.activeMission.value)
         requestLocationAfterMapReady()
-    }
 
-    private fun configureMap(map: MapView) {
-        map.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        map.setTileSource(TileSourceFactory.MAPNIK)
-        map.setMultiTouchControls(true)
-
-        // Map restrictions to prevent infinite tiling and out-of-bounds scrolling.
-        map.minZoomLevel = 3.0
-        map.isVerticalMapRepetitionEnabled = false
-        map.isHorizontalMapRepetitionEnabled = false
-        map.setScrollableAreaLimitLatitude(85.0, -85.0, 0)
-        map.setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
-        map.controller.setZoom(16.0)
-    }
-
-    private fun attachMapListener(map: MapView) {
-        binding.mapLoading.visibility = View.VISIBLE
-        mapListener = object : MapListener {
-            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean {
-                renderFriendMarkers()
-                return false
-            }
-
-            override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
-                _binding?.mapLoading?.visibility = View.GONE
-                renderFriendMarkers()
-                return false
-            }
-        }
-        map.addMapListener(mapListener)
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            kotlinx.coroutines.delay(3000)
-            _binding?.mapLoading?.visibility = View.GONE
+        mapViewModel.activeMission.value?.let { mission ->
+            map.controller.animateTo(GeoPoint(mission.location_lat, mission.location_lng))
         }
     }
 
@@ -133,90 +110,12 @@ class MapFragment : Fragment() {
             setupLocation(centerOnLocation = true)
         } else if (permissionState == LocationPermissionGate.State.REQUEST) {
             locationPermissionController.requestPermission { granted ->
-                _binding ?: return@requestPermission
+                if (!isAdded) return@requestPermission
                 if (granted) {
                     setupLocation(centerOnLocation = true)
                 } else {
                     showLocationPermissionFeedback()
                 }
-            }
-        }
-    }
-
-    private fun checkActiveMission() {
-        mapViewModel.loadActiveMission()
-    }
-
-    private fun renderActiveMission(mission: Mission?) {
-        val currentBinding = _binding ?: return
-
-        if (mission != null) {
-            currentBinding.missionPreviewText.text =
-                mission.text.ifBlank { getString(R.string.map_active_mission_ready) }
-            currentBinding.newFlightButton.text = getString(R.string.map_go_to_missions)
-
-            currentBinding.newFlightButton.setOnClickListener {
-                findNavController().navigate(R.id.action_map_to_missions)
-            }
-
-            val targetPoint = GeoPoint(mission.location_lat, mission.location_lng)
-            mapView?.let { map ->
-                map.controller.animateTo(targetPoint)
-                map.invalidate()
-            }
-            return
-        }
-
-        currentBinding.missionPreviewText.text = getString(R.string.map_preview_default)
-        currentBinding.newFlightButton.text = getString(R.string.generate_mission)
-        currentBinding.newFlightButton.setOnClickListener {
-            findNavController().navigate(R.id.action_map_to_missions)
-        }
-    }
-
-    private fun setupLocation(centerOnLocation: Boolean) {
-        val map = mapView ?: return
-        val hasFineLocation = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val hasCoarseLocation = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        if (hasFineLocation || hasCoarseLocation) {
-            if (myLocationOverlay == null) {
-                val provider = GpsMyLocationProvider(requireContext())
-                myLocationOverlay = MyLocationNewOverlay(provider, map).apply {
-                    enableMyLocation()
-                    enableFollowLocation()
-                }
-                map.overlays.add(myLocationOverlay)
-            }
-
-            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                val currentBinding = _binding
-                if (!MapLocationCallbackGuard.shouldHandleLocationUpdate(
-                        hasLocation = location != null,
-                        isFragmentAdded = isAdded,
-                        hasBinding = currentBinding != null
-                    )
-                ) {
-                    return@addOnSuccessListener
-                }
-
-                location ?: return@addOnSuccessListener
-                currentBinding ?: return@addOnSuccessListener
-
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val geoPoint = GeoPoint(location.latitude, location.longitude)
-                    val hasMissionTarget = mapViewModel.activeMission.value != null
-                    val activeMap = mapView ?: return@launch
-                    if (centerOnLocation || !hasMissionTarget) {
-                        activeMap.controller.setCenter(geoPoint)
-                    }
-                }
-                updateUserLocation(location.latitude, location.longitude)
             }
         }
     }
@@ -235,7 +134,7 @@ class MapFragment : Fragment() {
                     showSnackbar(getString(R.string.map_location_permission_rationale), isError = true)
                 }
                 locationPermissionController.requestPermission { granted ->
-                    _binding ?: return@requestPermission
+                    if (!isAdded) return@requestPermission
                     if (granted) {
                         setupLocation(centerOnLocation = true)
                     } else {
@@ -259,45 +158,71 @@ class MapFragment : Fragment() {
         }
         showSnackbar(getString(messageRes), isError = true)
     }
-    
-    private fun updateUserLocation(lat: Double, lng: Double) {
-        mapViewModel.updateUserLocation(lat, lng)
+
+    private fun setupLocation(centerOnLocation: Boolean) {
+        val map = mapView ?: return
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasFineLocation || hasCoarseLocation) {
+            if (myLocationOverlay == null) {
+                val provider = GpsMyLocationProvider(requireContext())
+                myLocationOverlay = MyLocationNewOverlay(provider, map).apply {
+                    enableMyLocation()
+                    enableFollowLocation()
+                }
+                map.overlays.add(myLocationOverlay)
+            }
+
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                if (!MapLocationCallbackGuard.shouldHandleLocationUpdate(
+                        hasLocation = location != null,
+                        isFragmentAdded = isAdded,
+                        hasBinding = mapView != null
+                    )
+                ) {
+                    return@addOnSuccessListener
+                }
+
+                location ?: return@addOnSuccessListener
+
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val geoPoint = GeoPoint(location.latitude, location.longitude)
+                    val hasMissionTarget = mapViewModel.activeMission.value != null
+                    val activeMap = mapView ?: return@launch
+                    if (centerOnLocation || !hasMissionTarget) {
+                        activeMap.controller.setCenter(geoPoint)
+                    }
+                }
+                mapViewModel.updateUserLocation(location.latitude, location.longitude)
+            }
+        }
     }
 
     private fun getFriendMarkerIcon(): BitmapDrawable? {
         friendMarkerIcon?.let { return it }
-
         val buzzyDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_buzzy) ?: return null
         val bitmap = createBitmap(60, 60)
         val canvas = Canvas(bitmap)
         buzzyDrawable.setBounds(0, 0, canvas.width, canvas.height)
         buzzyDrawable.draw(canvas)
-
         return bitmap.toDrawable(resources).also { friendMarkerIcon = it }
     }
 
-    private fun renderFriendMarkers() {
+    private fun renderFriendMarkers(clusters: List<FriendMapCluster>) {
         val map = mapView ?: return
         friendMarkers.forEach { map.overlays.remove(it) }
         friendMarkers.clear()
 
-        if (friendProfiles.isEmpty()) {
+        if (clusters.isEmpty()) {
             map.invalidate()
             return
         }
-
-        val profileById = friendProfiles.associateBy { it.id }
-        val clusters = FriendMapClusterer.cluster(
-            items = friendProfiles.map { friend ->
-                FriendMapPoint(
-                    id = friend.id,
-                    latitude = friend.last_lat ?: 0.0,
-                    longitude = friend.last_lng ?: 0.0
-                )
-            },
-            zoomLevel = map.zoomLevelDouble,
-            clusterRadiusPx = 120
-        )
 
         clusters.forEach { cluster ->
             val marker = Marker(map).apply {
@@ -307,8 +232,7 @@ class MapFragment : Fragment() {
                     icon = getFriendClusterIcon(cluster.memberIds.size)
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 } else {
-                    val profile = profileById[cluster.memberIds.first()]
-                    title = profile?.username
+                    title = mapViewModel.getFriendUsername(cluster.memberIds.first())
                     icon = getFriendMarkerIcon()
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 }
@@ -322,7 +246,6 @@ class MapFragment : Fragment() {
 
     private fun getFriendClusterIcon(memberCount: Int): BitmapDrawable {
         friendClusterIcons[memberCount]?.let { return it }
-
         val size = (72 * resources.displayMetrics.density).toInt()
         val bitmap = createBitmap(size, size)
         val canvas = Canvas(bitmap)
@@ -347,22 +270,14 @@ class MapFragment : Fragment() {
         return bitmap.toDrawable(resources).also { friendClusterIcons[memberCount] = it }
     }
 
-    override fun onResume() {
-        super.onResume()
-        mapView?.onResume()
-        checkActiveMission()
-        viewModel.loadFriends()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        mapView?.onPause()
-    }
-
-    override fun onDestroyView() {
+    private fun cleanupMap() {
         val currentMap = mapView
         if (currentMap != null) {
-            mapListener?.let { currentMap.removeMapListener(it) }
+            mapViewModel.saveCameraPosition(
+                currentMap.mapCenter.latitude,
+                currentMap.mapCenter.longitude,
+                currentMap.zoomLevelDouble
+            )
             friendMarkers.forEach(currentMap.overlays::remove)
             myLocationOverlay?.disableFollowLocation()
             myLocationOverlay?.disableMyLocation()
@@ -371,12 +286,36 @@ class MapFragment : Fragment() {
             currentMap.onPause()
             currentMap.onDetach()
         }
-        mapListener = null
+        mapView = null
         myLocationOverlay = null
-        friendProfiles = emptyList()
+        friendMarkerIcon?.bitmap?.recycle()
         friendMarkerIcon = null
+        friendClusterIcons.values.forEach { it.bitmap.recycle() }
         friendClusterIcons.clear()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mapView?.onResume()
+        mapViewModel.loadActiveMission()
+        mapViewModel.loadFriends()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        val map = mapView
+        if (map != null) {
+            mapViewModel.saveCameraPosition(
+                map.mapCenter.latitude,
+                map.mapCenter.longitude,
+                map.zoomLevelDouble
+            )
+        }
+        map?.onPause()
+    }
+
+    override fun onDestroyView() {
+        cleanupMap()
         super.onDestroyView()
-        _binding = null
     }
 }

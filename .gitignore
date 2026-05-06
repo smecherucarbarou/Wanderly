@@ -87,6 +87,7 @@ supabase/.temp/
 app/google-services.json
 google-services.json
 keystore/
+keystore.properties
 *.jks
 *.keystore
 *.p12

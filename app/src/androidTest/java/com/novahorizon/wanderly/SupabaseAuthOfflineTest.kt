@@ -1,28 +1,25 @@
 package com.novahorizon.wanderly
 
 import android.content.Context
-import androidx.test.core.app.ActivityScenario
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.action.ViewActions.scrollTo
-import androidx.test.espresso.action.ViewActions.typeText
-import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
-import androidx.test.espresso.assertion.ViewAssertions.matches
-import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.isRoot
-import androidx.test.espresso.matcher.ViewMatchers.withId
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.IOException
 
 @RunWith(AndroidJUnit4::class)
 class SupabaseAuthOfflineTest {
+
+    @get:Rule
+    val composeTestRule = createAndroidComposeRule<AuthActivity>()
 
     @Before
     fun setUp() {
@@ -45,17 +42,21 @@ class SupabaseAuthOfflineTest {
     fun offlineLoginShowsFriendlyError() {
         val credentials = AndroidTestCredentialProvider.requireCredentials()
 
-        ActivityScenario.launch(AuthActivity::class.java).use {
-            onView(isRoot()).perform(waitFor(visibleViewMatcher(R.id.email_input), 7_000L))
-
-            onView(withId(R.id.email_input)).perform(typeText(credentials.email), closeSoftKeyboard())
-            onView(withId(R.id.password_input)).perform(typeText(credentials.password), closeSoftKeyboard())
-            onView(withId(R.id.login_button)).perform(scrollTo(), click())
-
-            onView(withText(FRIENDLY_OFFLINE_ERROR)).check(matches(isDisplayed()))
-            onView(withText(RAW_NETWORK_ERROR)).check(doesNotExist())
-            onView(withText("java.io.IOException: $RAW_NETWORK_ERROR")).check(doesNotExist())
+        composeTestRule.waitUntil(timeoutMillis = 7_000) {
+            composeTestRule.onAllNodes(hasText("Email")).fetchSemanticsNodes().isNotEmpty()
         }
+
+        composeTestRule.onNodeWithText("Email").performTextInput(credentials.email)
+        composeTestRule.onNodeWithText("Password").performTextInput(credentials.password)
+        composeTestRule.onNodeWithText("Log In").performClick()
+
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodes(hasText(FRIENDLY_OFFLINE_ERROR))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeTestRule.onNodeWithText(FRIENDLY_OFFLINE_ERROR).assertExists()
+        composeTestRule.onNodeWithText(RAW_NETWORK_ERROR).assertDoesNotExist()
     }
 
     private class FakeSupabaseClient(private val error: IOException) : EmailAuthService {

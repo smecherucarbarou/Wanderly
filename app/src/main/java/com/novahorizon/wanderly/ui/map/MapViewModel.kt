@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.Mission
+import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -17,12 +18,80 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class CameraPosition(
+    val latitude: Double = 46.77,
+    val longitude: Double = 23.59,
+    val zoom: Double = 16.0
+)
+
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val repository: WanderlyRepository
 ) : ViewModel() {
     private val _activeMission = MutableLiveData<Mission?>()
     val activeMission: LiveData<Mission?> = _activeMission
+
+    private val _isMapReady = MutableLiveData(false)
+    val isMapReady: LiveData<Boolean> = _isMapReady
+
+    private val _cameraPosition = MutableLiveData(CameraPosition())
+    val cameraPosition: LiveData<CameraPosition> = _cameraPosition
+
+    private val _clusters = MutableLiveData<List<FriendMapCluster>>(emptyList())
+    val clusters: LiveData<List<FriendMapCluster>> = _clusters
+
+    private var currentZoom: Double = 16.0
+    private var friendProfiles: List<Profile> = emptyList()
+
+    fun onMapReady() {
+        _isMapReady.value = true
+    }
+
+    fun saveCameraPosition(latitude: Double, longitude: Double, zoom: Double) {
+        currentZoom = zoom
+        _cameraPosition.value = CameraPosition(latitude, longitude, zoom)
+        recomputeClusters()
+    }
+
+    fun loadFriends() {
+        viewModelScope.launch {
+            try {
+                val friends = repository.getFriends()
+                friendProfiles = friends.filter { it.last_lat != null && it.last_lng != null }
+                recomputeClusters()
+            } catch (e: Exception) {
+                CrashReporter.recordNonFatal(
+                    CrashEvent.MAP_LOCATION_UPDATE_FAILED,
+                    e,
+                    CrashKey.COMPONENT to "map",
+                    CrashKey.OPERATION to "load_friends"
+                )
+            }
+        }
+    }
+
+    private fun recomputeClusters() {
+        if (friendProfiles.isEmpty()) {
+            _clusters.value = emptyList()
+            return
+        }
+        val points = friendProfiles.map { friend ->
+            FriendMapPoint(
+                id = friend.id,
+                latitude = friend.last_lat ?: 0.0,
+                longitude = friend.last_lng ?: 0.0
+            )
+        }
+        _clusters.value = FriendMapClusterer.cluster(
+            items = points,
+            zoomLevel = currentZoom,
+            clusterRadiusPx = 120
+        )
+    }
+
+    fun getFriendUsername(friendId: String): String? {
+        return friendProfiles.find { it.id == friendId }?.username
+    }
 
     fun loadActiveMission() {
         viewModelScope.launch {

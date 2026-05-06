@@ -17,6 +17,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kover)
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
 }
@@ -68,10 +69,21 @@ val placesProxyUrl = resolveBuildSetting("PLACES_PROXY_URL", "GOOGLE_PLACES_PROX
 val androidTestEmail = resolveBuildSetting("WANDERLY_ANDROID_TEST_EMAIL")
 val androidTestPassword = resolveBuildSetting("WANDERLY_ANDROID_TEST_PASSWORD")
 
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    if (keystorePropertiesFile.isFile) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+
 val releaseStoreFilePath = resolveReleaseSecretSetting("RELEASE_STORE_FILE")
+    .ifBlank { nonBlank(keystoreProperties.getProperty("storeFile")) ?: "" }
 val releaseStorePassword = resolveReleaseSecretSetting("RELEASE_STORE_PASSWORD")
+    .ifBlank { nonBlank(keystoreProperties.getProperty("storePassword")) ?: "" }
 val releaseKeyAlias = resolveReleaseSecretSetting("RELEASE_KEY_ALIAS")
+    .ifBlank { nonBlank(keystoreProperties.getProperty("keyAlias")) ?: "" }
 val releaseKeyPassword = resolveReleaseSecretSetting("RELEASE_KEY_PASSWORD")
+    .ifBlank { nonBlank(keystoreProperties.getProperty("keyPassword")) ?: "" }
 val releaseStoreFile = nonBlank(releaseStoreFilePath)?.let { rawPath ->
     val rawFile = File(rawPath)
     if (rawFile.isAbsolute) rawFile else rootProject.file(rawPath)
@@ -287,8 +299,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
-        viewBinding = true
         buildConfig = true
+        compose = true
+    }
+    lint {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -359,6 +373,19 @@ dependencies {
     implementation(libs.com.google.android.material.material)
     implementation(libs.androidx.constraintlayout.constraintlayout)
     implementation(libs.androidx.viewpager2)
+
+    // Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.runtime.livedata)
+    implementation(libs.compose.activity)
+    implementation(libs.compose.navigation)
+    implementation(libs.compose.hilt.navigation)
+    implementation(libs.compose.lifecycle.runtime)
+    debugImplementation(libs.compose.ui.tooling)
     
     // Navigation Component
     implementation(libs.androidx.navigation.fragment.ktx)
@@ -384,6 +411,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.datastore.preferences)
 
     // Hilt
@@ -418,11 +446,16 @@ dependencies {
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
     testImplementation("com.google.dagger:hilt-android-testing:2.59.1")
     kspTest("com.google.dagger:hilt-android-compiler:2.59.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.espresso.intents)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.59.1")
     kspAndroidTest("com.google.dagger:hilt-android-compiler:2.59.1")
+    debugImplementation(libs.compose.ui.test.manifest)
 }

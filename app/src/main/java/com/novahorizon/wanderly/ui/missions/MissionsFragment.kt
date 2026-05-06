@@ -4,15 +4,15 @@ import com.novahorizon.wanderly.observability.AppLogger
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
@@ -23,26 +23,20 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.WanderlyGraph
-import com.novahorizon.wanderly.data.HiveRank
-import com.novahorizon.wanderly.data.Profile
-import com.novahorizon.wanderly.data.derivedHiveRank
-import com.novahorizon.wanderly.databinding.FragmentMissionsBinding
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
-import com.novahorizon.wanderly.ui.common.RankUiFormatter
 import com.novahorizon.wanderly.ui.common.showSnackbar
+import com.novahorizon.wanderly.ui.compose.screens.missions.MissionsScreen
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 @AndroidEntryPoint
 class MissionsFragment : Fragment() {
-
-    private var _binding: FragmentMissionsBinding? = null
-    private val binding get() = _binding!!
 
     private val viewModel: MissionsViewModel by viewModels()
 
@@ -55,7 +49,7 @@ class MissionsFragment : Fragment() {
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
-        _binding ?: return@registerForActivityResult
+        if (!isAdded) return@registerForActivityResult
         if (isGranted) {
             startCamera()
         } else {
@@ -64,7 +58,7 @@ class MissionsFragment : Fragment() {
     }
 
     private val takePhotoLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        _binding ?: return@registerForActivityResult
+        if (!isAdded) return@registerForActivityResult
         if (success) {
             val imageUri = tempImageUri
             if (imageUri == null) {
@@ -80,15 +74,15 @@ class MissionsFragment : Fragment() {
                         }
                     }
                     if (bitmap == null) {
-                        _binding ?: return@launch
+                        if (!isAdded) return@launch
                         showSnackbar(getString(R.string.photo_read_failed), isError = true)
                         return@launch
                     }
-                    _binding ?: return@launch
+                    if (!isAdded) return@launch
                     viewModel.verifyPhoto(bitmap)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
-                    _binding ?: return@launch
+                    if (!isAdded) return@launch
                     showSnackbar(getString(R.string.mission_photo_process_failed), isError = true)
                 }
             }
@@ -101,123 +95,30 @@ class MissionsFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = FragmentMissionsBinding.inflate(inflater, container, false)
-        return binding.root
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                WanderlyTheme {
+                    MissionsScreen(
+                        viewModel = viewModel,
+                        onGenerateMission = { checkLocationAndGenerate() },
+                        onVerifyPhoto = { checkCameraPermissionAndStart() },
+                        onCompleteMission = { viewModel.completeMission() },
+                        onLearnMore = { viewModel.fetchPlaceDetails() }
+                    )
+                }
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        setupObservers()
         viewModel.loadProfile()
-
-        binding.newFlightButton.setOnClickListener { checkLocationAndGenerate() }
-        binding.verifyButton.setOnClickListener { checkCameraPermissionAndStart() }
-        binding.completeButton.setOnClickListener { viewModel.completeMission() }
-        binding.learnMoreButton.setOnClickListener { viewModel.fetchPlaceDetails() }
-    }
-
-    private fun setupObservers() {
-        viewModel.profile.observe(viewLifecycleOwner) { profile ->
-            profile?.let { updateUI(it) }
-        }
 
         viewModel.streakMessage.observe(viewLifecycleOwner) { message ->
             message?.let {
                 showSnackbar(it, isError = false)
                 (activity as? MainActivity)?.requestNotificationPermissionIfNeeded()
-            }
-        }
-
-        viewModel.missionState.observe(viewLifecycleOwner) { state ->
-            when (state) {
-                is MissionsViewModel.MissionState.Generating -> {
-                    binding.loadingIndicator.visibility = View.VISIBLE
-                    binding.missionText.visibility = View.VISIBLE
-                    binding.missionText.text = getString(R.string.mission_loading_state)
-                    binding.newFlightButton.isEnabled = false
-                    binding.buzzyBubble.text = getString(R.string.mission_bubble_generating)
-                }
-
-                is MissionsViewModel.MissionState.MissionReceived -> {
-                    locationLookupInFlight = false
-                    binding.missionText.text = state.text
-                    binding.missionText.visibility = View.VISIBLE
-                    binding.loadingIndicator.visibility = View.GONE
-                    binding.newFlightButton.visibility = View.GONE
-                    binding.verifyButton.visibility = View.VISIBLE
-                    binding.verifyButton.isEnabled = true
-                    binding.verifyButton.text = getString(R.string.mission_verify_location)
-                    binding.completeButton.visibility = View.GONE
-                    binding.learnMoreButton.visibility = View.GONE
-                    binding.buzzyBubble.text = getString(R.string.mission_bubble_received)
-                }
-
-                is MissionsViewModel.MissionState.Verifying -> {
-                    binding.verifyButton.isEnabled = false
-                    binding.verifyButton.text = getString(R.string.mission_verifying_state)
-                    binding.buzzyBubble.text = getString(R.string.mission_bubble_verifying)
-                }
-
-                is MissionsViewModel.MissionState.VerificationResult -> {
-                    val message = state.message.asString(requireContext())
-                    if (state.success) {
-                        viewModel.currentMissionText()?.let {
-                            binding.missionText.text = it
-                            binding.missionText.visibility = View.VISIBLE
-                        }
-                        binding.verifyButton.visibility = View.GONE
-                        binding.completeButton.visibility = View.VISIBLE
-                        binding.learnMoreButton.visibility = View.VISIBLE
-                        binding.buzzyBubble.text = getString(R.string.mission_bubble_verified)
-                    } else {
-                        binding.verifyButton.isEnabled = true
-                        binding.verifyButton.text = getString(R.string.mission_take_photo_to_verify)
-                        binding.buzzyBubble.text = message
-                    }
-                }
-
-                is MissionsViewModel.MissionState.FetchingDetails -> {
-                    binding.learnMoreButton.isEnabled = false
-                    binding.learnMoreButton.text = getString(R.string.mission_fetching_details)
-                }
-
-                is MissionsViewModel.MissionState.DetailsReceived -> {
-                    binding.learnMoreButton.visibility = View.GONE
-                    binding.buzzyBubble.text = state.info
-                }
-
-                is MissionsViewModel.MissionState.Idle -> {
-                    locationLookupInFlight = false
-                    binding.verifyButton.visibility = View.GONE
-                    binding.completeButton.visibility = View.GONE
-                    binding.learnMoreButton.visibility = View.GONE
-                    binding.newFlightButton.visibility = View.VISIBLE
-                    binding.newFlightButton.isEnabled = true
-                    binding.newFlightButton.text = getString(R.string.generate_mission)
-                    binding.buzzyBubble.text = getString(R.string.mission_bubble_idle)
-                    binding.missionText.text = getString(R.string.mission_empty_state)
-                    binding.missionText.visibility = View.VISIBLE
-                }
-
-                is MissionsViewModel.MissionState.Error -> {
-                    val message = state.message.asString(requireContext())
-                    locationLookupInFlight = false
-                    binding.loadingIndicator.visibility = View.GONE
-                    binding.missionText.visibility = View.VISIBLE
-                    binding.missionText.text = message
-                    binding.newFlightButton.visibility = View.VISIBLE
-                    binding.newFlightButton.isEnabled = true
-                    binding.newFlightButton.text = getString(R.string.mission_retry)
-                    binding.verifyButton.visibility = View.GONE
-                    binding.completeButton.visibility = View.GONE
-                    binding.learnMoreButton.isEnabled = true
-                    binding.learnMoreButton.text = getString(R.string.mission_learn_more)
-                    binding.buzzyBubble.text = message
-                    showSnackbar(message, isError = true)
-                }
-
-                else -> Unit
             }
         }
     }
@@ -232,7 +133,7 @@ class MissionsFragment : Fragment() {
                     showSnackbar(getString(R.string.mission_location_permission_rationale), isError = true)
                 }
                 locationPermissionController.requestPermission { granted ->
-                    _binding ?: return@requestPermission
+                    if (!isAdded) return@requestPermission
                     if (granted) {
                         checkLocationAndGenerate()
                     } else {
@@ -249,23 +150,18 @@ class MissionsFragment : Fragment() {
             }
         }
         locationLookupInFlight = true
-        binding.newFlightButton.isEnabled = false
-        binding.loadingIndicator.visibility = View.VISIBLE
-        binding.buzzyBubble.text = getString(R.string.mission_bubble_locating)
-        binding.missionText.visibility = View.VISIBLE
-        binding.missionText.text = getString(R.string.mission_location_loading)
 
         WanderlyGraph.missionLocationProvider().requestCurrentLocation(
             fragment = this,
             onSuccess = onSuccess@{ location ->
-            val currentBinding = _binding ?: return@onSuccess
+            if (!isAdded) return@onSuccess
             if (location != null) {
                 val lifecycleOwner = viewLifecycleOwner
                 lifecycleOwner.lifecycleScope.launch {
                     try {
                         val cityName = WanderlyGraph.missionCityResolver()
                             .resolveCityName(requireContext(), location)
-                        if (!isAdded || _binding == null || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                        if (!isAdded || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
                             return@launch
                         }
                         logDebug("City from geocoder: $cityName")
@@ -278,19 +174,13 @@ class MissionsFragment : Fragment() {
                 }
             } else {
                 locationLookupInFlight = false
-                currentBinding.loadingIndicator.visibility = View.GONE
-                currentBinding.newFlightButton.isEnabled = true
-                currentBinding.buzzyBubble.text = getString(R.string.mission_location_failed)
                 showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
         },
             onFailure = onFailure@{ error ->
-            val currentBinding = _binding ?: return@onFailure
+            if (!isAdded) return@onFailure
             logError("Error getting precise location", error)
             locationLookupInFlight = false
-            currentBinding.loadingIndicator.visibility = View.GONE
-            currentBinding.newFlightButton.isEnabled = true
-            currentBinding.buzzyBubble.text = getString(R.string.mission_location_failed)
             showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
         )
@@ -320,7 +210,7 @@ class MissionsFragment : Fragment() {
 
             hasRequestedCameraPermission() -> {
                 showSnackbar(getString(R.string.mission_camera_permission_settings), isError = true)
-                openCameraPermissionSettings()
+                locationPermissionController.openAppSettings()
             }
 
             else -> {
@@ -338,7 +228,7 @@ class MissionsFragment : Fragment() {
 
             hasRequestedCameraPermission() -> {
                 showSnackbar(getString(R.string.mission_camera_permission_settings), isError = true)
-                openCameraPermissionSettings()
+                locationPermissionController.openAppSettings()
             }
 
             else -> showSnackbar(getString(R.string.mission_camera_permission_required), isError = true)
@@ -357,14 +247,6 @@ class MissionsFragment : Fragment() {
             .edit()
             .putBoolean(KEY_CAMERA_PERMISSION_REQUESTED, true)
             .apply()
-    }
-
-    private fun openCameraPermissionSettings() {
-        val intent = Intent(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.fromParts("package", requireContext().packageName, null)
-        )
-        startActivity(intent)
     }
 
     private fun startCamera() {
@@ -388,24 +270,6 @@ class MissionsFragment : Fragment() {
         }
     }
 
-    private fun updateUI(profile: Profile) {
-        val honey = profile.honey ?: 0
-        val derivedRank = profile.derivedHiveRank()
-
-        binding.honeyCount.text = resources.getQuantityString(R.plurals.mission_honey_format, honey, honey)
-        binding.rankName.text = getString(RankUiFormatter.rankNameRes(derivedRank))
-
-        val maxHoney = HiveRank.maxHoneyForRank(derivedRank)
-        val minHoney = HiveRank.minHoneyForRank(derivedRank)
-        val progress = if (maxHoney > minHoney) {
-            (((honey - minHoney).toFloat() / (maxHoney - minHoney)) * 100).toInt()
-        } else {
-            100
-        }
-
-        binding.honeyProgress.progress = progress
-    }
-
     override fun onDestroyView() {
         val fileToDelete = tempImageFile
         if (fileToDelete != null) {
@@ -416,7 +280,6 @@ class MissionsFragment : Fragment() {
         tempImageFile = null
         tempImageUri = null
         super.onDestroyView()
-        _binding = null
     }
 
     private fun logDebug(message: String) {

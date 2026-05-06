@@ -1,0 +1,95 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Left White Wing -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineJoin="round"
+        android:pathData="M90,70 C70,20 20,40 40,80 C50,100 80,90 90,70 Z" />
+
+    <!-- Right White Wing -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineJoin="round"
+        android:pathData="M110,70 C130,20 180,40 160,80 C150,100 120,90 110,70 Z" />
+
+    <!-- Left Antenna -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M75,65 Q60,30 45,40" />
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M45,40 m-8,0 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0" />
+
+    <!-- Right Antenna -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M125,65 Q140,30 155,40" />
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M155,40 m-8,0 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0" />
+
+    <!-- Stinger -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineJoin="round"
+        android:pathData="M100,165 L90,185 L110,185 Z" />
+
+    <!-- Round Body (Yellow #F5A623) -->
+    <path
+        android:fillColor="#F5A623"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="8"
+        android:pathData="M100,55 C40,55 40,165 100,165 C160,165 160,55 100,55 Z" />
+
+    <!-- Black Stripes (#1A1A1A) -->
+    <!-- Top Stripe -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M52,90 C80,105 120,105 148,90 L156,110 C120,130 80,130 44,110 Z" />
+
+    <!-- Bottom Stripe -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M58,135 C80,145 120,145 142,135 L132,155 C110,165 90,165 68,155 Z" />
+
+    <!-- Left Eye (Big Round) -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M75,75 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,70 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+
+    <!-- Right Eye (Big Round) -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M125,75 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M120,70 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+
+    <!-- Small Smile -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#1A1A1A"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M90,85 Q100,95 110,85" />
+
+</vector>

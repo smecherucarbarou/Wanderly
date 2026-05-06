@@ -6,15 +6,18 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.FragmentContainerView
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.NavHostFragment
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthCallbackMatcher
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.data.WanderlyRepository
-import com.novahorizon.wanderly.databinding.ActivityAuthBinding
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
@@ -28,14 +31,52 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class AuthActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityAuthBinding
+    private lateinit var authNavHost: FragmentContainerView
+    private lateinit var authLoading: ProgressBar
+
     @Inject
     lateinit var repository: WanderlyRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityAuthBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+
+        val root = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        authNavHost = FragmentContainerView(this).apply {
+            id = R.id.auth_nav_host
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+        }
+        root.addView(authNavHost)
+
+        authLoading = ProgressBar(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER
+            }
+            isIndeterminate = true
+        }
+        root.addView(authLoading)
+
+        setContentView(root)
+
+        if (savedInstanceState == null) {
+            val navHostFragment = NavHostFragment.create(R.navigation.auth_nav_graph)
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.auth_nav_host, navHostFragment)
+                .setPrimaryNavigationFragment(navHostFragment)
+                .commit()
+        }
 
         lifecycleScope.launch {
             val uri = intent.data
@@ -71,8 +112,8 @@ class AuthActivity : AppCompatActivity() {
     }
 
     private fun showAuthUi() {
-        binding.authLoading.visibility = View.GONE
-        binding.authNavHost.visibility = View.VISIBLE
+        authLoading.visibility = View.GONE
+        authNavHost.visibility = View.VISIBLE
     }
 
     private suspend fun resumeStandardAuthFlow() {

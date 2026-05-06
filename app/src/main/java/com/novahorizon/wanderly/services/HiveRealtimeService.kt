@@ -272,10 +272,9 @@ class HiveRealtimeService : Service() {
                 logDebug("Unsubscribed from channel.")
             } catch (e: Exception) {
                 logError("Error during unsubscribe", e)
-            } finally {
-                serviceScope.cancel()
             }
         }
+        serviceScope.cancel()
         super.onDestroy()
     }
 

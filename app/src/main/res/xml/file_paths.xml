@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path
-        name="cache"
-        path="." />
-
-    <cache-path
         name="images"
         path="images/" />
 
+    <cache-path
+        name="camera"
+        path="camera/" />
+
     <external-cache-path
         name="external_cache"
-        path="." />
+        path="camera/" />
 </paths>

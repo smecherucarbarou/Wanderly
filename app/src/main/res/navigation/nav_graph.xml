@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
     app:startDestination="@id/mapFragment">
 
@@ -23,8 +22,7 @@
     <fragment
         android:id="@+id/mapFragment"
         android:name="com.novahorizon.wanderly.ui.map.MapFragment"
-        android:label="Map"
-        tools:layout="@layout/fragment_map">
+        android:label="Map">
         <action
             android:id="@+id/action_map_to_missions"
             app:destination="@id/missionsFragment"
@@ -40,26 +38,22 @@
     <fragment
         android:id="@+id/gemsFragment"
         android:name="com.novahorizon.wanderly.ui.gems.GemsFragment"
-        android:label="Hidden Gems"
-        tools:layout="@layout/fragment_gems" />
+        android:label="Hidden Gems" />
 
     <fragment
         android:id="@+id/missionsFragment"
         android:name="com.novahorizon.wanderly.ui.missions.MissionsFragment"
-        android:label="Missions"
-        tools:layout="@layout/fragment_missions" />
+        android:label="Missions" />
 
     <fragment
         android:id="@+id/socialFragment"
         android:name="com.novahorizon.wanderly.ui.social.SocialFragment"
-        android:label="Hive"
-        tools:layout="@layout/fragment_social" />
+        android:label="Hive" />
 
     <fragment
         android:id="@+id/profileFragment"
         android:name="com.novahorizon.wanderly.ui.profile.ProfileFragment"
-        android:label="Profile"
-        tools:layout="@layout/fragment_profile">
+        android:label="Profile">
         <action
             android:id="@+id/action_profile_to_devDashboard"
             app:destination="@id/devDashboardFragment"
@@ -72,6 +66,5 @@
     <fragment
         android:id="@+id/devDashboardFragment"
         android:name="com.novahorizon.wanderly.ui.profile.DevDashboardFragment"
-        android:label="God Mode"
-        tools:layout="@layout/fragment_dev_dashboard" />
+        android:label="God Mode" />
 </navigation>

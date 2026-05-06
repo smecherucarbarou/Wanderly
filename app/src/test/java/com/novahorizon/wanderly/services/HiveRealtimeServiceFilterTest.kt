@@ -1,8 +1,6 @@
 package com.novahorizon.wanderly.services
 
-import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,33 +19,22 @@ class HiveRealtimeServiceFilterTest {
     }
 
     @Test
-    fun `service uses eq filters for profile update subscriptions`() {
-        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/services/HiveRealtimeService.kt")
-            .readText()
+    fun `empty friend list produces no subscriptions`() {
+        val subscriptions = HiveRealtimeSubscriptionPlanner.subscriptionsFor(
+            currentUserId = "self-id",
+            friendIds = emptyList()
+        )
 
-        assertTrue(source.contains("filter(\"id\", FilterOperator.EQ"))
-        assertFalse(source.contains("FilterOperator.IN"))
-        assertFalse(source.contains("{${'$'}"))
-        assertFalse(source.contains("filter = null"))
+        assertTrue(subscriptions.isEmpty())
     }
 
     @Test
-    fun `service does not subscribe to all profile updates`() {
-        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/services/HiveRealtimeService.kt")
-            .readText()
-        val subscriptionBlock = source.substringAfter("postgresChangeFlow<PostgresAction.Update>")
-            .substringBefore("}.onEach")
+    fun `only self id produces no subscriptions`() {
+        val subscriptions = HiveRealtimeSubscriptionPlanner.subscriptionsFor(
+            currentUserId = "self-id",
+            friendIds = listOf("self-id", "self-id")
+        )
 
-        assertTrue(subscriptionBlock.contains("table = Constants.TABLE_PROFILES"))
-        assertTrue(subscriptionBlock.contains("filter(\"id\", FilterOperator.EQ"))
-    }
-
-    private fun projectFile(relativePath: String): File = File(projectRoot(), relativePath)
-
-    private fun projectRoot(): File {
-        val userDir = System.getProperty("user.dir") ?: error("user.dir not set")
-        return generateSequence(File(userDir).absoluteFile) { it.parentFile }
-            .firstOrNull { File(it, "settings.gradle.kts").isFile }
-            ?: error("Project root not found")
+        assertTrue(subscriptions.isEmpty())
     }
 }

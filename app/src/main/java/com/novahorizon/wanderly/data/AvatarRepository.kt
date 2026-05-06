@@ -219,13 +219,27 @@ class AvatarRepository(
         } else {
             sampled
         }
-        return try {
+        val jpegBytes = try {
             ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
                 out.toByteArray()
             }
         } finally {
             bitmap.recycle()
+        }
+        return stripExifMetadata(jpegBytes)
+    }
+
+    private fun stripExifMetadata(jpegBytes: ByteArray): ByteArray {
+        val tempFile = java.io.File.createTempFile("avatar_exif_strip", ".jpg", context.cacheDir)
+        try {
+            tempFile.writeBytes(jpegBytes)
+            val exif = android.media.ExifInterface(tempFile.absolutePath)
+            EXIF_TAGS_TO_STRIP.forEach { tag -> exif.setAttribute(tag, null) }
+            exif.saveAttributes()
+            return tempFile.readBytes()
+        } finally {
+            tempFile.delete()
         }
     }
 
@@ -276,6 +290,22 @@ class AvatarRepository(
         private const val MAX_AVATAR_DIMENSION = 512
         private const val JPEG_QUALITY = 80
         private val ALLOWED_MIME = setOf("image/jpeg", "image/png", "image/webp")
+        private val EXIF_TAGS_TO_STRIP = listOf(
+            android.media.ExifInterface.TAG_GPS_LATITUDE,
+            android.media.ExifInterface.TAG_GPS_LONGITUDE,
+            android.media.ExifInterface.TAG_GPS_LATITUDE_REF,
+            android.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
+            android.media.ExifInterface.TAG_GPS_ALTITUDE,
+            android.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
+            android.media.ExifInterface.TAG_GPS_TIMESTAMP,
+            android.media.ExifInterface.TAG_GPS_DATESTAMP,
+            android.media.ExifInterface.TAG_DATETIME,
+            android.media.ExifInterface.TAG_DATETIME_ORIGINAL,
+            android.media.ExifInterface.TAG_DATETIME_DIGITIZED,
+            android.media.ExifInterface.TAG_MAKE,
+            android.media.ExifInterface.TAG_MODEL,
+            android.media.ExifInterface.TAG_SOFTWARE
+        )
 
         internal fun validateAvatarPayload(imageBytes: ByteArray, mimeType: String): AvatarUploadResult? {
             if (mimeType !in ALLOWED_MIME) return AvatarUploadResult.UnsupportedFormat

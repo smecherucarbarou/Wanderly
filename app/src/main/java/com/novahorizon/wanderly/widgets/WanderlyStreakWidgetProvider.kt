@@ -66,7 +66,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
 
     private fun updateAsync(context: Context, block: suspend () -> Unit) {
         val pendingResult = goAsync()
-        widgetScope.launch {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 block()
             } finally {
@@ -77,7 +77,6 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_REFRESH_WIDGET = "com.novahorizon.wanderly.widgets.ACTION_REFRESH_WIDGET"
-        private val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         internal var clock: Clock = SystemClock
 
         private suspend fun refreshAndRenderWidgets(
@@ -157,6 +156,10 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             }
 
             scheduleNextUpdate(appContext)
+        }
+
+        internal fun rescheduleAlarm(context: Context) {
+            scheduleNextUpdate(context)
         }
 
         private fun scheduleNextUpdate(context: Context) {

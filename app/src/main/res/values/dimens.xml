@@ -7,8 +7,4 @@
     <dimen name="widget_spacing_small">10dp</dimen>
     <dimen name="widget_corner_radius">24dp</dimen>
     <dimen name="widget_stroke_width">2dp</dimen>
-    <dimen name="profile_avatar_container_size">164dp</dimen>
-    <dimen name="profile_halo_size">154dp</dimen>
-    <dimen name="profile_avatar_size">124dp</dimen>
-    <dimen name="profile_avatar_radius">62dp</dimen>
 </resources>

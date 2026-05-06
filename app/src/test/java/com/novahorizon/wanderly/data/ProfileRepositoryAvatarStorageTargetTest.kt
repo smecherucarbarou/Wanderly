@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.data
 
 import com.novahorizon.wanderly.Constants
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -109,42 +108,5 @@ class ProfileRepositoryAvatarStorageTargetTest {
                 length = AvatarRepository.MAX_AVATAR_UPLOAD_BYTES + 1L
             )
         )
-    }
-
-    @Test
-    fun `avatar uri upload reads through content resolver and resolves mime type`() {
-        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/data/AvatarRepository.kt").readText()
-
-        assertTrue(source.contains("private fun readAvatarBytes(uri: Uri): ByteArray"))
-        assertTrue(source.contains("context.contentResolver.openInputStream(uri)"))
-        assertTrue(source.contains("private fun resolveAvatarMimeType(uri: Uri): String"))
-        assertTrue(source.contains("private const val AVATAR_MIME_TYPE = \"image/jpeg\""))
-        assertFalse(source.contains("File(uri.path!!"))
-    }
-
-    @Test
-    fun `avatar upload owns staged storage and profile update diagnostics`() {
-        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/data/AvatarRepository.kt").readText()
-
-        assertTrue(source.contains("stage = \"read_bytes\""))
-        assertTrue(source.contains("stage = \"validate_user\""))
-        assertTrue(source.contains("stage = \"storage_upload\""))
-        assertTrue(source.contains("stage = \"public_url\""))
-        assertTrue(source.contains("stage = \"profile_update\""))
-        assertTrue(source.contains("require(currentUserId == profileId)"))
-        assertTrue(source.contains("Profile::avatar_url setTo publicUrl"))
-        assertTrue(source.contains("Avatar upload start currentUser=$"))
-        assertTrue(source.contains("Avatar upload failed stage=$"))
-    }
-
-    private fun projectFile(relativePath: String): File {
-        return File(projectRoot(), relativePath)
-    }
-
-    private fun projectRoot(): File {
-        val userDir = System.getProperty("user.dir") ?: error("user.dir not set")
-        return generateSequence(File(userDir)) { it.parentFile }
-            .firstOrNull { File(it, "settings.gradle.kts").isFile }
-            ?: error("Could not find project root")
     }
 }

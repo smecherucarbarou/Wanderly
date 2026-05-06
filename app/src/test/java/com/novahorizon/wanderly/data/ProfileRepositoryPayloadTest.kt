@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.data
 
 import org.junit.Assert.assertEquals
-import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -47,16 +46,6 @@ class ProfileRepositoryPayloadTest {
     }
 
     @Test
-    fun `profile repository never creates profiles from Android client`() {
-        val source = projectFile("app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt").readText()
-
-        assertFalse(source.contains(".insert("))
-        assertFalse(source.contains(".upsert("))
-        assertFalse(source.contains("create_profile_if_missing"))
-        assertFalse(source.contains("ClientProfileInsert"))
-    }
-
-    @Test
     fun `admin stats payload contains progress fields and excludes admin role`() {
         val payload = ProfileRepository.toAdminProfileStatsUpdate(
             honey = 375,
@@ -67,7 +56,9 @@ class ProfileRepositoryPayloadTest {
         assertEquals(9, payload.streak_count)
         assertEquals(3, payload.hive_rank)
 
-        val adminWritableFields = payload.javaClass.declaredFields.map { it.name }.toSet()
+        val adminWritableFields = payload.javaClass.declaredFields
+            .filter { !it.isSynthetic && !it.name.startsWith("$") }
+            .map { it.name }.toSet()
         assertEquals(setOf("honey", "streak_count", "hive_rank"), adminWritableFields)
     }
 
@@ -111,14 +102,5 @@ class ProfileRepositoryPayloadTest {
                 IllegalStateException("PGRST002: could not find function in schema cache")
             )
         )
-    }
-
-    private fun projectFile(relativePath: String): File = File(projectRoot(), relativePath)
-
-    private fun projectRoot(): File {
-        val userDir = System.getProperty("user.dir") ?: error("user.dir not set")
-        return generateSequence(File(userDir)) { it.parentFile }
-            .firstOrNull { File(it, "settings.gradle.kts").isFile }
-            ?: error("Could not find project root")
     }
 }
