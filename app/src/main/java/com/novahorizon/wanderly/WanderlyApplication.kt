@@ -14,6 +14,7 @@ import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.StrictModeInitializer
 import com.novahorizon.wanderly.workers.StreakWorker
 import com.novahorizon.wanderly.workers.SocialWorker
+import android.os.StrictMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,8 +31,13 @@ class WanderlyApplication : Application() {
         StrictModeInitializer.enableForDebugBuild()
         CrashReporter.initialize(this, BuildConfig.CRASH_REPORTING_CONFIGURED)
         
-        // Initialize Supabase
+        // Supabase auth restores session from disk; permit the read narrowly.
+        val savedPolicy = StrictMode.getThreadPolicy()
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder(savedPolicy).permitDiskReads().build()
+        )
         com.novahorizon.wanderly.api.SupabaseClient.init(this)
+        StrictMode.setThreadPolicy(savedPolicy)
         WanderlyNotificationManager.createNotificationChannel(this)
 
         initOsmdroidAsync()

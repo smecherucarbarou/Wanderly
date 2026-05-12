@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 class StreakWidgetRenderTest {
 
@@ -12,7 +13,7 @@ class StreakWidgetRenderTest {
     fun `resolveVisualState produces valid state for active streak`() {
         val state = StreakWidgetStateHelper.resolveVisualState(
             streakCount = 7,
-            lastMissionDate = "2026-05-05"
+            lastMissionDate = LocalDate.now().toString()
         )
 
         assertNotNull(state)
@@ -42,7 +43,8 @@ class StreakWidgetRenderTest {
 
     @Test
     fun `isInDanger returns true when streak not maintained today`() {
-        assertTrue(StreakWidgetStateHelper.isInDanger("2026-05-04"))
+        val twoDaysAgo = LocalDate.now().minusDays(2).toString()
+        assertTrue(StreakWidgetStateHelper.isInDanger(twoDaysAgo))
     }
 
     @Test

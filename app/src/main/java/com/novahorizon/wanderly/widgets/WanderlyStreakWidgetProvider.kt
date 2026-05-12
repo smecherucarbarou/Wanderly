@@ -13,8 +13,9 @@ import android.widget.RemoteViews
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.PreferencesStore
+import com.novahorizon.wanderly.di.WanderlyEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import com.novahorizon.wanderly.data.WidgetStreakSnapshot
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -86,7 +87,10 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
         ) {
             val appContext = context.applicationContext
             val preferencesStore = PreferencesStore(appContext)
-            val repository = WanderlyGraph.repository(appContext)
+            val entryPoint = EntryPointAccessors.fromApplication(
+                appContext, WanderlyEntryPoint::class.java
+            )
+            val repository = entryPoint.wanderlyRepository()
             val nowMillis = clock.nowMillis()
             val cachedSnapshot = try {
                 preferencesStore.getWidgetStreakSnapshot()
@@ -132,11 +136,22 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
             )
 
             appWidgetIds.forEach { appWidgetId ->
+                val streakCount = snapshotToRender?.streakCount ?: 0
+                val subtitle = appContext.getString(visualState.subtitleRes)
                 val views = RemoteViews(appContext.packageName, R.layout.widget_streak).apply {
-                    setTextViewText(R.id.widget_streak_count, (snapshotToRender?.streakCount ?: 0).toString())
-                    setTextViewText(R.id.widget_subtitle, appContext.getString(visualState.subtitleRes))
+                    setTextViewText(R.id.widget_streak_count, streakCount.toString())
+                    setTextViewText(R.id.widget_subtitle, subtitle)
                     setImageViewResource(R.id.widget_mascot, visualState.mascotRes)
                     setImageViewResource(R.id.widget_fire_icon, visualState.fireRes)
+                    setContentDescription(
+                        R.id.widget_container,
+                        appContext.resources.getQuantityString(
+                            R.plurals.widget_streak_accessibility,
+                            streakCount,
+                            streakCount,
+                            subtitle
+                        )
+                    )
                     setTextColor(
                         R.id.widget_streak_count,
                         appContext.getColor(visualState.countColorRes)

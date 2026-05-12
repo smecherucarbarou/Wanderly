@@ -9,8 +9,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
+import com.novahorizon.wanderly.MissionGenerationService
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.MissionCompletionResult
 import com.novahorizon.wanderly.data.Profile
@@ -21,7 +21,9 @@ import com.novahorizon.wanderly.data.mission.MissionPlaceCandidate
 import com.novahorizon.wanderly.data.mission.MissionPlaceSelectionResult
 import com.novahorizon.wanderly.data.mission.MissionPlaceSelecting
 import com.novahorizon.wanderly.data.mission.ValidatedMissionPlace
+import com.novahorizon.wanderly.api.PlacesGeocoder
 import com.novahorizon.wanderly.ui.common.UiText
+import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,12 +61,10 @@ class MissionsViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         context = ApplicationProvider.getApplicationContext()
-        WanderlyGraph.resetTestOverrides()
     }
 
     @After
     fun tearDown() {
-        WanderlyGraph.resetTestOverrides()
         Dispatchers.resetMain()
     }
 
@@ -353,7 +353,8 @@ class MissionsViewModelTest {
                     name = "Test Cafe"
                 )
             )
-        )
+        ),
+        missionGenerationService: MissionGenerationService = NoOpMissionGenerationService()
     ): Pair<MissionsViewModel, ViewModelStore> {
         val store = ViewModelStore()
         val factory = object : ViewModelProvider.Factory {
@@ -365,7 +366,8 @@ class MissionsViewModelTest {
                     ProfileStateProvider(repository),
                     detailsRepository,
                     candidateProvider,
-                    placeSelector
+                    placeSelector,
+                    missionGenerationService
                 ) as T
             }
         }
@@ -531,5 +533,19 @@ class MissionsViewModelTest {
                 continuation.invokeOnCancellation { cancelled = true }
             }
         }
+    }
+
+    private class NoOpMissionGenerationService : MissionGenerationService {
+        override suspend fun generateText(prompt: String): String = ""
+        override suspend fun generateWithSearch(prompt: String): String = ""
+        override suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String =
+            """{"verified":false,"reason":"test stub"}"""
+        override suspend fun resolveCoordinates(
+            placeName: String,
+            targetCity: String,
+            userLat: Double,
+            userLng: Double,
+            radiusKm: Double
+        ): PlacesGeocoder.VerifiedPlace? = null
     }
 }

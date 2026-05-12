@@ -6,12 +6,13 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.di.WanderlyEntryPoint
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +25,10 @@ class SocialWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (BuildConfig.DEBUG) {
             AppLogger.d("SocialWorker", "--- Social Polling Started (PID: $pid) ---")
         }
-        val repository = WanderlyGraph.repository(applicationContext)
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, WanderlyEntryPoint::class.java
+        )
+        val repository = entryPoint.wanderlyRepository()
 
         try {
             if (AuthSessionCoordinator.awaitResolvedSessionOrNull(7_000L) == null) {

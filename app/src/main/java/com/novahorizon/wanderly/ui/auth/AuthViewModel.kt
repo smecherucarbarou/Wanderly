@@ -1,11 +1,15 @@
 package com.novahorizon.wanderly.ui.auth
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.data.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -14,15 +18,24 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _authState = MutableLiveData<AuthState>(AuthState.Idle)
-    val authState: LiveData<AuthState> = _authState
-
-    sealed class AuthState {
-        object Idle : AuthState()
-        object Loading : AuthState()
-        object Success : AuthState()
-        data class Error(val message: String) : AuthState()
+    /** Persistent UI state that survives configuration changes. */
+    sealed interface AuthUiState {
+        data object Idle : AuthUiState
+        data object Loading : AuthUiState
     }
+
+    /** One-shot events that should be consumed exactly once. */
+    sealed interface AuthEvent {
+        data object LoginSuccess : AuthEvent
+        data object SignupSuccess : AuthEvent
+        data class Error(val message: String) : AuthEvent
+    }
+
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
+    val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    private val _events = Channel<AuthEvent>(Channel.BUFFERED)
+    val events: Flow<AuthEvent> = _events.receiveAsFlow()
 
     private fun friendlyAuthError(raw: String?): String {
         val msg = raw?.lowercase() ?: return "Something went wrong. Please try again."
@@ -43,31 +56,62 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun setLoading() {
+        _uiState.value = AuthUiState.Loading
+    }
+
+    fun setError(message: String) {
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Idle
+            _events.send(AuthEvent.Error(message))
+        }
+    }
+
+    fun beginExternalSignIn() {
+        _uiState.value = AuthUiState.Loading
+    }
+
+    fun resetExternalSignIn() {
+        _uiState.value = AuthUiState.Idle
+    }
+
+    fun externalSignInFailed(error: Throwable? = null) {
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Idle
+            _events.send(AuthEvent.Error("Google sign-in failed. Please try again."))
+        }
+    }
+
     fun login(email: String, pass: String) {
-        _authState.value = AuthState.Loading
+        _uiState.value = AuthUiState.Loading
         viewModelScope.launch {
             try {
                 authRepository.signInWithEmail(email, pass)
-                _authState.postValue(AuthState.Success)
+                _uiState.value = AuthUiState.Idle
+                _events.send(AuthEvent.LoginSuccess)
             } catch (e: Exception) {
-                _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))
+                _uiState.value = AuthUiState.Idle
+                _events.send(AuthEvent.Error(friendlyAuthError(e.message)))
             }
         }
     }
 
     fun signup(email: String, pass: String, username: String) {
-        _authState.value = AuthState.Loading
+        _uiState.value = AuthUiState.Loading
         viewModelScope.launch {
             try {
                 val result = authRepository.signUpWithEmail(email, pass, username)
                 if (result.emailAlreadyRegistered) {
-                    _authState.postValue(AuthState.Error("Email already registered"))
+                    _uiState.value = AuthUiState.Idle
+                    _events.send(AuthEvent.Error("Email already registered"))
                     return@launch
                 }
 
-                _authState.postValue(AuthState.Success)
+                _uiState.value = AuthUiState.Idle
+                _events.send(AuthEvent.SignupSuccess)
             } catch (e: Exception) {
-                _authState.postValue(AuthState.Error(friendlyAuthError(e.message)))
+                _uiState.value = AuthUiState.Idle
+                _events.send(AuthEvent.Error(friendlyAuthError(e.message)))
             }
         }
     }

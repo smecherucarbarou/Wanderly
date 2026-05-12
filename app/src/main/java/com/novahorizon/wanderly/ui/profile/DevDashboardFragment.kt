@@ -1,39 +1,36 @@
 package com.novahorizon.wanderly.ui.profile
 
-import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.asFlow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
+import com.novahorizon.wanderly.notifications.NotificationPermissionManager
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardCallbacks
+import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardDiagnostics
+import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardRow
+import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardSection
 import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardScreen
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
-import com.novahorizon.wanderly.workers.SocialWorker
-import com.novahorizon.wanderly.workers.StreakWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,9 +38,9 @@ class DevDashboardFragment : Fragment() {
 
     @Inject
     lateinit var repository: WanderlyRepository
-    private val prettyJson = Json { prettyPrint = true }
-    private val adminToolsViewModel: AdminToolsViewModel by viewModels()
-    private var accessVerified = false
+
+    private var accessVerified by mutableStateOf(false)
+    private var diagnostics by mutableStateOf(DevDashboardDiagnostics())
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return ComposeView(requireContext()).apply {
@@ -51,76 +48,14 @@ class DevDashboardFragment : Fragment() {
             visibility = View.INVISIBLE
             setContent {
                 WanderlyTheme {
-                    val aiState by adminToolsViewModel.aiNotificationState.asFlow()
-                        .collectAsStateWithLifecycle(AdminToolsViewModel.AiNotificationState())
-
-                    aiState.snackbarMessage?.let { message ->
-                        showSnackbar(message.asString(requireContext()), isError = aiState.isError)
-                        adminToolsViewModel.clearSnackbarMessage()
-                    }
-
                     if (accessVerified) {
                         DevDashboardScreen(
-                            aiLogs = aiState.logs.joinToString("\n\n") { it.asString(requireContext()) },
-                            isAiRunning = aiState.isRunning,
-                            isCrashlyticsEnabled = BuildConfig.CRASH_REPORTING_CONFIGURED,
+                            diagnostics = diagnostics,
+                            isCrashlyticsEnabled = BuildConfig.DEBUG && BuildConfig.CRASH_REPORTING_CONFIGURED,
                             callbacks = DevDashboardCallbacks(
-                                onUpdateStats = { honey, streak, flights -> updateReality(honey, streak, flights) },
-                                onNotifyStreak = { streak -> triggerNotifyStreak(streak) },
-                                onResetDailyCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.DAILY_REMINDER,
-                                        getString(R.string.dev_dashboard_daily_reminder_label)
-                                    )
-                                },
-                                onNotifyEvening = { triggerNotifyEvening() },
-                                onResetEveningCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.EVENING_ALERT,
-                                        getString(R.string.dev_dashboard_evening_alert_label)
-                                    )
-                                },
-                                onNotifyMilestone = { streak -> triggerNotifyMilestone(streak) },
-                                onResetMilestoneCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.MILESTONE,
-                                        getString(R.string.dev_dashboard_milestone_label)
-                                    )
-                                },
-                                onNotifyLost = { triggerNotifyLost() },
-                                onResetLostCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.STREAK_LOST,
-                                        getString(R.string.dev_dashboard_streak_lost_label)
-                                    )
-                                },
-                                onNotifyRival = { name -> triggerNotifyRival(name) },
-                                onResetRivalCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.RIVAL_ACTIVITY,
-                                        getString(R.string.dev_dashboard_rival_activity_label)
-                                    )
-                                },
-                                onNotifyOvertaken = { name -> triggerNotifyOvertaken(name) },
-                                onResetOvertakenCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.OVERTAKEN,
-                                        getString(R.string.dev_dashboard_overtaken_label)
-                                    )
-                                },
-                                onNotifyFight = { name -> triggerNotifyFight(name) },
-                                onResetFightCooldown = {
-                                    resetNotificationType(
-                                        WanderlyNotificationManager.NotificationType.FIGHT_FOR_FIRST,
-                                        getString(R.string.dev_dashboard_fight_label)
-                                    )
-                                },
-                                onClearNotifCooldowns = { triggerClearAllCooldowns() },
-                                onTestAiNotif = { adminToolsViewModel.runAiNotificationTest() },
-                                onRawLogs = { showRawProfile() },
-                                onResetVisit = { triggerResetVisit() },
-                                onReplayOnboarding = { triggerReplayOnboarding() },
-                                onRunWorkers = { triggerRunWorkers() },
+                                onRefreshDiagnostics = { refreshDiagnostics() },
+                                onOpenNotificationSettings = { openNotificationSettings() },
+                                onClearNotificationState = { triggerClearNotificationState() },
                                 onCrashlyticsNonfatal = { triggerCrashlyticsNonfatal() }
                             )
                         )
@@ -132,125 +67,126 @@ class DevDashboardFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        if (!BuildConfig.DEBUG) {
+            showSnackbar(getString(R.string.admin_access_denied), isError = true)
+            findNavController().navigateUp()
+            return
+        }
+
+        accessVerified = true
+        view.visibility = View.VISIBLE
+        refreshDiagnostics()
+    }
+
+    private fun refreshDiagnostics() {
+        if (!accessVerified || !isAdded) return
         viewLifecycleOwner.lifecycleScope.launch {
-            val isAdmin = repository.getCurrentProfile()?.admin_role == true
-            if (!isAdmin) {
-                showSnackbar(getString(R.string.admin_access_denied), isError = true)
-                findNavController().navigateUp()
-                return@launch
-            }
-            accessVerified = true
-            view.visibility = View.VISIBLE
+            val profile = repository.currentProfile.value ?: repository.getCurrentProfile()
+            if (!isAdded) return@launch
+            diagnostics = buildDiagnostics(profile)
         }
     }
 
-    private fun triggerNotifyStreak(streakText: String) {
-        val streak = streakText.toIntOrNull()?.coerceAtLeast(1) ?: 7
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendDailyReminder(requireContext(), streak, force = true)
-            showSnackbar(resources.getQuantityString(R.plurals.dev_dashboard_forced_daily_reminder, streak, streak))
+    private fun buildDiagnostics(profile: Profile?): DevDashboardDiagnostics {
+        val context = requireContext()
+        val notificationStatus = when (NotificationPermissionManager.status(context)) {
+            NotificationPermissionManager.Status.GRANTED -> getString(R.string.dev_dashboard_notification_granted)
+            NotificationPermissionManager.Status.DENIED -> getString(R.string.dev_dashboard_notification_denied)
+            NotificationPermissionManager.Status.NOT_REQUIRED -> getString(R.string.dev_dashboard_notification_not_required)
         }
+        val systemNotifications = if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            getString(R.string.dev_dashboard_enabled)
+        } else {
+            getString(R.string.dev_dashboard_disabled)
+        }
+
+        return DevDashboardDiagnostics(
+            sections = listOf(
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_build_app),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_environment_label),
+                            if (BuildConfig.DEBUG) getString(R.string.dev_dashboard_debug) else getString(R.string.dev_dashboard_release)
+                        ),
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_version_label),
+                            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                        )
+                    )
+                ),
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_auth_session),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_auth_label),
+                            if (profile == null) getString(R.string.dev_dashboard_profile_unavailable)
+                            else getString(R.string.dev_dashboard_profile_loaded)
+                        ),
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_user_label),
+                            redactIdentifier(profile?.id)
+                        ),
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_admin_label),
+                            if (profile?.admin_role == true) getString(R.string.dev_dashboard_admin_yes)
+                            else getString(R.string.dev_dashboard_admin_no)
+                        )
+                    )
+                ),
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_profile_avatar),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_avatar_label),
+                            if (profile?.avatar_url.isNullOrBlank()) getString(R.string.dev_dashboard_none)
+                            else getString(R.string.dev_dashboard_present)
+                        )
+                    )
+                ),
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_friends_social),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_friend_code_label),
+                            if (profile?.friend_code.isNullOrBlank()) getString(R.string.dev_dashboard_none)
+                            else getString(R.string.dev_dashboard_present)
+                        )
+                    )
+                ),
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_streak_notifications),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_notification_permission_label),
+                            notificationStatus
+                        ),
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_system_notifications_label),
+                            systemNotifications
+                        )
+                    )
+                ),
+                DevDashboardSection(
+                    title = getString(R.string.dev_dashboard_section_storage_supabase),
+                    rows = listOf(
+                        DevDashboardRow(
+                            getString(R.string.dev_dashboard_supabase_label),
+                            redactedSupabaseHost()
+                        )
+                    )
+                )
+            )
+        )
     }
 
-    private fun triggerNotifyEvening() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendEveningAlert(requireContext(), force = true)
-            showSnackbar(getString(R.string.dev_dashboard_forced_evening_alert))
-        }
-    }
-
-    private fun triggerNotifyMilestone(streakText: String) {
-        val streak = streakText.toIntOrNull()?.coerceAtLeast(1) ?: 10
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendMilestoneCelebration(requireContext(), streak, force = true)
-            showSnackbar(resources.getQuantityString(R.plurals.dev_dashboard_forced_milestone, streak, streak))
-        }
-    }
-
-    private fun triggerNotifyLost() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendStreakLost(requireContext(), force = true)
-            showSnackbar(getString(R.string.dev_dashboard_forced_streak_lost))
-        }
-    }
-
-    private fun triggerNotifyRival(name: String) {
-        val rivalName = name.trim().ifBlank { getString(R.string.dev_dashboard_default_rival_one) }
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendRivalActivity(requireContext(), rivalName, force = true)
-            showSnackbar(getString(R.string.dev_dashboard_forced_rival_activity, rivalName))
-        }
-    }
-
-    private fun triggerNotifyOvertaken(name: String) {
-        val rivalName = name.trim().ifBlank { getString(R.string.dev_dashboard_default_rival_two) }
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendOvertakenAlert(requireContext(), rivalName, force = true)
-            showSnackbar(getString(R.string.dev_dashboard_forced_overtaken, rivalName))
-        }
-    }
-
-    private fun triggerNotifyFight(name: String) {
-        val rivalName = name.trim().ifBlank { getString(R.string.dev_dashboard_default_rival_three) }
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.sendFightForFirst(requireContext(), rivalName, force = true)
-            showSnackbar(getString(R.string.dev_dashboard_forced_fight, rivalName))
-        }
-    }
-
-    private fun triggerClearAllCooldowns() {
+    private fun triggerClearNotificationState() {
         viewLifecycleOwner.lifecycleScope.launch {
             WanderlyNotificationManager.clearNotificationCooldowns(requireContext())
             NotificationCheckCoordinator.clearCheckState(requireContext())
+            refreshDiagnostics()
             showSnackbar(getString(R.string.dev_dashboard_cleared_notification_state))
         }
-    }
-
-    private fun showRawProfile() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val profile = repository.getCurrentProfile()
-            if (profile != null) {
-                AlertDialog.Builder(requireContext(), R.style.Wanderly_AlertDialog)
-                    .setTitle(getString(R.string.dev_dashboard_live_profile_title))
-                    .setMessage(prettyJson.encodeToString(profile))
-                    .setPositiveButton(getString(R.string.dev_dashboard_ok), null)
-                    .show()
-            } else {
-                showSnackbar(getString(R.string.dev_dashboard_failed_profile_fetch), isError = true)
-            }
-        }
-    }
-
-    private fun triggerResetVisit() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            repository.updateLastVisitDate("2000-01-01")
-            val success = repository.resetMissionDateForTesting()
-            if (success) {
-                showSnackbar(getString(R.string.dev_dashboard_reset_visit_success))
-            } else {
-                showSnackbar(getString(R.string.dev_dashboard_reset_visit_partial_failure), isError = true)
-            }
-        }
-    }
-
-    private fun triggerReplayOnboarding() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            repository.setOnboardingSeen(false)
-            startActivity(
-                Intent(requireContext(), MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                }
-            )
-            requireActivity().finish()
-        }
-    }
-
-    private fun triggerRunWorkers() {
-        val socialRequest = OneTimeWorkRequestBuilder<SocialWorker>().build()
-        val streakRequest = OneTimeWorkRequestBuilder<StreakWorker>().build()
-        WorkManager.getInstance(requireContext()).enqueue(socialRequest)
-        WorkManager.getInstance(requireContext()).enqueue(streakRequest)
-        showSnackbar(getString(R.string.dev_dashboard_workers_queued))
     }
 
     private fun triggerCrashlyticsNonfatal() {
@@ -261,56 +197,21 @@ class DevDashboardFragment : Fragment() {
         )
     }
 
-    private fun resetNotificationType(
-        type: WanderlyNotificationManager.NotificationType,
-        label: String
-    ) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            WanderlyNotificationManager.clearNotificationCooldown(requireContext(), type)
-            NotificationCheckCoordinator.clearCheckStateForType(requireContext(), type)
-            showSnackbar(getString(R.string.dev_dashboard_cooldown_reset, label))
-        }
+    private fun openNotificationSettings() {
+        startActivity(NotificationPermissionManager.notificationSettingsIntent(requireContext()))
     }
 
-    private fun updateReality(honeyInput: String, streakInput: String, flightsInput: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val profile = repository.getCurrentProfile() ?: return@launch
+    private fun redactedSupabaseHost(): String {
+        val host = Uri.parse(BuildConfig.SUPABASE_URL).host
+        return host?.takeIf { it.isNotBlank() } ?: getString(R.string.dev_dashboard_not_configured)
+    }
 
-            val editHoney = honeyInput.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-            val editFlights = flightsInput.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-            val parsedStreak = streakInput.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-
-            if (honeyInput.trim().isNotEmpty() && editHoney == null) {
-                showSnackbar(getString(R.string.dev_dashboard_honey_invalid), isError = true)
-                return@launch
-            }
-            if (flightsInput.trim().isNotEmpty() && editFlights == null) {
-                showSnackbar(getString(R.string.dev_dashboard_flights_invalid), isError = true)
-                return@launch
-            }
-            if (streakInput.trim().isNotEmpty() && parsedStreak == null) {
-                showSnackbar(getString(R.string.dev_dashboard_streak_invalid), isError = true)
-                return@launch
-            }
-
-            val newHoney = editHoney ?: if (editFlights != null) editFlights * 50 else (profile.honey ?: 0)
-            val newStreak = parsedStreak?.coerceAtLeast(0) ?: (profile.streak_count ?: 0)
-
-            if (repository.adminUpdateProfileStats(profile.id, newHoney, newStreak)) {
-                val refreshed = repository.getCurrentProfile() ?: profile.copy(
-                    honey = newHoney,
-                    streak_count = newStreak
-                )
-                showSnackbar(
-                    getString(
-                        R.string.dev_dashboard_reality_updated,
-                        refreshed.honey ?: 0,
-                        refreshed.streak_count ?: 0
-                    )
-                )
-            } else {
-                showSnackbar(getString(R.string.dev_dashboard_reality_update_failed), isError = true)
-            }
+    private fun redactIdentifier(raw: String?): String {
+        val value = raw?.takeIf { it.isNotBlank() } ?: return getString(R.string.dev_dashboard_none)
+        return if (value.length <= 8) {
+            getString(R.string.dev_dashboard_redacted)
+        } else {
+            "${value.take(4)}...${value.takeLast(4)}"
         }
     }
 }

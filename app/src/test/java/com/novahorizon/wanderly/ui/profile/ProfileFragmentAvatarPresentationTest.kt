@@ -86,4 +86,24 @@ class ProfileFragmentAvatarPresentationTest {
         assertEquals(0xFFEAB308.toInt(), ProfileFragment.resolveStreakAccentColor(7))
         assertEquals(0xFFFFD166.toInt(), ProfileFragment.resolveStreakAccentColor(250))
     }
+
+    @Test
+    fun `shows dev panel only for debug builds`() {
+        assertTrue(ProfileFragment.shouldShowDevPanel(isDebugBuild = true, isAdmin = false))
+        assertTrue(ProfileFragment.shouldShowDevPanel(isDebugBuild = true, isAdmin = true))
+        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = true))
+        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = false))
+        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = null))
+    }
+
+    @Test
+    fun `does not prompt for client class selection while class is server owned`() {
+        assertFalse(
+            ProfileFragment.shouldPromptClassSelection(
+                flights = 10,
+                explorerClass = null,
+                isDialogShowing = false
+            )
+        )
+    }
 }

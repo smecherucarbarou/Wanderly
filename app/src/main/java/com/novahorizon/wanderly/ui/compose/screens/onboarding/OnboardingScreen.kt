@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.ui.compose.screens.onboarding
 
+import android.content.res.Configuration
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,11 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.ui.compose.components.HoneyButton
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import kotlinx.coroutines.launch
 
 data class OnboardingPageData(
@@ -74,8 +80,13 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     val isLastPage = pagerState.currentPage == pages.lastIndex
 
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
     Column(
         modifier = Modifier
+            .widthIn(max = 520.dp)
             .fillMaxSize()
             .padding(24.dp)
     ) {
@@ -96,7 +107,7 @@ fun OnboardingScreen(
             if (!isLastPage) {
                 TextButton(onClick = onComplete) {
                     Text(
-                        text = "Skip",
+                        text = stringResource(R.string.onboarding_skip),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -134,6 +145,7 @@ fun OnboardingScreen(
                 }
             }
         )
+    }
     }
 }
 
@@ -196,8 +208,15 @@ private fun PageIndicator(
     currentPage: Int,
     modifier: Modifier = Modifier
 ) {
+    val indicatorDescription = stringResource(
+        R.string.onboarding_counter_format,
+        currentPage + 1,
+        pageCount
+    )
     Row(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = indicatorDescription
+        },
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         repeat(pageCount) { index ->
@@ -211,5 +230,36 @@ private fun PageIndicator(
                     )
             )
         }
+    }
+}
+
+// ─── Previews ────────────────────────────────────────────────────────────────
+
+@Preview(name = "Light - Onboarding Page")
+@Preview(name = "Dark - Onboarding Page", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewOnboardingPageContent() {
+    WanderlyTheme {
+        OnboardingPageContent(
+            page = OnboardingPageData(
+                illustrationRes = R.drawable.ic_buzzy,
+                labelRes = R.string.onboarding_slide_one_label,
+                titleRes = R.string.onboarding_slide_one_title,
+                subtitleRes = R.string.onboarding_slide_one_subtitle,
+                supportRes = R.string.onboarding_slide_one_support
+            )
+        )
+    }
+}
+
+@Preview(name = "Light - Page Indicator")
+@Preview(name = "Dark - Page Indicator", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewPageIndicator() {
+    WanderlyTheme {
+        PageIndicator(
+            pageCount = 3,
+            currentPage = 1
+        )
     }
 }

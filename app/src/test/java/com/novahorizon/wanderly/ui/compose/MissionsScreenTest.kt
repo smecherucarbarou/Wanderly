@@ -5,12 +5,15 @@ import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
+import com.novahorizon.wanderly.DefaultMissionGenerationService
+import com.novahorizon.wanderly.MissionGenerationService
 import com.novahorizon.wanderly.data.MissionCompletionResult
 import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.Profile
@@ -80,7 +83,7 @@ class MissionsScreenTest {
                 }
             }
 
-            composeTestRule.onNodeWithText("Generate New Mission").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Find a mission").assertIsDisplayed()
         } finally {
             store.clear()
         }
@@ -103,7 +106,30 @@ class MissionsScreenTest {
                 }
             }
 
-            composeTestRule.onNodeWithText("0").assertIsDisplayed()
+            composeTestRule.onNodeWithContentDescription("0 honey").assertIsDisplayed()
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `shows streak fire pill even when streak is zero`() {
+        val (viewModel, store) = createViewModel()
+
+        try {
+            composeTestRule.setContent {
+                WanderlyTheme {
+                    MissionsScreen(
+                        viewModel = viewModel,
+                        onGenerateMission = {},
+                        onVerifyPhoto = {},
+                        onCompleteMission = {},
+                        onLearnMore = {}
+                    )
+                }
+            }
+
+            composeTestRule.onNodeWithContentDescription("0 day streak").assertIsDisplayed()
         } finally {
             store.clear()
         }
@@ -146,7 +172,8 @@ class MissionsScreenTest {
                     ProfileStateProvider(repository),
                     detailsRepo,
                     candidateProvider,
-                    placeSelector
+                    placeSelector,
+                    DefaultMissionGenerationService
                 ) as T
             }
         }

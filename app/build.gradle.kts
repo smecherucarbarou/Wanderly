@@ -247,7 +247,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.novahorizon.wanderly.HiltTestRunner"
         testInstrumentationRunnerArguments["wanderly.test.email"] = androidTestEmail
         testInstrumentationRunnerArguments["wanderly.test.password"] = androidTestPassword
         manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
@@ -412,6 +412,7 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.runtime.livedata)
     implementation(libs.compose.activity)
     implementation(libs.compose.navigation)

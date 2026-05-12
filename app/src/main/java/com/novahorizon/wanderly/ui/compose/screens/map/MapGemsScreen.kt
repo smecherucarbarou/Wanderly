@@ -1,25 +1,37 @@
 package com.novahorizon.wanderly.ui.compose.screens.map
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.asFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Gem
 import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.HoneyButton
@@ -38,13 +50,18 @@ fun GemsScreen(
     val gemsState by viewModel.gemsState.asFlow().collectAsStateWithLifecycle(GemsState.Idle)
     val context = LocalContext.current
 
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
     Column(
         modifier = Modifier
+            .widthIn(max = 600.dp)
             .fillMaxSize()
             .padding(top = 20.dp)
     ) {
         Text(
-            text = "Hidden Gems",
+            text = stringResource(R.string.gems_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 20.dp)
@@ -90,15 +107,22 @@ fun GemsScreen(
                         .padding(20.dp)
                 ) {
                     Text(
-                        text = "Discover hidden gems near your location.",
+                        text = stringResource(R.string.gems_idle_description),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.gems_idle_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    HoneyButton(text = "Find Gems", onClick = onRetry)
+                    HoneyButton(text = stringResource(R.string.gems_find_button), onClick = onRetry)
                 }
             }
         }
+    }
     }
 }
 
@@ -113,7 +137,8 @@ private fun GemCard(
     WanderlyCard(
         modifier = Modifier
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {}
+            .clickable(onClick = onClick, onClickLabel = stringResource(R.string.cd_gem_view_details))
     ) {
         Text(
             text = name,
@@ -122,11 +147,20 @@ private fun GemCard(
         )
         if (location.isNotBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "📍 $location",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+                Text(
+                    text = location,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         if (description.isNotBlank()) {
             Spacer(modifier = Modifier.height(10.dp))

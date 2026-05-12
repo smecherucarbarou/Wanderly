@@ -21,16 +21,20 @@ object Constants {
     const val KEY_WIDGET_STREAK_SAVED_AT_MILLIS = "widget_streak_saved_at_millis"
     const val KEY_WIDGET_LAST_SYNC_SUCCEEDED = "widget_last_sync_succeeded"
 
-    const val AUTH_CALLBACK_SCHEME = "wanderly"
-    const val AUTH_CALLBACK_HOST = "auth"
-    const val AUTH_CALLBACK_PATH = "/callback"
-    const val INVITE_CALLBACK_SCHEME = "wanderly"
-    const val INVITE_CALLBACK_HOST = "invite"
-    const val INVITE_WEB_SCHEME = "https"
-    const val INVITE_WEB_HOST = "wanderly.app"
+    const val WEB_SCHEME = "https"
+    const val WEB_HOST = "wanderly.ro"
+    const val AUTH_CALLBACK_PATH = "/auth/callback"
     const val INVITE_PATH_SEGMENT = "invite"
     const val INVITE_QUERY_PARAMETER = "invite"
     const val KEY_PENDING_INVITE_CODE = "pending_invite_code"
+
+    const val LEGACY_SCHEME = "wanderly"
+    const val LEGACY_INVITE_HOST = "invite"
+
+    fun authCallbackUrl(): String = "$WEB_SCHEME://$WEB_HOST$AUTH_CALLBACK_PATH"
+
+    fun inviteUrl(friendCode: String): String =
+        "$WEB_SCHEME://$WEB_HOST/$INVITE_PATH_SEGMENT/$friendCode"
 
     const val TABLE_PROFILES = "profiles"
     const val STORAGE_BUCKET_AVATARS = "avatars"

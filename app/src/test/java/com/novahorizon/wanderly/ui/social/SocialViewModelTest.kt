@@ -268,6 +268,43 @@ class SocialViewModelTest {
     }
 
     @Test
+    fun `addFriend rejects special characters before repository call`() = runTest {
+        val repository = TestWanderlyRepository(context)
+        val (viewModel, store) = createViewModel(repository)
+
+        try {
+            viewModel.addFriend("AB!123")
+            advanceUntilIdle()
+
+            assertEquals(0, repository.addFriendCallCount)
+            assertEquals(
+                SocialViewModel.SocialMessage(
+                    message = UiText.StringResource(R.string.social_friend_code_invalid),
+                    isError = true
+                ),
+                viewModel.addFriendResult.value
+            )
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
+    fun `addFriend normalizes lowercase friend code before repository call`() = runTest {
+        val repository = TestWanderlyRepository(context)
+        val (viewModel, store) = createViewModel(repository)
+
+        try {
+            viewModel.addFriend("ab12cd")
+            advanceUntilIdle()
+
+            assertEquals("AB12CD", repository.lastAddFriendCode)
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
     fun `acceptFriendRequest success refreshes social lifecycle state`() = runTest {
         val requester = testProfile("requester", "Request Bee", honey = 90)
         val accepted = testProfile("requester", "Request Bee", honey = 90)
@@ -398,6 +435,10 @@ class SocialViewModelTest {
         private var actionCompleted = false
         var getFriendsCallCount: Int = 0
             private set
+        var addFriendCallCount: Int = 0
+            private set
+        var lastAddFriendCode: String? = null
+            private set
         val acceptedRequestIds = mutableListOf<String>()
         val rejectedRequestIds = mutableListOf<String>()
 
@@ -421,6 +462,8 @@ class SocialViewModelTest {
 
         override suspend fun addFriendByCodeResult(friendCode: String): AddFriendResult {
             addFriendError?.let { throw it }
+            addFriendCallCount += 1
+            lastAddFriendCode = friendCode
             return addFriendResult
         }
 

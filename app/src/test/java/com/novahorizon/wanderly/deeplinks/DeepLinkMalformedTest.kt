@@ -24,8 +24,15 @@ class DeepLinkMalformedTest {
     }
 
     @Test
-    fun `AuthActivity accepts auth callback with extra unexpected query params`() {
+    fun `AuthActivity rejects legacy scheme auth callback even with valid code`() {
         val callback = Uri.parse("wanderly://auth/callback?code=auth-code&unexpected=value")
+
+        assertFalse(AuthCallbackMatcher.matchesCallbackUri(callback))
+    }
+
+    @Test
+    fun `AuthActivity accepts HTTPS auth callback with extra unexpected query params`() {
+        val callback = Uri.parse("https://wanderly.ro/auth/callback?code=auth-code&unexpected=value")
 
         assertTrue(AuthCallbackMatcher.matchesCallbackUri(callback))
     }
@@ -43,7 +50,7 @@ class DeepLinkMalformedTest {
     @Test
     fun `SplashActivity invite parser ignores missing required code`() {
         assertNull(InviteDeepLink.extractFriendCode(Uri.parse("wanderly://invite")))
-        assertNull(InviteDeepLink.extractFriendCode(Uri.parse("https://wanderly.app/invite")))
+        assertNull(InviteDeepLink.extractFriendCode(Uri.parse("https://wanderly.ro/invite/")))
     }
 
     @Test

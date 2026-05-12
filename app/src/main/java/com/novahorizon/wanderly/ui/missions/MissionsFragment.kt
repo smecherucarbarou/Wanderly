@@ -21,8 +21,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
+import com.novahorizon.wanderly.MissionCityResolver
+import com.novahorizon.wanderly.MissionLocationProvider
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.ui.common.LocationPermissionController
 import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.showSnackbar
@@ -34,11 +35,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MissionsFragment : Fragment() {
 
     private val viewModel: MissionsViewModel by viewModels()
+
+    @Inject lateinit var missionLocationProvider: MissionLocationProvider
+    @Inject lateinit var missionCityResolver: MissionCityResolver
 
     private var tempImageUri: Uri? = null
     private var tempImageFile: File? = null
@@ -151,7 +156,7 @@ class MissionsFragment : Fragment() {
         }
         locationLookupInFlight = true
 
-        WanderlyGraph.missionLocationProvider().requestCurrentLocation(
+        missionLocationProvider.requestCurrentLocation(
             fragment = this,
             onSuccess = onSuccess@{ location ->
             if (!isAdded) return@onSuccess
@@ -159,7 +164,7 @@ class MissionsFragment : Fragment() {
                 val lifecycleOwner = viewLifecycleOwner
                 lifecycleOwner.lifecycleScope.launch {
                     try {
-                        val cityName = WanderlyGraph.missionCityResolver()
+                        val cityName = missionCityResolver
                             .resolveCityName(requireContext(), location)
                         if (!isAdded || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
                             return@launch

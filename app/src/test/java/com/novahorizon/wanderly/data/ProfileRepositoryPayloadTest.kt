@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,7 +8,7 @@ import org.junit.Test
 class ProfileRepositoryPayloadTest {
 
     @Test
-    fun `client payload excludes server owned reward progress location and admin fields`() {
+    fun `client payload contains only editable profile columns`() {
         val profile = Profile(
             id = "user-1",
             username = "Explorer",
@@ -29,20 +28,13 @@ class ProfileRepositoryPayloadTest {
 
         val payload = ProfileRepository.toClientProfileUpdate(profile)
 
-        val clientWritableFields = payload.javaClass.declaredFields.map { it.name }.toSet()
-        val serverOwnedFields = setOf(
-            "username",
-            "honey",
-            "hive_rank",
-            "admin_role",
-            "last_mission_date",
-            "last_buzz_date",
-            "last_lat",
-            "last_lng",
-            "streak_count"
-        )
+        val clientWritableFields = payload.javaClass.declaredFields
+            .filter { !it.isSynthetic && !it.name.startsWith("$") }
+            .map { it.name }.toSet()
 
-        assertTrue(clientWritableFields.none { it in serverOwnedFields })
+        assertEquals(setOf("username", "avatar_url"), clientWritableFields)
+        assertEquals("Explorer", payload.username)
+        assertEquals("https://example.com/avatar.jpg", payload.avatar_url)
     }
 
     @Test
@@ -60,6 +52,25 @@ class ProfileRepositoryPayloadTest {
             .filter { !it.isSynthetic && !it.name.startsWith("$") }
             .map { it.name }.toSet()
         assertEquals(setOf("honey", "streak_count", "hive_rank"), adminWritableFields)
+    }
+
+    @Test
+    fun `admin stats payload clamps negative and absurd values`() {
+        val negativePayload = ProfileRepository.toAdminProfileStatsUpdate(
+            honey = -1,
+            streakCount = -2
+        )
+        val cappedPayload = ProfileRepository.toAdminProfileStatsUpdate(
+            honey = 2_000_000,
+            streakCount = 10_000
+        )
+
+        assertEquals(0, negativePayload.honey)
+        assertEquals(0, negativePayload.streak_count)
+        assertEquals(1, negativePayload.hive_rank)
+        assertEquals(1_000_000, cappedPayload.honey)
+        assertEquals(3_650, cappedPayload.streak_count)
+        assertEquals(4, cappedPayload.hive_rank)
     }
 
     @Test

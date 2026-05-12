@@ -81,16 +81,16 @@ class AvatarRepository(
                 val responseBody = response.body.string()
                 if (!response.isSuccessful) {
                     val message = buildAvatarUploadFailureMessage(response.code, responseBody)
-                    logError("Upload failed bucket=$bucket path=${target.filePath} error=$message")
+                    logError("Upload failed bucket=$bucket error=$message")
                     return@withContext AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
                 }
             }
 
-            logDebug("Upload success bucket=$bucket path=${target.filePath}")
+            logDebug("Upload success bucket=$bucket")
             AvatarUploadResult.Success(target.publicUrl)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            logError("Upload failed bucket=$bucket path=${target.filePath} error=${e.message}", e)
+            logError("Upload failed bucket=$bucket error=${e.message}", e)
             AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
         }
     }
@@ -109,7 +109,7 @@ class AvatarRepository(
                 "No authenticated Supabase user for avatar upload"
             }
             require(currentUserId == profileId) {
-                "Avatar upload user mismatch currentUser=$currentUserId profileId=$profileId"
+                "Avatar upload user mismatch"
             }
             val accessToken = SupabaseClient.client.auth.currentAccessTokenOrNull()
             require(!accessToken.isNullOrBlank()) {
@@ -127,8 +127,7 @@ class AvatarRepository(
             )
 
             logDebug(
-                "Avatar upload start currentUser=$currentUserId profileId=$profileId " +
-                    "bucket=$bucket objectPath=${target.filePath} mimeType=$mimeType bytes=${avatarBytes.size}"
+                "Avatar upload start bucket=$bucket mimeType=$mimeType bytes=${avatarBytes.size}"
             )
 
             stage = "storage_upload"
@@ -173,7 +172,7 @@ class AvatarRepository(
                 filter { eq("id", profileId) }
             }
 
-            logDebug("Avatar upload success currentUser=$currentUserId profileId=$profileId bucket=$bucket objectPath=${target.filePath}")
+            logDebug("Avatar upload success bucket=$bucket")
             AvatarUploadResult.Success(target.publicUrl)
         } catch (e: Exception) {
             if (e is CancellationException) throw e

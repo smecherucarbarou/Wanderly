@@ -5,10 +5,6 @@
         path="images/" />
 
     <cache-path
-        name="camera"
-        path="camera/" />
-
-    <external-cache-path
-        name="external_cache"
+        name="camera_cache"
         path="camera/" />
 </paths>

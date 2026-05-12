@@ -74,7 +74,7 @@ class ProfileScreenTest {
                 }
             }
 
-            composeTestRule.onNodeWithText("Loading profile...").assertIsDisplayed()
+            composeTestRule.onNodeWithText("Preparing your hive").assertIsDisplayed()
         } finally {
             store.clear()
         }

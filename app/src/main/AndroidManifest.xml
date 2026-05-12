@@ -56,6 +56,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- HTTPS App Link: invite -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="wanderly.ro"
+                    android:pathPrefix="/invite/" />
+            </intent-filter>
+            <!-- HTTPS App Link: homepage with invite query -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="wanderly.ro"
+                    android:path="/" />
+            </intent-filter>
+            <!-- Legacy scheme: invite (backward compat) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -65,38 +86,21 @@
                     android:host="invite"
                     android:pathPrefix="/" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="wanderly.app"
-                    android:path="/" />
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="wanderly.app"
-                    android:pathPrefix="/invite/" />
-            </intent-filter>
         </activity>
 
         <activity
             android:name=".AuthActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
-            <intent-filter>
+            <!-- HTTPS App Link: auth callback -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="wanderly"
-                    android:host="auth"
-                    android:path="/callback" />
+                    android:scheme="https"
+                    android:host="wanderly.ro"
+                    android:pathPrefix="/auth/callback" />
             </intent-filter>
         </activity>
 

@@ -6,7 +6,6 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.AuthRepository
 import com.novahorizon.wanderly.data.AvatarUploadResult
 import com.novahorizon.wanderly.data.LogoutCoordinator
@@ -26,18 +25,11 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     private val repository: WanderlyRepository,
     private val profileStateProvider: ProfileStateProvider,
-    private val authRepository: AuthRepository = WanderlyGraph.authRepository(),
-    private val logoutCoordinator: LogoutCoordinator? = null
+    private val authRepository: AuthRepository,
+    private val logoutCoordinator: LogoutCoordinator
 ) : ViewModel() {
     private var hasCheckedBadgesThisSession = false
     private var profileCollectorJob: Job? = null
-    private val defaultLogoutCoordinator by lazy {
-        LogoutCoordinator.create(
-            repository.context,
-            authRepository,
-            repository
-        )
-    }
 
     private val _profile = MutableLiveData<Profile?>()
     val profile: LiveData<Profile?> = _profile
@@ -47,6 +39,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _profileEvent = MutableLiveData<ProfileEvent?>()
     val profileEvent: LiveData<ProfileEvent?> = _profileEvent
+
+    private val _avatarUploadState = MutableLiveData<AvatarUploadState>(AvatarUploadState.Idle)
+    val avatarUploadState: LiveData<AvatarUploadState> = _avatarUploadState
 
     init {
         startProfileCollector()
@@ -62,7 +57,13 @@ class ProfileViewModel @Inject constructor(
     sealed class ProfileUiState {
         object Loading : ProfileUiState()
         data class Loaded(val profile: Profile) : ProfileUiState()
+        object Empty : ProfileUiState()
         data class Error(val message: UiText) : ProfileUiState()
+    }
+
+    sealed class AvatarUploadState {
+        object Idle : AvatarUploadState()
+        object Uploading : AvatarUploadState()
     }
 
     fun loadProfile() {
@@ -74,72 +75,70 @@ class ProfileViewModel @Inject constructor(
             try {
                 val profile = profileStateProvider.refreshProfile()
                 if (profile == null) {
-                    _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
-                    _profileEvent.postValue(ProfileEvent.LoggedOut)
+                    _profile.value = null
+                    _profileState.value = ProfileUiState.Empty
                     return@launch
                 }
-                _profile.postValue(profile)
-                _profileState.postValue(ProfileUiState.Loaded(profile))
+                val displayProfile = mergeWithOptimisticProfile(profile)
+                _profile.value = displayProfile
+                _profileState.value = ProfileUiState.Loaded(displayProfile)
                 if (!hasCheckedBadgesThisSession) {
                     hasCheckedBadgesThisSession = true
-                    checkAndUnlockBadges(profile)
+                    checkAndUnlockBadges(displayProfile)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _profileState.postValue(ProfileUiState.Error(UiText.resource(R.string.profile_load_failed)))
+                _profileState.value = ProfileUiState.Error(UiText.resource(R.string.profile_load_failed))
             }
         }
     }
 
     fun uploadAvatar(profile: Profile, uri: Uri) {
-    viewModelScope.launch {
-        try {
-            val avatarUrl = when (val uploadResult = repository.uploadAvatar(uri, profile.id)) {
-                is AvatarUploadResult.Success -> uploadResult.avatarUrl
+        viewModelScope.launch {
+            _avatarUploadState.value = AvatarUploadState.Uploading
+            try {
+                val avatarUrl = when (val uploadResult = repository.uploadAvatar(uri, profile.id)) {
+                    is AvatarUploadResult.Success -> uploadResult.avatarUrl
 
-                is AvatarUploadResult.Error -> {
-                    _profileEvent.postValue(
-                        ProfileEvent.ShowMessage(
+                    is AvatarUploadResult.Error -> {
+                        _profileEvent.value = ProfileEvent.ShowMessage(
                             UiText.DynamicString(uploadResult.message),
                             isError = true
                         )
-                    )
-                    return@launch
-                }
+                        return@launch
+                    }
 
-                AvatarUploadResult.FileTooLarge -> {
-                    _profileEvent.postValue(
-                        ProfileEvent.ShowMessage(
+                    AvatarUploadResult.FileTooLarge -> {
+                        _profileEvent.value = ProfileEvent.ShowMessage(
                             UiText.resource(R.string.profile_avatar_upload_failed),
                             isError = true
                         )
-                    )
-                    return@launch
-                }
+                        return@launch
+                    }
 
-                AvatarUploadResult.UnsupportedFormat -> {
-                    _profileEvent.postValue(
-                        ProfileEvent.ShowMessage(
+                    AvatarUploadResult.UnsupportedFormat -> {
+                        _profileEvent.value = ProfileEvent.ShowMessage(
                             UiText.resource(R.string.profile_avatar_upload_failed),
                             isError = true
                         )
-                    )
-                    return@launch
+                        return@launch
+                    }
                 }
-            }
 
-            // Repository already persists avatar_url; this event lets the UI refresh immediately.
-            _profileEvent.postValue(ProfileEvent.AvatarUpdated(avatarUrl))
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            _profileEvent.postValue(
-                ProfileEvent.ShowMessage(
+                val updatedProfile = profile.copy(avatar_url = avatarUrl)
+                _profile.value = updatedProfile
+                _profileState.value = ProfileUiState.Loaded(updatedProfile)
+                _profileEvent.value = ProfileEvent.AvatarUpdated(avatarUrl)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _profileEvent.value = ProfileEvent.ShowMessage(
                     UiText.resource(R.string.profile_avatar_upload_failed),
                     isError = true
                 )
-            )
+            } finally {
+                _avatarUploadState.value = AvatarUploadState.Idle
+            }
         }
-    }
     }
 
     fun updateUsername(profile: Profile, newUsername: String) {
@@ -201,37 +200,19 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun confirmClassSelection(profile: Profile, className: String) {
-        viewModelScope.launch {
-            try {
-                val updated = profile.copy(explorer_class = className)
-                val success = repository.updateProfile(updated)
-                if (success) {
-                    _profileEvent.postValue(ProfileEvent.ClassLocked(className))
-                } else {
-                    _profileEvent.postValue(
-                        ProfileEvent.ShowMessage(
-                            UiText.resource(R.string.profile_class_lock_failed),
-                            isError = true
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                _profileEvent.postValue(
-                    ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_class_lock_failed),
-                        isError = true
-                    )
-                )
-            }
-        }
+    fun confirmClassSelection(
+        @Suppress("UNUSED_PARAMETER") profile: Profile,
+        @Suppress("UNUSED_PARAMETER") className: String
+    ) {
+        _profileEvent.value = ProfileEvent.ShowMessage(
+            UiText.resource(R.string.profile_class_lock_failed),
+            isError = true
+        )
     }
 
     fun logout() {
         viewModelScope.launch {
             try {
-                val logoutCoordinator = logoutCoordinator ?: defaultLogoutCoordinator
                 val result = logoutCoordinator.logoutCompletely()
                 if (result.signedOut) {
                     _profileEvent.postValue(ProfileEvent.LoggedOut)
@@ -265,17 +246,30 @@ class ProfileViewModel @Inject constructor(
         val newBadges = updatedProfile.badges?.toSet().orEmpty()
 
         if (newBadges.size > currentBadges.size) {
-            repository.updateProfile(updatedProfile)
+            // Badge persistence is server-owned in release builds; avoid direct profile-field updates.
         }
     }
 
     private fun startProfileCollector() {
         profileCollectorJob?.cancel()
         profileCollectorJob = profileStateProvider.collectProfile(viewModelScope) { profile ->
-            _profile.postValue(profile)
-            if (profile != null) {
-                _profileState.postValue(ProfileUiState.Loaded(profile))
+            val displayProfile = profile?.let(::mergeWithOptimisticProfile)
+            _profile.value = displayProfile
+            if (displayProfile != null) {
+                _profileState.value = ProfileUiState.Loaded(displayProfile)
             }
+        }
+    }
+
+    private fun mergeWithOptimisticProfile(profile: Profile): Profile {
+        val current = _profile.value ?: return profile
+        if (current.id != profile.id) return profile
+
+        val currentAvatar = current.avatar_url?.takeIf { it.isNotBlank() }
+        return if (currentAvatar != null && profile.avatar_url.isNullOrBlank()) {
+            profile.copy(avatar_url = currentAvatar)
+        } else {
+            profile
         }
     }
 }

@@ -11,21 +11,20 @@ class StreakTierHelperTest {
         assertTier(
             streakCount = 0,
             label = "Broken",
-            emoji = "\uD83D\uDC80",
             color = 0xFF6B7280.toInt(),
             animFile = R.drawable.ic_streak_fire
         )
-        assertTier(1, "Starter", "\uD83D\uDD25", 0xFFF97316.toInt(), R.drawable.ic_streak_fire)
-        assertTier(6, "Starter", "\uD83D\uDD25", 0xFFF97316.toInt(), R.drawable.ic_streak_fire)
-        assertTier(7, "Rising", "\uD83D\uDD25", 0xFFEAB308.toInt(), R.drawable.ic_streak_fire)
-        assertTier(29, "Rising", "\uD83D\uDD25", 0xFFEAB308.toInt(), R.drawable.ic_streak_fire)
-        assertTier(30, "Blazing", "\uD83D\uDD25", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
-        assertTier(59, "Blazing", "\uD83D\uDD25", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
-        assertTier(60, "Legendary", "\uD83D\uDD25", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
-        assertTier(99, "Legendary", "\uD83D\uDD25", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
-        assertTier(100, "Epic", "\uD83D\uDD25", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
-        assertTier(199, "Epic", "\uD83D\uDD25", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
-        assertTier(200, "GOD", "\uD83D\uDD25", 0xFFFFD166.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(1, "Starter", 0xFFF97316.toInt(), R.drawable.ic_streak_fire)
+        assertTier(6, "Starter", 0xFFF97316.toInt(), R.drawable.ic_streak_fire)
+        assertTier(7, "Rising", 0xFFEAB308.toInt(), R.drawable.ic_streak_fire)
+        assertTier(29, "Rising", 0xFFEAB308.toInt(), R.drawable.ic_streak_fire)
+        assertTier(30, "Blazing", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
+        assertTier(59, "Blazing", 0xFFF59E0B.toInt(), R.drawable.ic_streak_fire_5)
+        assertTier(60, "Legendary", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
+        assertTier(99, "Legendary", 0xFFFF8A3D.toInt(), R.drawable.ic_streak_fire_25)
+        assertTier(100, "Epic", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(199, "Epic", 0xFFFFB347.toInt(), R.drawable.ic_streak_fire_50)
+        assertTier(200, "GOD", 0xFFFFD166.toInt(), R.drawable.ic_streak_fire_50)
     }
 
     @Test
@@ -40,14 +39,12 @@ class StreakTierHelperTest {
     private fun assertTier(
         streakCount: Int,
         label: String,
-        emoji: String,
         color: Int,
         animFile: Int
     ) {
         val tier = StreakTierHelper.resolve(streakCount)
 
         assertEquals(label, tier.label)
-        assertEquals(emoji, tier.emoji)
         assertEquals(color, tier.color)
         assertEquals(animFile, tier.animFile)
     }

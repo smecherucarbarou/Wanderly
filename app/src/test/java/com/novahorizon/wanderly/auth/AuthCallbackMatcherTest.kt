@@ -16,21 +16,34 @@ import org.robolectric.annotation.Config
 class AuthCallbackMatcherTest {
 
     @Test
-    fun `constants build canonical custom auth callback`() {
-        val authCallbackUrl =
-            "${Constants.AUTH_CALLBACK_SCHEME}://${Constants.AUTH_CALLBACK_HOST}${Constants.AUTH_CALLBACK_PATH}"
+    fun `constants build canonical HTTPS auth callback`() {
+        val authCallbackUrl = Constants.authCallbackUrl()
 
-        assertEquals("wanderly://auth/callback", authCallbackUrl)
+        assertEquals("https://wanderly.ro/auth/callback", authCallbackUrl)
     }
 
     @Test
-    fun `matches canonical custom auth callback shape`() {
-        assertTrue(AuthCallbackMatcher.matches("wanderly", "auth", "/callback"))
+    fun `matches HTTPS auth callback shape`() {
+        assertTrue(AuthCallbackMatcher.matches("https", "wanderly.ro", "/auth/callback"))
     }
 
     @Test
-    fun `accepts valid callback with code query param`() {
+    fun `rejects legacy custom auth callback shape`() {
+        assertFalse(AuthCallbackMatcher.matches("wanderly", "auth", "/callback"))
+    }
+
+    @Test
+    fun `accepts valid HTTPS callback with code query param`() {
         assertTrue(
+            AuthCallbackMatcher.matchesCallbackUri(
+                Uri.parse("https://wanderly.ro/auth/callback?code=auth-code")
+            )
+        )
+    }
+
+    @Test
+    fun `rejects legacy callback even with valid code query param`() {
+        assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
                 Uri.parse("wanderly://auth/callback?code=auth-code")
             )
@@ -39,6 +52,15 @@ class AuthCallbackMatcherTest {
 
     @Test
     fun `rejects callback with access_token in fragment`() {
+        assertFalse(
+            AuthCallbackMatcher.matchesCallbackUri(
+                Uri.parse("https://wanderly.ro/auth/callback#access_token=token&refresh_token=refresh")
+            )
+        )
+    }
+
+    @Test
+    fun `rejects legacy callback with access_token in fragment`() {
         assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
                 Uri.parse("wanderly://auth/callback#access_token=token&refresh_token=refresh")
@@ -50,7 +72,7 @@ class AuthCallbackMatcherTest {
     fun `rejects callback with access_token in query`() {
         assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
-                Uri.parse("wanderly://auth/callback?access_token=abc")
+                Uri.parse("https://wanderly.ro/auth/callback?access_token=abc")
             )
         )
     }
@@ -59,7 +81,7 @@ class AuthCallbackMatcherTest {
     fun `rejects callback with refresh_token in query`() {
         assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
-                Uri.parse("wanderly://auth/callback?refresh_token=abc")
+                Uri.parse("https://wanderly.ro/auth/callback?refresh_token=abc")
             )
         )
     }
@@ -68,25 +90,20 @@ class AuthCallbackMatcherTest {
     fun `rejects callback without code param`() {
         assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
-                Uri.parse("wanderly://auth/callback")
+                Uri.parse("https://wanderly.ro/auth/callback")
             )
         )
     }
 
     @Test
-    fun `rejects invite and old web callback shapes`() {
+    fun `rejects invite and wrong host shapes`() {
         assertFalse(
             AuthCallbackMatcher.matchesCallbackUri(
                 Uri.parse("wanderly://invite/ABC123")
             )
         )
-        assertFalse(
-            AuthCallbackMatcher.matchesCallbackUri(
-                Uri.parse("https://wanderly.app/auth/callback?code=auth-code")
-            )
-        )
         assertFalse(AuthCallbackMatcher.matches("wanderly", "login", "/callback"))
-        assertFalse(AuthCallbackMatcher.matches("https", "wanderly.app", "/callback"))
+        assertFalse(AuthCallbackMatcher.matches("https", "wanderly.ro", "/callback"))
         assertFalse(AuthCallbackMatcher.matches("https", "auth", "/auth/callback"))
         assertFalse(AuthCallbackMatcher.matches("https", "other", "/auth/callback"))
     }

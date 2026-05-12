@@ -12,7 +12,7 @@ object InviteShareFormatter {
     }
 
     fun buildInviteUrl(friendCode: String): String {
-        return "${Constants.INVITE_CALLBACK_SCHEME}://${Constants.INVITE_CALLBACK_HOST}/${normalizeFriendCode(friendCode)}"
+        return Constants.inviteUrl(normalizeFriendCode(friendCode))
     }
 
     private fun normalizeFriendCode(friendCode: String): String {

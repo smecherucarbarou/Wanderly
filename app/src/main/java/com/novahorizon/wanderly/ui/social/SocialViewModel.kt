@@ -13,7 +13,9 @@ import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,6 +28,9 @@ class SocialViewModel @Inject constructor(
 
     private val _friends = MutableLiveData<List<Profile>>()
     val friends: LiveData<List<Profile>> = _friends
+
+    private val _currentProfile = MutableLiveData<Profile?>()
+    val currentProfile: LiveData<Profile?> = _currentProfile
 
     private val _incomingFriendRequests = MutableLiveData<List<Profile>>()
     val incomingFriendRequests: LiveData<List<Profile>> = _incomingFriendRequests
@@ -54,6 +59,14 @@ class SocialViewModel @Inject constructor(
         val message: UiText,
         val isError: Boolean
     )
+
+    init {
+        viewModelScope.launch {
+            repository.currentProfile.collectLatest { profile ->
+                _currentProfile.postValue(profile)
+            }
+        }
+    }
 
     fun loadLeaderboard() {
         _isLoading.value = true
@@ -93,12 +106,19 @@ class SocialViewModel @Inject constructor(
     }
 
     fun addFriend(friendCode: String) {
-        if (friendCode.isBlank()) return
+        val normalizedFriendCode = friendCode.trim().uppercase(Locale.US)
+        if (!FRIEND_CODE_PATTERN.matches(normalizedFriendCode)) {
+            _addFriendResult.value = SocialMessage(
+                message = UiText.resource(R.string.social_friend_code_invalid),
+                isError = true
+            )
+            return
+        }
         _isLoading.value = true
         _state.value = SocialUiState.Loading
         viewModelScope.launch {
             try {
-                val result = repository.addFriendByCodeResult(friendCode)
+                val result = repository.addFriendByCodeResult(normalizedFriendCode)
                 val feedback = addFriendDisplayMessage(result)
                 _addFriendResult.postValue(feedback)
                 when (result) {
@@ -294,5 +314,9 @@ class SocialViewModel @Inject constructor(
                 incomingRequests = incomingRequests
             )
         }
+    }
+
+    private companion object {
+        val FRIEND_CODE_PATTERN = Regex("^[A-Z0-9]{6}$")
     }
 }

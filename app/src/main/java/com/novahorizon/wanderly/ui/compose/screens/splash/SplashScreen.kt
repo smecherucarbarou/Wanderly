@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.ui.compose.components.BuzzyMascot
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyColors
 
@@ -66,7 +68,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Wanderly",
+                text = stringResource(R.string.app_name),
                 fontSize = 36.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = WanderlyColors.DarkTextPrimary
@@ -75,7 +77,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Explore. Discover. Collect.",
+                text = stringResource(R.string.splash_tagline),
                 fontSize = 14.sp,
                 color = WanderlyColors.DarkAccent
             )

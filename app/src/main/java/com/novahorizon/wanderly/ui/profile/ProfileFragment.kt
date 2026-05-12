@@ -5,6 +5,7 @@ import com.novahorizon.wanderly.observability.AppLogger
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -14,14 +15,20 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.auth.SessionNavigator
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileRepository
@@ -30,6 +37,7 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.notifications.NotificationPermissionManager
 import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.compose.screens.profile.ProfileScreen
@@ -37,6 +45,9 @@ import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import com.novahorizon.wanderly.widgets.StreakTierHelper
 import com.yalantis.ucrop.UCrop
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @AndroidEntryPoint
@@ -48,6 +59,10 @@ class ProfileFragment : Fragment() {
     private var pendingAvatarRemotePath: String? = null
     private var pendingClassSelectionDialog: androidx.appcompat.app.AlertDialog? = null
     private var isClassDialogShowing = false
+    private var avatarDisplaySource by mutableStateOf<String?>(null)
+    private var showDevPanel by mutableStateOf(BuildConfig.DEBUG)
+    private var notificationStatusText by mutableStateOf<String?>(null)
+    private var notificationActionLabel by mutableStateOf<String?>(null)
     private val viewModel: ProfileViewModel by viewModels()
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -81,41 +96,33 @@ class ProfileFragment : Fragment() {
 
     private val pickMedia = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@registerForActivityResult
+        val appContext = requireContext().applicationContext
 
-        val imageCacheDir = File(requireContext().cacheDir, "images").apply {
-            mkdirs()
-        }
-
-        val destinationFile = File.createTempFile(
-            "avatar_crop_",
-            ".jpg",
-            imageCacheDir
-        )
-
-        val destinationUri = FileProvider.getUriForFile(
-            requireContext(),
-            "${BuildConfig.APPLICATION_ID}.fileprovider",
-            destinationFile
-        )
-
-        pendingAvatarDestinationUri = destinationUri
-
-        val uCropIntent = UCrop.of(uri, destinationUri)
-            .withAspectRatio(1f, 1f)
-            .withMaxResultSize(400, 400)
-            .withOptions(
-                UCrop.Options().apply {
-                    setCircleDimmedLayer(true)
-                    setShowCropGrid(false)
-                }
-            )
-            .getIntent(requireContext())
-            .apply {
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val destinationUri = withContext(Dispatchers.IO) {
+                createAvatarCropDestinationUri(appContext)
             }
+            if (!isAdded) return@launch
 
-        cropImage.launch(uCropIntent)
+            pendingAvatarDestinationUri = destinationUri
+
+            val uCropIntent = UCrop.of(uri, destinationUri)
+                .withAspectRatio(1f, 1f)
+                .withMaxResultSize(400, 400)
+                .withOptions(
+                    UCrop.Options().apply {
+                        setCircleDimmedLayer(true)
+                        setShowCropGrid(false)
+                    }
+                )
+                .getIntent(requireContext())
+                .apply {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }
+
+            cropImage.launch(uCropIntent)
+        }
     }
 
     override fun onCreateView(
@@ -129,13 +136,20 @@ class ProfileFragment : Fragment() {
                 WanderlyTheme {
                     ProfileScreen(
                         viewModel = viewModel,
+                        avatarDisplaySource = avatarDisplaySource,
+                        showDevPanel = showDevPanel,
+                        notificationStatusText = notificationStatusText,
+                        notificationActionLabel = notificationActionLabel,
                         onLogout = { viewModel.logout() },
-                        onSettings = {
-                            findNavController().navigate(R.id.action_profile_to_devDashboard)
-                        },
+                        onSettings = { openDevDashboard() },
+                        onNotificationAction = { handleNotificationAction() },
                         onEditAvatar = {
                             pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }
+                        },
+                        onEditUsername = { showEditUsernameDialog() },
+                        onCopyFriendCode = { copyFriendCode(it) },
+                        onShareFriendCode = { shareFriendCode(it) },
+                        onRetry = { viewModel.loadProfile() }
                     )
                 }
             }
@@ -151,6 +165,7 @@ class ProfileFragment : Fragment() {
                     if (event.isError && pendingAvatarPreviewSource != null && pendingAvatarRemotePath == null) {
                         pendingAvatarPreviewSource = null
                         pendingAvatarRemotePath = null
+                        updateAvatarDisplaySource(currentProfile)
                     }
                     showSnackbar(event.message.asString(requireContext()), isError = event.isError)
                     viewModel.clearProfileEvent()
@@ -158,9 +173,9 @@ class ProfileFragment : Fragment() {
 
                 is ProfileViewModel.ProfileEvent.AvatarUpdated -> {
                     val avatarUrl = event.avatarUrl
-                    pendingAvatarPreviewSource = null
                     pendingAvatarRemotePath = AvatarLoader.extractSupabaseStoragePath(avatarUrl) ?: avatarUrl
                     currentProfile = currentProfile?.copy(avatar_url = avatarUrl)
+                    updateAvatarDisplaySource(currentProfile)
                     showSnackbar(getString(R.string.profile_avatar_updated), isError = false)
                     viewModel.clearProfileEvent()
                 }
@@ -188,25 +203,140 @@ class ProfileFragment : Fragment() {
         viewModel.profile.observe(viewLifecycleOwner) { profile ->
             if (profile != null) {
                 currentProfile = profile
+                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG, profile.admin_role)
+                updateAvatarDisplaySource(profile)
                 val honey = profile.honey ?: 0
                 val flights = honey / 50
-                if (flights >= 10 && profile.explorer_class.isNullOrEmpty() && !isClassDialogShowing) {
+                if (shouldPromptClassSelection(flights, profile.explorer_class, isClassDialogShowing)) {
                     showClassSelectionDialog(profile)
                 }
+            } else {
+                currentProfile = null
+                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG, null)
+                updateAvatarDisplaySource(null)
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
+        refreshNotificationUiState()
         viewModel.loadProfile()
     }
 
+    private fun refreshNotificationUiState() {
+        if (!isAdded) return
+        val context = requireContext()
+        val status = NotificationPermissionManager.status(context)
+        val systemNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+        notificationStatusText = when {
+            status == NotificationPermissionManager.Status.NOT_REQUIRED && systemNotificationsEnabled ->
+                getString(R.string.profile_notifications_not_required)
+            status == NotificationPermissionManager.Status.GRANTED && systemNotificationsEnabled ->
+                getString(R.string.profile_notifications_enabled)
+            !systemNotificationsEnabled ->
+                getString(R.string.profile_notifications_system_disabled)
+            else ->
+                getString(R.string.profile_notifications_permission_denied)
+        }
+
+        notificationActionLabel = if (
+            status == NotificationPermissionManager.Status.DENIED &&
+            !NotificationPermissionManager.hasRequestedPermissionBefore(context)
+        ) {
+            getString(R.string.profile_notifications_enable)
+        } else {
+            getString(R.string.profile_notifications_open_settings)
+        }
+    }
+
+    private fun handleNotificationAction() {
+        val context = requireContext()
+        val shouldRequestInApp = NotificationPermissionManager.status(context) == NotificationPermissionManager.Status.DENIED &&
+            !NotificationPermissionManager.hasRequestedPermissionBefore(context)
+
+        if (shouldRequestInApp) {
+            (activity as? MainActivity)?.requestNotificationPermissionIfNeeded()
+        } else {
+            startActivity(NotificationPermissionManager.notificationSettingsIntent(context))
+        }
+    }
+
     private fun uploadAvatarToSupabase(uri: Uri) {
-        val profile = currentProfile ?: return
+        val profile = currentProfile ?: viewModel.profile.value
+        if (profile == null) {
+            pendingAvatarPreviewSource = null
+            pendingAvatarRemotePath = null
+            showSnackbar(getString(R.string.profile_load_failed), isError = true)
+            viewModel.loadProfile()
+            return
+        }
         pendingAvatarPreviewSource = uri.toString()
         pendingAvatarRemotePath = null
+        updateAvatarDisplaySource(profile)
         viewModel.uploadAvatar(profile, uri)
+    }
+
+    private fun createAvatarCropDestinationUri(context: Context): Uri {
+        val imageCacheDir = File(context.cacheDir, "images").apply {
+            mkdirs()
+        }
+        val destinationFile = File.createTempFile(
+            "avatar_crop_",
+            ".jpg",
+            imageCacheDir
+        )
+        return FileProvider.getUriForFile(
+            context,
+            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            destinationFile
+        )
+    }
+
+    private fun updateAvatarDisplaySource(profile: Profile?) {
+        val decision = resolveAvatarPresentation(
+            profileAvatarSource = profile?.avatar_url,
+            pendingAvatarPreviewSource = pendingAvatarPreviewSource,
+            pendingAvatarRemotePath = pendingAvatarRemotePath
+        )
+        if (decision.shouldClearPendingPreview) {
+            pendingAvatarPreviewSource = null
+            pendingAvatarRemotePath = null
+        }
+        avatarDisplaySource = decision.displaySource
+    }
+
+    private fun openDevDashboard() {
+        if (!BuildConfig.DEBUG) return
+
+        val navController = runCatching { findNavController() }
+            .getOrElse { error ->
+                logDevPanelNavigationFailure(error)
+                showSnackbar(getString(R.string.dev_dashboard_open_failed), isError = true)
+                return
+            }
+
+        if (navController.currentDestination?.id == R.id.devDashboardFragment) return
+
+        runCatching {
+            if (navController.currentDestination?.id == R.id.profileFragment) {
+                navController.navigate(R.id.action_profile_to_devDashboard)
+            } else {
+                navController.navigate(R.id.devDashboardFragment)
+            }
+        }.recoverCatching {
+            navController.navigate(R.id.devDashboardFragment)
+        }.onFailure { error ->
+            logDevPanelNavigationFailure(error)
+            showSnackbar(getString(R.string.dev_dashboard_open_failed), isError = true)
+        }
+    }
+
+    private fun logDevPanelNavigationFailure(error: Throwable) {
+        if (BuildConfig.DEBUG) {
+            AppLogger.e("ProfileFragment", "Dev Panel navigation failed: ${LogRedactor.redact(error.message)}")
+        }
     }
 
     private fun copyFriendCode(friendCode: String) {
@@ -239,7 +369,8 @@ class ProfileFragment : Fragment() {
             currentUsername = currentProfile?.username
         ) { newUsername ->
             if (newUsername.length >= 3) {
-                viewModel.updateUsername(currentProfile!!, newUsername)
+                val profile = currentProfile ?: return@showEditUsernameDialog
+                viewModel.updateUsername(profile, newUsername)
             } else {
                 showSnackbar(getString(R.string.profile_username_too_short), isError = true)
             }
@@ -306,6 +437,16 @@ class ProfileFragment : Fragment() {
         internal fun resolveStreakAccentColor(streakCount: Int): Int {
             return StreakTierHelper.resolve(streakCount).color
         }
+
+        internal fun shouldShowDevPanel(isDebugBuild: Boolean, @Suppress("UNUSED_PARAMETER") isAdmin: Boolean?): Boolean {
+            return isDebugBuild
+        }
+
+        internal fun shouldPromptClassSelection(
+            @Suppress("UNUSED_PARAMETER") flights: Int,
+            @Suppress("UNUSED_PARAMETER") explorerClass: String?,
+            @Suppress("UNUSED_PARAMETER") isDialogShowing: Boolean
+        ): Boolean = false
 
         internal fun resolveAvatarPresentation(
             profileAvatarSource: String?,

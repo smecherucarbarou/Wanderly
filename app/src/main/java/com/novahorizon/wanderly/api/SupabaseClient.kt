@@ -43,8 +43,8 @@ object SupabaseClient {
             }
             install(Postgrest)
             install(Auth) {
-                scheme = Constants.AUTH_CALLBACK_SCHEME
-                host = Constants.AUTH_CALLBACK_HOST
+                scheme = Constants.WEB_SCHEME
+                host = Constants.WEB_HOST
                 alwaysAutoRefresh = true
                 autoLoadFromStorage = true
             }

@@ -2,18 +2,14 @@ package com.novahorizon.wanderly.notifications
 
 import com.novahorizon.wanderly.observability.AppLogger
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
 import com.novahorizon.wanderly.R
@@ -107,10 +103,7 @@ object WanderlyNotificationManager {
         dedupKey: String? = null,
         bypassCooldown: Boolean = false
     ): Boolean {
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!NotificationPermissionManager.hasNotificationPermission(context)) {
             logWarnOnce(NotificationWarning.Permission, "POST_NOTIFICATIONS permission not granted")
             return false
         }

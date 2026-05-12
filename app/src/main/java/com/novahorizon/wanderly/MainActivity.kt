@@ -2,30 +2,31 @@ package com.novahorizon.wanderly
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.View
 import android.widget.LinearLayout
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentContainerView
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.navigation.NavigationBarView
 import com.google.android.material.snackbar.Snackbar
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.notifications.NotificationPermissionManager
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.main.MainViewModel
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         rootView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -80,6 +82,8 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
             inflateMenu(R.menu.bottom_nav_menu)
+            labelVisibilityMode = NavigationBarView.LABEL_VISIBILITY_LABELED
+            isItemHorizontalTranslationEnabled = false
             itemIconTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.nav_item_colors)
             itemTextColor = ContextCompat.getColorStateList(this@MainActivity, R.color.nav_item_colors)
             setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.card_background))
@@ -165,17 +169,16 @@ class MainActivity : AppCompatActivity() {
     private fun applyWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            navHostFragment.setPadding(
-                navHostFragment.paddingLeft,
-                systemBars.top,
-                navHostFragment.paddingRight,
-                0
+            navHostFragment.updatePadding(
+                left = systemBars.left,
+                top = systemBars.top,
+                right = systemBars.right,
+                bottom = 0
             )
-            bottomNavigation.setPadding(
-                bottomNavigation.paddingLeft,
-                bottomNavigation.paddingTop,
-                bottomNavigation.paddingRight,
-                systemBars.bottom
+            bottomNavigation.updatePadding(
+                left = systemBars.left,
+                right = systemBars.right,
+                bottom = systemBars.bottom
             )
             insets
         }
@@ -212,21 +215,27 @@ class MainActivity : AppCompatActivity() {
 
     fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+        if (NotificationPermissionManager.hasNotificationPermission(this)) {
             return
         }
 
-        val permissionPrefs = getSharedPreferences(NOTIFICATION_PERMISSION_PREFS, MODE_PRIVATE)
-        val requestedBefore = permissionPrefs.getBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, false)
+        val requestedBefore = NotificationPermissionManager.hasRequestedPermissionBefore(this)
         val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
             this,
             Manifest.permission.POST_NOTIFICATIONS
         )
 
-        when {
-            shouldShowRationale -> showNotificationPermissionRationale()
-            requestedBefore -> showNotificationPermissionSettingsDialog()
-            else -> launchNotificationPermissionRequest()
+        when (
+            NotificationPermissionManager.resolveRequestAction(
+                status = NotificationPermissionManager.status(this),
+                requestedBefore = requestedBefore,
+                shouldShowRationale = shouldShowRationale
+            )
+        ) {
+            NotificationPermissionManager.RequestAction.NONE -> Unit
+            NotificationPermissionManager.RequestAction.SHOW_RATIONALE -> showNotificationPermissionRationale()
+            NotificationPermissionManager.RequestAction.OPEN_SETTINGS -> showNotificationPermissionSettingsDialog()
+            NotificationPermissionManager.RequestAction.REQUEST_PERMISSION -> launchNotificationPermissionRequest()
         }
     }
 
@@ -253,21 +262,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchNotificationPermissionRequest() {
-        getSharedPreferences(NOTIFICATION_PERMISSION_PREFS, MODE_PRIVATE)
-            .edit {
-                putBoolean(KEY_NOTIFICATION_PERMISSION_REQUESTED, true)
-            }
+        NotificationPermissionManager.markPermissionRequested(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
     private fun openNotificationSettings() {
-        startActivity(
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-            }
-        )
+        startActivity(NotificationPermissionManager.notificationSettingsIntent(this))
     }
 
     private fun routePendingInviteIfNeeded(destinationId: Int?) {
@@ -287,10 +289,5 @@ class MainActivity : AppCompatActivity() {
             stopHiveService()
         }
         super.onDestroy()
-    }
-
-    private companion object {
-        const val NOTIFICATION_PERMISSION_PREFS = "wanderly_runtime_permissions"
-        const val KEY_NOTIFICATION_PERMISSION_REQUESTED = "post_notifications_requested"
     }
 }

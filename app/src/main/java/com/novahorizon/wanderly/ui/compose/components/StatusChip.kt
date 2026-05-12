@@ -27,6 +27,6 @@ fun StatusChip(
         color = MaterialTheme.colorScheme.primary,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.sp
     )
 }

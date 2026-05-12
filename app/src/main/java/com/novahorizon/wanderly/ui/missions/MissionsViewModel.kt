@@ -9,8 +9,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.MissionGenerationService
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.MissionDetailsRepository
 import com.novahorizon.wanderly.data.MissionCompletionResult
@@ -43,7 +43,8 @@ class MissionsViewModel @Inject constructor(
     private val profileStateProvider: ProfileStateProvider,
     private val missionDetailsRepository: MissionDetailsRepository,
     private val missionCandidateProvider: MissionCandidateProvider,
-    private val missionPlaceSelector: MissionPlaceSelecting
+    private val missionPlaceSelector: MissionPlaceSelecting,
+    private val missionGenerationService: MissionGenerationService
 ) : ViewModel() {
 
     private val _profile = MutableLiveData<Profile?>()
@@ -246,7 +247,7 @@ class MissionsViewModel @Inject constructor(
                     """.trimIndent()
                 }
 
-                val resultText = WanderlyGraph.missionGenerationService()
+                val resultText = missionGenerationService
                     .analyzeImage(bitmap, prompt)
                     .trim()
                 val verification = AiResponseParser.parsePhotoVerification(resultText)

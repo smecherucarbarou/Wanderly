@@ -38,7 +38,7 @@
     <fragment
         android:id="@+id/gemsFragment"
         android:name="com.novahorizon.wanderly.ui.gems.GemsFragment"
-        android:label="Hidden Gems" />
+        android:label="Gems" />
 
     <fragment
         android:id="@+id/missionsFragment"
@@ -66,5 +66,5 @@
     <fragment
         android:id="@+id/devDashboardFragment"
         android:name="com.novahorizon.wanderly.ui.profile.DevDashboardFragment"
-        android:label="God Mode" />
+        android:label="Dev Panel" />
 </navigation>

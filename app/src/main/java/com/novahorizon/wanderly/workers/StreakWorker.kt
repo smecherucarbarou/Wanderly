@@ -6,13 +6,14 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
+import com.novahorizon.wanderly.di.WanderlyEntryPoint
 import com.novahorizon.wanderly.notifications.NotificationCheckCoordinator
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CancellationException
 
 class StreakWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -21,7 +22,10 @@ class StreakWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (BuildConfig.DEBUG) {
             AppLogger.d("StreakWorker", "--- Streak Check Started ---")
         }
-        val repository = WanderlyGraph.repository(applicationContext)
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, WanderlyEntryPoint::class.java
+        )
+        val repository = entryPoint.wanderlyRepository()
         if (AuthSessionCoordinator.awaitResolvedSessionOrNull(7_000L) == null) {
             if (BuildConfig.DEBUG) {
                 AppLogger.w("StreakWorker", "Auth not ready after waiting. Scheduling retry.")

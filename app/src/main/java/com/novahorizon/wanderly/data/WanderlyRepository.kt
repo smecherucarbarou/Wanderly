@@ -92,8 +92,6 @@ open class WanderlyRepository(context: Context) {
 
     suspend fun updateLastVisitDate(date: String) = preferencesStore.updateLastVisitDate(date)
 
-    suspend fun resetMissionDateForTesting(): Boolean = profileRepository.resetMissionDateForTesting()
-
     open suspend fun getMissionHistory(): String = preferencesStore.getMissionHistory()
 
     open suspend fun getMissionTarget(): String? = preferencesStore.getMissionTarget()

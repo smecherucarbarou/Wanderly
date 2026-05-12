@@ -7,20 +7,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.novahorizon.wanderly.OsmdroidInitializer
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Mission
 import com.novahorizon.wanderly.ui.compose.components.HoneyButton
@@ -38,28 +50,39 @@ fun MapScreen(
     onMapViewDisposed: () -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    var isOsmdroidReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(context) {
+        runCatching {
+            OsmdroidInitializer.awaitInitialized(context.applicationContext)
+        }
+        isOsmdroidReady = true
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { context ->
-                MapView(context).apply {
-                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                    setTileSource(TileSourceFactory.MAPNIK)
-                    setMultiTouchControls(true)
-                    minZoomLevel = 3.0
-                    isVerticalMapRepetitionEnabled = false
-                    isHorizontalMapRepetitionEnabled = false
-                    setScrollableAreaLimitLatitude(85.0, -85.0, 0)
-                    setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
-                    controller.setZoom(16.0)
-                    onMapViewCreated(this)
-                }
-            },
-            update = { mapView ->
-                mapView.invalidate()
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (isOsmdroidReady) {
+            AndroidView(
+                factory = { viewContext ->
+                    MapView(viewContext).apply {
+                        setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        minZoomLevel = 3.0
+                        isVerticalMapRepetitionEnabled = false
+                        isHorizontalMapRepetitionEnabled = false
+                        setScrollableAreaLimitLatitude(85.0, -85.0, 0)
+                        setScrollableAreaLimitLongitude(-180.0, 180.0, 0)
+                        controller.setZoom(16.0)
+                        onMapViewCreated(this)
+                    }
+                },
+                update = { mapView ->
+                    mapView.invalidate()
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
@@ -72,7 +95,7 @@ fun MapScreen(
             }
         }
 
-        if (!isMapReady) {
+        if (!isMapReady || !isOsmdroidReady) {
             CircularProgressIndicator(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -88,7 +111,11 @@ fun MapScreen(
                 .padding(end = 16.dp, bottom = 160.dp),
             containerColor = MaterialTheme.colorScheme.primary
         ) {
-            Text(text = "📍")
+            Icon(
+                imageVector = Icons.Filled.MyLocation,
+                contentDescription = stringResource(R.string.cd_my_location),
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
         }
 
         WanderlyCard(

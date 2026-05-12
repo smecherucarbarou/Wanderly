@@ -59,13 +59,18 @@ sealed class FriendRequestActionResult {
 }
 
 class SocialRepository {
-    suspend fun getLeaderboard(): List<Profile> = withContext(Dispatchers.IO) {
+    @Serializable
+    internal data class LeaderboardParams(
+        val max_rows: Int
+    )
+
+    suspend fun getLeaderboard(limit: Int = DEFAULT_LEADERBOARD_LIMIT): List<Profile> = withContext(Dispatchers.IO) {
         try {
             val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
             session.user?.id ?: return@withContext emptyList()
 
             SupabaseClient.client.postgrest
-                .rpc("get_social_leaderboard")
+                .rpc("get_social_leaderboard", buildLeaderboardParams(limit))
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
@@ -238,7 +243,13 @@ class SocialRepository {
     }
 
     companion object {
+        private const val DEFAULT_LEADERBOARD_LIMIT = 50
+        private const val MAX_LEADERBOARD_LIMIT = 100
         private val FRIEND_CODE_REGEX = Regex("^[A-Z0-9]{6}$")
+
+        internal fun buildLeaderboardParams(limit: Int = DEFAULT_LEADERBOARD_LIMIT): LeaderboardParams {
+            return LeaderboardParams(max_rows = limit.coerceIn(1, MAX_LEADERBOARD_LIMIT))
+        }
 
         internal fun normalizeFriendCode(friendCode: String): String? {
             val normalizedCode = friendCode.trim().uppercase()

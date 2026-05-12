@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import org.osmdroid.config.Configuration
+import java.io.File
 
 object OsmdroidInitializer {
     private val fallbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -28,6 +29,9 @@ object OsmdroidInitializer {
     }
 
     private fun configure(appContext: Context) {
+        val basePath = File(appContext.cacheDir, "osmdroid").apply { mkdirs() }
+        val tileCache = File(basePath, "tiles").apply { mkdirs() }
+
         Configuration.getInstance().load(
             appContext,
             appContext.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
@@ -35,7 +39,7 @@ object OsmdroidInitializer {
         Configuration.getInstance().userAgentValue = appContext.packageName
         Configuration.getInstance().cacheMapTileCount = 9.toShort()
         Configuration.getInstance().cacheMapTileOvershoot = 9.toShort()
-        Configuration.getInstance().osmdroidTileCache =
-            appContext.cacheDir.resolve("osmdroid")
+        Configuration.getInstance().osmdroidBasePath = basePath
+        Configuration.getInstance().osmdroidTileCache = tileCache
     }
 }

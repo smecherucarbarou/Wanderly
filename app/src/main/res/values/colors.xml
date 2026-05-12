@@ -11,4 +11,5 @@
     <color name="button_gradient_start">#F5A623</color>
     <color name="button_gradient_end">#FFB800</color>
     <color name="error">#E53935</color>
+    <color name="widget_streak_label">#F5D799</color>
 </resources>

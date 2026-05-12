@@ -24,17 +24,20 @@ object InviteDeepLink {
     ): String? {
         val nonBlankSegments = pathSegments.filter { it.isNotBlank() }
         val candidate = when {
-            scheme == Constants.INVITE_CALLBACK_SCHEME &&
-                host == Constants.INVITE_CALLBACK_HOST &&
+            // Legacy: wanderly://invite/CODE
+            scheme == Constants.LEGACY_SCHEME &&
+                host == Constants.LEGACY_INVITE_HOST &&
                 nonBlankSegments.size == 1 -> nonBlankSegments.first()
 
-            scheme == Constants.INVITE_WEB_SCHEME &&
-                host == Constants.INVITE_WEB_HOST &&
+            // HTTPS: https://wanderly.ro/invite/CODE
+            scheme == Constants.WEB_SCHEME &&
+                host == Constants.WEB_HOST &&
                 nonBlankSegments.size == 2 &&
                 nonBlankSegments.first() == Constants.INVITE_PATH_SEGMENT -> nonBlankSegments.last()
 
-            scheme == Constants.INVITE_WEB_SCHEME &&
-                host == Constants.INVITE_WEB_HOST &&
+            // HTTPS: https://wanderly.ro?invite=CODE
+            scheme == Constants.WEB_SCHEME &&
+                host == Constants.WEB_HOST &&
                 nonBlankSegments.isEmpty() &&
                 !inviteQueryCode.isNullOrBlank() -> inviteQueryCode
 

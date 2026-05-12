@@ -5,8 +5,8 @@ import com.novahorizon.wanderly.Constants
 
 object AuthCallbackMatcher {
     fun matches(scheme: String?, host: String?, path: String?): Boolean {
-        return scheme == Constants.AUTH_CALLBACK_SCHEME &&
-            host == Constants.AUTH_CALLBACK_HOST &&
+        return scheme == Constants.WEB_SCHEME &&
+            host == Constants.WEB_HOST &&
             path == Constants.AUTH_CALLBACK_PATH
     }
 

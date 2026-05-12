@@ -20,7 +20,7 @@ jobs:
       GOOGLE_PLACES_PROXY_URL: ${{ secrets.GOOGLE_PLACES_PROXY_URL }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Validate Gradle Wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -28,13 +28,13 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Cache Gradle
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: |
             ~/.gradle/caches
@@ -78,7 +78,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Instrumentation tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@62dbb605bba737720e10b196cb4220d374026a6d # v2
         env:
           WANDERLY_ANDROID_TEST_EMAIL: ${{ secrets.WANDERLY_ANDROID_TEST_EMAIL }}
           WANDERLY_ANDROID_TEST_PASSWORD: ${{ secrets.WANDERLY_ANDROID_TEST_PASSWORD }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload instrumentation test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: connected-android-test-results
           path: |
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kover-coverage-report
           path: |
@@ -145,14 +145,14 @@ jobs:
         run: ./gradlew :app:apkSizeReport --stacktrace --console=plain
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wanderly-debug-apk
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload APK size summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: apk-size-summary
           path: app/build/reports/apk-size/apk-size-summary.txt
@@ -217,21 +217,21 @@ jobs:
 
       - name: Upload signed release APK
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wanderly-signed-release-apk
           path: app/build/outputs/apk/release/*.apk
 
       - name: Upload signed release AAB
         if: steps.release_config.outputs.available == 'true' && steps.release_signing.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wanderly-signed-release-aab
           path: app/build/outputs/bundle/release/*.aab
 
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lint-results
           path: |

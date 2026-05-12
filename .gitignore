@@ -1,107 +1,66 @@
 *.iml
-.gradle
+/.gradle/
 /local.properties
 /app/google-services.json
+google-services.json
 /.idea/caches
-/.idea/libraries
-/.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/deploymentTargetSelector.xml
 .DS_Store
 /build
-/captures
-.externalNativeBuild
-.cxx
+**/build/
 
-# Compiled class file
+# Compiled outputs / Gradle
 *.class
+.kotlin/
 
-# Log file
+# Logs and temp files
 *.log
-
-# Local notes, text exports, and SQL dumps
-/CONTEXT.md
-/context.md
-/AUDIT.md
-/audit.md
-/docs/
-/logs/
-*.txt
+*.tmp
 *.md
-*.sql
-*.ps1
+/logs/
 
-# Runtime QA captures and local generated previews
-/*.png
-/profile-redesign-mockup.html
-/profile_*.html
-/*audit*.html
-docs/previews/*.png
-docs/previews/*.html
-
-# Local release/package outputs
+# Local package outputs
 *.apk
 *.aab
 *.apks
-**/build/
-release/
 
-# BlueJ files
-*.ctxt
+# Local QA captures / screenshots / UI dumps
+/captures/
+/screenshots/
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/wanderly_window*.xml
+/wanderly_reinspect_ui.xml
+/wanderly_screen*.png
+/screen_*.png
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
-
-# Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
-.kotlin/
-/.worktrees/
-/.claude/
-/mds/
-/audit/
-/supabase/*
-!/supabase/wanderly_db_fixed.sql
-!/supabase/functions/
-!/supabase/functions/gemini-proxy/
-!/supabase/functions/gemini-proxy/index.ts
-!/supabase/functions/google-places-proxy/
-!/supabase/functions/google-places-proxy/index.ts
-!/supabase/migrations/
-!/supabase/migrations/*.sql
-!/supabase/migrations/20260424_add_friend_code_unique_index.sql
-!/supabase/migrations/20260424_add_friendships_indexes.sql
-!/supabase/tests/
-!/supabase/tests/*.sql
-/supabase/.temp/
-/supabase/functions/supabase/
+# Local generated audit/work outputs
 /audit/
 /audit-artifacts/
-supabase/.temp/
-app/google-services.json
-google-services.json
+/mds/
+/site/
+/attached_assets/
+
+# Local scripts / one-off tooling
+*.local.ps1
+
+# Local worktrees
+/.worktrees/
+
+# Supabase local state only
+/supabase/.temp/
+/supabase/functions/supabase/
+
+# Local secrets and signing material
 keystore/
 keystore.properties
 *.jks
 *.keystore
-*.p12
-*.pem
 *.key
 .env
 .env.*
-firebase-service-account*.json
-service-account*.json
-*secret*.json
-secrets/

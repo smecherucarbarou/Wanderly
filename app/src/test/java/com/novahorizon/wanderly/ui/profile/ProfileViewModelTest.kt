@@ -10,7 +10,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.AuthRepository
 import com.novahorizon.wanderly.data.AvatarUploadResult
+import com.novahorizon.wanderly.data.LogoutCoordinator
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.ProfileUpdateResult
@@ -105,6 +107,23 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun `loadProfile emits empty state when repository has no profile`() = runTest {
+        val (viewModel, store) = createViewModel(TestWanderlyRepository(context))
+        val states = viewModel.observeProfileStates()
+
+        try {
+            viewModel.loadProfile()
+            advanceUntilIdle()
+
+            assertEquals(ProfileViewModel.ProfileUiState.Empty, states.last())
+            assertNull(viewModel.profile.value)
+        } finally {
+            store.clear()
+            viewModel.profileState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
     fun `uploadAvatar emits updated event on success`() = runTest {
         val profile = testProfile()
         val repository = TestWanderlyRepository(
@@ -132,6 +151,34 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun `uploadAvatar exposes progress and refreshes loaded profile on success`() = runTest {
+        val profile = testProfile()
+        val updatedAvatarProfile = profile.copy(avatar_url = REMOTE_AVATAR_PATH)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            uploadResult = AvatarUploadResult.Success(REMOTE_AVATAR_PATH)
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val avatarStates = viewModel.observeAvatarUploadStates()
+        val profileStates = viewModel.observeProfileStates()
+
+        try {
+            viewModel.uploadAvatar(profile, Uri.parse("content://wanderly/avatar.jpg"))
+            advanceUntilIdle()
+
+            assertTrue(avatarStates.any { it is ProfileViewModel.AvatarUploadState.Uploading })
+            assertEquals(ProfileViewModel.AvatarUploadState.Idle, avatarStates.last())
+            assertEquals(updatedAvatarProfile, viewModel.profile.value)
+            assertEquals(ProfileViewModel.ProfileUiState.Loaded(updatedAvatarProfile), profileStates.last())
+        } finally {
+            store.clear()
+            viewModel.avatarUploadState.removeObserver(avatarStates.observer)
+            viewModel.profileState.removeObserver(profileStates.observer)
+        }
+    }
+
+    @Test
     fun `uploadAvatar emits user-friendly failure event`() = runTest {
         val profile = testProfile()
         val (viewModel, store) = createViewModel(
@@ -142,6 +189,7 @@ class ProfileViewModelTest {
             )
         )
         val events = viewModel.observeProfileEvents()
+        val avatarStates = viewModel.observeAvatarUploadStates()
 
         try {
             viewModel.uploadAvatar(profile, Uri.parse("content://wanderly/avatar.jpg"))
@@ -150,9 +198,11 @@ class ProfileViewModelTest {
             val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
             assertEquals(UiText.DynamicString("Upload failed. Please try again."), event.message)
             assertTrue(event.isError)
+            assertEquals(ProfileViewModel.AvatarUploadState.Idle, avatarStates.last())
         } finally {
             store.clear()
             viewModel.profileEvent.removeObserver(events.observer)
+            viewModel.avatarUploadState.removeObserver(avatarStates.observer)
         }
     }
 
@@ -163,7 +213,21 @@ class ProfileViewModelTest {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ProfileViewModel(repository, ProfileStateProvider(repository)) as T
+                val authRepository = AuthRepository()
+                val logoutCoordinator = LogoutCoordinator(
+                    signOut = {},
+                    stopRealtime = {},
+                    cancelUserWork = {},
+                    clearNotificationState = {},
+                    clearLocalState = {},
+                    cancelWidgetRefresh = {}
+                )
+                return ProfileViewModel(
+                    repository,
+                    ProfileStateProvider(repository),
+                    authRepository,
+                    logoutCoordinator
+                ) as T
             }
         }
         return ViewModelProvider(store, factory)[ProfileViewModel::class.java] to store
@@ -181,12 +245,22 @@ class ProfileViewModelTest {
         return events
     }
 
+    private fun ProfileViewModel.observeAvatarUploadStates(): ObservedAvatarUploadStates {
+        val states = ObservedAvatarUploadStates()
+        avatarUploadState.observeForever(states.observer)
+        return states
+    }
+
     private class ObservedProfileStates : ArrayList<ProfileViewModel.ProfileUiState>() {
         val observer = Observer<ProfileViewModel.ProfileUiState> { add(it) }
     }
 
     private class ObservedProfileEvents : ArrayList<ProfileViewModel.ProfileEvent?>() {
         val observer = Observer<ProfileViewModel.ProfileEvent?> { add(it) }
+    }
+
+    private class ObservedAvatarUploadStates : ArrayList<ProfileViewModel.AvatarUploadState>() {
+        val observer = Observer<ProfileViewModel.AvatarUploadState> { add(it) }
     }
 
     private class TestWanderlyRepository(

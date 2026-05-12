@@ -11,8 +11,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.AuthRepository
 import com.novahorizon.wanderly.data.AvatarRepository
 import com.novahorizon.wanderly.data.AvatarUploadResult
+import com.novahorizon.wanderly.data.LogoutCoordinator
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -88,7 +90,21 @@ class AvatarUploadLargeImageTest {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ProfileViewModel(repository, ProfileStateProvider(repository)) as T
+                val authRepository = AuthRepository()
+                val logoutCoordinator = LogoutCoordinator(
+                    signOut = {},
+                    stopRealtime = {},
+                    cancelUserWork = {},
+                    clearNotificationState = {},
+                    clearLocalState = {},
+                    cancelWidgetRefresh = {}
+                )
+                return ProfileViewModel(
+                    repository,
+                    ProfileStateProvider(repository),
+                    authRepository,
+                    logoutCoordinator
+                ) as T
             }
         }
         return ViewModelProvider(store, factory)[ProfileViewModel::class.java] to store

@@ -1,5 +1,6 @@
 package com.novahorizon.wanderly.ui.compose.components
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -12,27 +13,41 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 
 @Composable
 fun LoadingState(
-    message: String = "Loading...",
+    message: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val displayMessage = message ?: stringResource(R.string.loading)
+    val spacing = WanderlyTheme.spacing
     Column(
         modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         CircularProgressIndicator(
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(spacing.iconLarge),
             color = MaterialTheme.colorScheme.primary
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(spacing.lg))
         Text(
-            text = message,
+            text = displayMessage,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Preview(name = "Light")
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewLoadingState() {
+    WanderlyTheme {
+        LoadingState()
     }
 }

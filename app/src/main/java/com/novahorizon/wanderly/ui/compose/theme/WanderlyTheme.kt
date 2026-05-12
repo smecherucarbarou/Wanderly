@@ -39,9 +39,9 @@ private val LightColorScheme = lightColorScheme(
 
 private val DarkColorScheme = darkColorScheme(
     primary = WanderlyColors.DarkPrimary,
-    onPrimary = WanderlyColors.DarkTextPrimary,
+    onPrimary = WanderlyColors.DarkBackground,
     primaryContainer = WanderlyColors.DarkAccent,
-    onPrimaryContainer = WanderlyColors.DarkTextPrimary,
+    onPrimaryContainer = WanderlyColors.DarkBackground,
     secondary = WanderlyColors.DarkSecondary,
     onSecondary = WanderlyColors.DarkBackground,
     secondaryContainer = WanderlyColors.DarkAccent,
@@ -56,7 +56,7 @@ private val DarkColorScheme = darkColorScheme(
     onSurfaceVariant = WanderlyColors.DarkTextSecondary,
     error = WanderlyColors.Error,
     onError = Color.White,
-    outline = WanderlyColors.DarkPrimary.copy(alpha = 0.3f)
+    outline = WanderlyColors.DarkTextSecondary
 )
 
 data class WanderlyExtendedColors(
@@ -90,7 +90,7 @@ fun WanderlyTheme(
             gradientEnd = WanderlyColors.DarkGradientEnd,
             honey = WanderlyColors.DarkPrimary,
             streak = WanderlyColors.DarkAccent,
-            cardBorder = WanderlyColors.DarkPrimary.copy(alpha = 0.2f)
+            cardBorder = WanderlyColors.DarkPrimary.copy(alpha = 0.35f)
         )
     } else {
         WanderlyExtendedColors(
@@ -117,7 +117,10 @@ fun WanderlyTheme(
         }
     }
 
-    CompositionLocalProvider(LocalWanderlyColors provides extendedColors) {
+    CompositionLocalProvider(
+        LocalWanderlyColors provides extendedColors,
+        LocalWanderlySpacing provides WanderlySpacingValues()
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = WanderlyTypography,
@@ -131,4 +134,8 @@ object WanderlyTheme {
     val extendedColors: WanderlyExtendedColors
         @Composable
         get() = LocalWanderlyColors.current
+
+    val spacing: WanderlySpacingValues
+        @Composable
+        get() = LocalWanderlySpacing.current
 }

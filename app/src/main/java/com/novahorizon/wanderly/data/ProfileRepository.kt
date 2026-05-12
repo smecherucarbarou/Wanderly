@@ -46,12 +46,11 @@ class ProfileRepository(
     private val preferencesStore: PreferencesStore
 ) {
     internal data class ClientProfileUpdate(
-        val badges: List<String>?,
-        val cities_visited: List<String>?,
+        val username: String?,
         val avatar_url: String?,
-        val friend_code: String?,
-        val explorer_class: String?
-    )
+    ) {
+        fun isEmpty(): Boolean = username == null && avatar_url == null
+    }
 
     internal data class AdminProfileStatsUpdate(
         val honey: Int,
@@ -144,9 +143,6 @@ class ProfileRepository(
             }
 
             var profile = normalizeProfile(loadedProfile)
-            if (loadedProfile.hive_rank != profile.hive_rank) {
-                persistProfile(profile)
-            }
 
             _currentProfile.value = profile
             preferencesStore.cacheProfileStreakState(
@@ -182,12 +178,14 @@ class ProfileRepository(
                 ?: return@withContext ProfileUpdateResult.Error(ProfileError.Unauthenticated)
             val normalizedProfile = normalizeProfile(profile.copy(id = userId))
             persistProfile(normalizedProfile, userId)
-            _currentProfile.value = normalizedProfile
+            val refreshedProfile = selectProfileWithSchemaRetry(userId) ?: normalizedProfile
+            val normalizedRefreshedProfile = normalizeProfile(refreshedProfile)
+            _currentProfile.value = normalizedRefreshedProfile
             preferencesStore.cacheProfileStreakState(
-                lastMissionDate = normalizedProfile.last_mission_date,
-                streakCount = normalizedProfile.streak_count
+                lastMissionDate = normalizedRefreshedProfile.last_mission_date,
+                streakCount = normalizedRefreshedProfile.streak_count
             )
-            ProfileUpdateResult.Success(normalizedProfile)
+            ProfileUpdateResult.Success(normalizedRefreshedProfile)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             val profileError = if (isPostgrestSchemaCacheError(e)) ProfileError.SchemaCache else ProfileError.Unknown
@@ -420,23 +418,6 @@ class ProfileRepository(
         }
     }
 
-    suspend fun resetMissionDateForTesting(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val profile = getCurrentProfile() ?: return@withContext false
-            updateProfile(profile.copy(last_mission_date = "2000-01-01"))
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            CrashReporter.recordNonFatal(
-                CrashEvent.PROFILE_SYNC_FAILED,
-                e,
-                CrashKey.COMPONENT to "profile_repository",
-                CrashKey.OPERATION to "reset_mission_date"
-            )
-            logError("Operation failed", e)
-            false
-        }
-    }
-
     suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
         val result = avatarRepository.uploadAvatar(uri, profileId)
         if (result is AvatarUploadResult.Success && _currentProfile.value?.id == profileId) {
@@ -458,15 +439,13 @@ class ProfileRepository(
 
     private suspend fun persistProfile(profile: Profile, userId: String = profile.id) {
         val payload = toClientProfileUpdate(profile)
+        if (payload.isEmpty()) return
 
         // Only user-editable profile columns are patched directly; server-owned fields use RPCs.
         withPostgrestSchemaCacheRetry {
             SupabaseClient.client.postgrest[Constants.TABLE_PROFILES].update({
-                Profile::badges setTo payload.badges
-                Profile::cities_visited setTo payload.cities_visited
-                Profile::avatar_url setTo payload.avatar_url
-                Profile::friend_code setTo payload.friend_code
-                Profile::explorer_class setTo payload.explorer_class
+                payload.username?.let { Profile::username setTo it }
+                payload.avatar_url?.let { Profile::avatar_url setTo it }
             }) {
                 filter { eq("id", userId) }
             }
@@ -567,11 +546,8 @@ class ProfileRepository(
 
         internal fun toClientProfileUpdate(profile: Profile): ClientProfileUpdate {
             return ClientProfileUpdate(
-                badges = profile.badges,
-                cities_visited = profile.cities_visited,
+                username = profile.username,
                 avatar_url = normalizeAvatarUrl(profile.avatar_url),
-                friend_code = profile.friend_code,
-                explorer_class = profile.explorer_class
             )
         }
 
@@ -592,8 +568,8 @@ class ProfileRepository(
         }
 
         internal fun toAdminProfileStatsUpdate(honey: Int, streakCount: Int): AdminProfileStatsUpdate {
-            val safeHoney = honey.coerceAtLeast(0)
-            val safeStreakCount = streakCount.coerceAtLeast(0)
+            val safeHoney = honey.coerceIn(0, MAX_ADMIN_HONEY)
+            val safeStreakCount = streakCount.coerceIn(0, MAX_ADMIN_STREAK_COUNT)
             return AdminProfileStatsUpdate(
                 honey = safeHoney,
                 streak_count = safeStreakCount,
@@ -619,6 +595,8 @@ class ProfileRepository(
             AvatarRepository.isAvatarFileUsable(exists, length)
 
         private const val POSTGREST_SCHEMA_CACHE_RETRY_DELAY_MS = 1_500L
+        private const val MAX_ADMIN_HONEY = 1_000_000
+        private const val MAX_ADMIN_STREAK_COUNT = 3_650
     }
 
     private fun logDebug(message: String) {

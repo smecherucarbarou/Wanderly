@@ -8,7 +8,11 @@ import android.os.Bundle
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentContainerView
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
@@ -39,6 +43,7 @@ class AuthActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -69,6 +74,16 @@ class AuthActivity : AppCompatActivity() {
         root.addView(authLoading)
 
         setContentView(root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.updatePadding(
+                left = systemBars.left,
+                top = systemBars.top,
+                right = systemBars.right,
+                bottom = systemBars.bottom
+            )
+            insets
+        }
 
         if (savedInstanceState == null) {
             val navHostFragment = NavHostFragment.create(R.navigation.auth_nav_graph)

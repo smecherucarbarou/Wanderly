@@ -14,8 +14,9 @@ import androidx.core.app.NotificationCompat
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.WanderlyGraph
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.di.WanderlyEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.SocialRepository
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -60,7 +61,10 @@ class HiveRealtimeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repository = WanderlyGraph.repository(this)
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, WanderlyEntryPoint::class.java
+        )
+        repository = entryPoint.wanderlyRepository()
         startForegroundService()
         observeHiveChanges()
     }
