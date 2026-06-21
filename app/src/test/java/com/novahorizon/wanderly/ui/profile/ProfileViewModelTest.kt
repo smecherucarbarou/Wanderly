@@ -311,6 +311,75 @@ class ProfileViewModelTest {
         }
     }
 
+    @Test
+    fun `claimReferral updates profile, hides panel and emits reward message`() = runTest {
+        val profile = testProfile().copy(honey = 100)
+        val rewardedProfile = profile.copy(honey = 200)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            referralResult = SensitiveProfileMutationResult.Success(rewardedProfile, "100")
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.claimReferral("ABC123")
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_referral_claimed, listOf(100)), event.message)
+            assertEquals(false, event.isError)
+            assertEquals(rewardedProfile, viewModel.profile.value)
+            assertEquals(false, viewModel.referralAvailable.value)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `claimReferral emits not-found message when code rejected`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = testProfile(),
+            referralResult = SensitiveProfileMutationResult.Rejected("code_not_found")
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.claimReferral("NOPE")
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_referral_not_found), event.message)
+            assertTrue(event.isError)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `claimReferral rejects blank code without calling repository`() = runTest {
+        val repository = TestWanderlyRepository(context = context, initialProfile = testProfile())
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.claimReferral("   ")
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_referral_empty), event.message)
+            assertTrue(event.isError)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
     private fun milestoneStatus(
         threshold: Int,
         reached: Boolean,
@@ -390,7 +459,9 @@ class ProfileViewModelTest {
         private val streakFreezeResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success(),
         private val milestones: List<StreakMilestoneStatus> = emptyList(),
         private val claimMilestoneResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success(),
-        private val milestonesAfterClaim: List<StreakMilestoneStatus>? = null
+        private val milestonesAfterClaim: List<StreakMilestoneStatus>? = null,
+        private val hasClaimedReferral: Boolean = false,
+        private val referralResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success()
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow(initialProfile)
         private var hasClaimed = false
@@ -447,6 +518,15 @@ class ProfileViewModelTest {
                 hasClaimed = true
             }
             return claimMilestoneResult
+        }
+
+        override suspend fun hasClaimedReferral(): Boolean = hasClaimedReferral
+
+        override suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult {
+            (referralResult as? SensitiveProfileMutationResult.Success)?.profile?.let {
+                profileFlow.value = it
+            }
+            return referralResult
         }
     }
 

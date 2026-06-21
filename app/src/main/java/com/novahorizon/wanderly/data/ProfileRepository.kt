@@ -140,6 +140,23 @@ class ProfileRepository(
     )
 
     @Serializable
+    private data class ReferralClaimParams(
+        val p_friend_code: String
+    )
+
+    @Serializable
+    private data class ReferralClaimRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val reward_honey: Int? = null
+    )
+
+    @Serializable
+    private data class ReferralRow(
+        val referred_id: String
+    )
+
+    @Serializable
     private data class UsernameUpdateRpcResponse(
         val success: Boolean,
         val error_code: String? = null,
@@ -538,6 +555,45 @@ class ProfileRepository(
                 // balance, so re-fetch the profile to reflect honey and badges.
                 val profile = getCurrentProfile()
                 SensitiveProfileMutationResult.Success(profile)
+            } else {
+                SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            mapSensitiveProfileMutationFailure(e)
+        }
+    }
+
+    suspend fun hasClaimedReferral(): Boolean = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext false
+        val userId = session.user?.id ?: return@withContext false
+        try {
+            withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest[Constants.TABLE_REFERRALS]
+                    .select(Columns.list("referred_id")) { filter { eq("referred_id", userId) } }
+                    .decodeList<ReferralRow>()
+            }.isNotEmpty()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Failed to load referral state: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+        session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("claim_referral", ReferralClaimParams(friendCode))
+                .decodeSingle<ReferralClaimRpcResponse>()
+            if (response.success) {
+                // RPC credits honey to both parties server-side without echoing the new
+                // balance, so re-fetch the profile. Reward amount is carried in `reason`.
+                val profile = getCurrentProfile()
+                SensitiveProfileMutationResult.Success(profile, response.reward_honey?.toString())
             } else {
                 SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
             }

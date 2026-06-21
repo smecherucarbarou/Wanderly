@@ -70,6 +70,11 @@ open class WanderlyRepository(context: Context) {
     open suspend fun claimStreakMilestone(threshold: Int): SensitiveProfileMutationResult =
         profileRepository.claimStreakMilestone(threshold)
 
+    open suspend fun hasClaimedReferral(): Boolean = profileRepository.hasClaimedReferral()
+
+    open suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult =
+        profileRepository.claimReferral(friendCode)
+
     open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
     open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)

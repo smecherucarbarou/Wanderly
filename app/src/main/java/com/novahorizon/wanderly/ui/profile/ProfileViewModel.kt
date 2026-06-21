@@ -48,6 +48,9 @@ class ProfileViewModel @Inject constructor(
     private val _streakMilestones = MutableLiveData<List<StreakMilestoneStatus>>(emptyList())
     val streakMilestones: LiveData<List<StreakMilestoneStatus>> = _streakMilestones
 
+    private val _referralAvailable = MutableLiveData(false)
+    val referralAvailable: LiveData<Boolean> = _referralAvailable
+
     init {
         startProfileCollector()
     }
@@ -88,6 +91,7 @@ class ProfileViewModel @Inject constructor(
                 _profile.value = displayProfile
                 _profileState.value = ProfileUiState.Loaded(displayProfile)
                 loadStreakMilestones()
+                loadReferralState()
                 if (!hasCheckedBadgesThisSession) {
                     hasCheckedBadgesThisSession = true
                     checkAndUnlockBadges(displayProfile)
@@ -323,6 +327,65 @@ class ProfileViewModel @Inject constructor(
 
     private suspend fun loadStreakMilestones() {
         _streakMilestones.value = repository.getStreakMilestones()
+    }
+
+    fun claimReferral(rawCode: String) {
+        val code = rawCode.trim()
+        if (code.isEmpty()) {
+            _profileEvent.value = ProfileEvent.ShowMessage(
+                UiText.resource(R.string.profile_referral_empty),
+                isError = true
+            )
+            return
+        }
+        viewModelScope.launch {
+            when (val result = repository.claimReferral(code)) {
+                is SensitiveProfileMutationResult.Success -> {
+                    result.profile?.let { updated ->
+                        _profile.value = updated
+                        _profileState.value = ProfileUiState.Loaded(updated)
+                    }
+                    _referralAvailable.value = false
+                    val reward = result.reason?.toIntOrNull() ?: 0
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_referral_claimed, reward),
+                        isError = false
+                    )
+                }
+                is SensitiveProfileMutationResult.Rejected -> {
+                    if (result.reason == "not_authenticated") {
+                        _profileEvent.value = ProfileEvent.LoggedOut
+                        return@launch
+                    }
+                    if (result.reason == "already_referred") {
+                        _referralAvailable.value = false
+                    }
+                    val message = when (result.reason) {
+                        "code_not_found" -> R.string.profile_referral_not_found
+                        "self_referral" -> R.string.profile_referral_self
+                        "already_referred" -> R.string.profile_referral_already
+                        else -> R.string.profile_referral_failed
+                    }
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(message),
+                        isError = true
+                    )
+                }
+                SensitiveProfileMutationResult.Unauthenticated -> {
+                    _profileEvent.value = ProfileEvent.LoggedOut
+                }
+                else -> {
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_referral_failed),
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun loadReferralState() {
+        _referralAvailable.value = !repository.hasClaimedReferral()
     }
 
     fun clearProfileEvent() {

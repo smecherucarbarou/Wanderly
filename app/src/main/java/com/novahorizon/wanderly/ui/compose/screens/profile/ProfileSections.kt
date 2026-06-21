@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Notifications
@@ -30,9 +31,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -548,6 +554,62 @@ private fun MilestoneStatusChip(text: String) {
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+internal fun ProfileReferralPanel(onClaim: (String) -> Unit) {
+    val spacing = WanderlyTheme.spacing
+    var code by remember { mutableStateOf("") }
+
+    WanderlyCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing.md)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CardGiftcard,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.profile_referral_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.xs))
+        Text(
+            text = stringResource(R.string.profile_referral_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(spacing.md))
+        OutlinedTextField(
+            value = code,
+            onValueChange = { code = it },
+            label = { Text(stringResource(R.string.profile_referral_hint)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+        Spacer(modifier = Modifier.height(spacing.md))
+        Button(
+            onClick = { onClaim(code) },
+            enabled = code.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = spacing.minTouchTarget),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text(
+                text = stringResource(R.string.profile_referral_button),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 

@@ -250,6 +250,16 @@
     <string name="profile_streak_milestone_already_claimed">You already claimed this milestone.</string>
     <string name="profile_streak_milestone_locked">Keep your streak going to unlock this milestone.</string>
     <string name="profile_streak_milestone_failed">Couldn\'t claim milestone. Check your connection.</string>
+    <string name="profile_referral_title">Referral code</string>
+    <string name="profile_referral_description">Enter a friend\'s code. You both get honey.</string>
+    <string name="profile_referral_hint">Friend code</string>
+    <string name="profile_referral_button">Apply code</string>
+    <string name="profile_referral_claimed">Referral applied! +%1$d honey for you both.</string>
+    <string name="profile_referral_empty">Enter a code first.</string>
+    <string name="profile_referral_not_found">That code doesn\'t exist.</string>
+    <string name="profile_referral_self">You can\'t use your own code.</string>
+    <string name="profile_referral_already">You\'ve already used a referral code.</string>
+    <string name="profile_referral_failed">Couldn\'t apply code. Check your connection.</string>
     <string name="profile_rank_progress">Hive progress</string>
     <string name="profile_rank_progress_format">%1$s / %2$s honey to next rank</string>
     <string name="profile_badges_title">Badges</string>

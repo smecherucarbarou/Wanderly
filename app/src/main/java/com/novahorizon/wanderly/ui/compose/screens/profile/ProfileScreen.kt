@@ -51,6 +51,7 @@ fun ProfileScreen(
     onShareFriendCode: (String) -> Unit = {},
     onUseStreakFreeze: () -> Unit = {},
     onClaimMilestone: (Int) -> Unit = {},
+    onClaimReferral: (String) -> Unit = {},
     onRetry: () -> Unit = { viewModel.loadProfile() }
 ) {
     val profileState by viewModel.profileState.asFlow().collectAsStateWithLifecycle(ProfileUiState.Loading)
@@ -58,6 +59,8 @@ fun ProfileScreen(
         .collectAsStateWithLifecycle(ProfileViewModel.AvatarUploadState.Idle)
     val streakMilestones by viewModel.streakMilestones.asFlow()
         .collectAsStateWithLifecycle(emptyList())
+    val referralAvailable by viewModel.referralAvailable.asFlow()
+        .collectAsStateWithLifecycle(false)
 
     when (profileState) {
         is ProfileUiState.Loading -> {
@@ -89,7 +92,9 @@ fun ProfileScreen(
                 onShareFriendCode = onShareFriendCode,
                 onUseStreakFreeze = onUseStreakFreeze,
                 streakMilestones = streakMilestones,
-                onClaimMilestone = onClaimMilestone
+                onClaimMilestone = onClaimMilestone,
+                referralAvailable = referralAvailable,
+                onClaimReferral = onClaimReferral
             )
         }
     }
@@ -132,7 +137,9 @@ private fun ProfileContent(
     onShareFriendCode: (String) -> Unit,
     onUseStreakFreeze: () -> Unit,
     streakMilestones: List<StreakMilestoneStatus>,
-    onClaimMilestone: (Int) -> Unit
+    onClaimMilestone: (Int) -> Unit,
+    referralAvailable: Boolean,
+    onClaimReferral: (String) -> Unit
 ) {
     val spacing = WanderlyTheme.spacing
     val honey = profile.honey ?: 0
@@ -213,6 +220,11 @@ private fun ProfileContent(
 
             Spacer(modifier = Modifier.height(spacing.lg))
             ProfileProgressPanel(honey = honey, rankInt = rankInt)
+
+            if (referralAvailable) {
+                Spacer(modifier = Modifier.height(spacing.lg))
+                ProfileReferralPanel(onClaim = onClaimReferral)
+            }
 
             Spacer(modifier = Modifier.height(spacing.xl))
             ProfileBadgesPanel(profile = profile)
