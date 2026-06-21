@@ -63,6 +63,8 @@ open class WanderlyRepository(context: Context) {
     open suspend fun restoreStreak(cost: Int): SensitiveProfileMutationResult =
         profileRepository.restoreStreak(cost)
 
+    open suspend fun useStreakFreeze(): SensitiveProfileMutationResult = profileRepository.useStreakFreeze()
+
     open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
     open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)

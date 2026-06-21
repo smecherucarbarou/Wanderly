@@ -27,8 +27,12 @@ import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.LoadingState
 import com.novahorizon.wanderly.ui.compose.components.WanderlyEmptyState
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.streak.DailyStreakStatus
+import com.novahorizon.wanderly.streak.DailyStreakStatusEvaluator
 import com.novahorizon.wanderly.ui.profile.ProfileViewModel
 import com.novahorizon.wanderly.ui.profile.ProfileViewModel.ProfileUiState
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 @Composable
 fun ProfileScreen(
@@ -44,6 +48,7 @@ fun ProfileScreen(
     onEditUsername: () -> Unit = {},
     onCopyFriendCode: (String) -> Unit = {},
     onShareFriendCode: (String) -> Unit = {},
+    onUseStreakFreeze: () -> Unit = {},
     onRetry: () -> Unit = { viewModel.loadProfile() }
 ) {
     val profileState by viewModel.profileState.asFlow().collectAsStateWithLifecycle(ProfileUiState.Loading)
@@ -77,7 +82,8 @@ fun ProfileScreen(
                 onEditAvatar = onEditAvatar,
                 onEditUsername = onEditUsername,
                 onCopyFriendCode = onCopyFriendCode,
-                onShareFriendCode = onShareFriendCode
+                onShareFriendCode = onShareFriendCode,
+                onUseStreakFreeze = onUseStreakFreeze
             )
         }
     }
@@ -117,11 +123,23 @@ private fun ProfileContent(
     onEditAvatar: () -> Unit,
     onEditUsername: () -> Unit,
     onCopyFriendCode: (String) -> Unit,
-    onShareFriendCode: (String) -> Unit
+    onShareFriendCode: (String) -> Unit,
+    onUseStreakFreeze: () -> Unit
 ) {
     val spacing = WanderlyTheme.spacing
     val honey = profile.honey ?: 0
     val streak = profile.streak_count ?: 0
+    val streakFreezes = profile.streak_freezes ?: 0
+    val streakAtRisk = when (
+        DailyStreakStatusEvaluator.evaluate(
+            streakCount = streak,
+            lastMissionDate = profile.last_mission_date,
+            today = LocalDate.now(ZoneOffset.UTC)
+        )
+    ) {
+        DailyStreakStatus.AT_RISK, DailyStreakStatus.FREEZE_ELIGIBLE -> true
+        else -> false
+    }
     val citiesVisited = profile.cities_visited?.size ?: 0
     val rankInt = HiveRank.fromHoney(honey)
     val displayName = profile.username?.takeIf { it.isNotBlank() } ?: stringResource(R.string.profile_default_name)
@@ -158,6 +176,15 @@ private fun ProfileContent(
                 streak = streak,
                 citiesVisited = citiesVisited
             )
+
+            if (streak > 0 || streakFreezes > 0) {
+                Spacer(modifier = Modifier.height(spacing.lg))
+                ProfileStreakFreezePanel(
+                    freezesLeft = streakFreezes,
+                    atRisk = streakAtRisk,
+                    onUseFreeze = onUseStreakFreeze
+                )
+            }
 
             if (notificationStatusText != null && notificationActionLabel != null) {
                 Spacer(modifier = Modifier.height(spacing.lg))

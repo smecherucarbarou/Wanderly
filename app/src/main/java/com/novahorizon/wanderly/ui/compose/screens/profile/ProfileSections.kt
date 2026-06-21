@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
@@ -317,6 +318,64 @@ internal fun ProfileProgressPanel(honey: Int, rankInt: Int) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+internal fun ProfileStreakFreezePanel(
+    freezesLeft: Int,
+    atRisk: Boolean,
+    onUseFreeze: () -> Unit
+) {
+    val spacing = WanderlyTheme.spacing
+
+    WanderlyCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing.md)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.AcUnit,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.profile_streak_freeze_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(spacing.xs))
+                Text(
+                    text = if (atRisk) {
+                        stringResource(R.string.profile_streak_freeze_at_risk)
+                    } else {
+                        stringResource(R.string.profile_streak_freeze_available, freezesLeft)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(spacing.md))
+        OutlinedButton(
+            onClick = onUseFreeze,
+            enabled = freezesLeft > 0,
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = spacing.minTouchTarget),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text(
+                text = stringResource(R.string.profile_streak_freeze_button),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

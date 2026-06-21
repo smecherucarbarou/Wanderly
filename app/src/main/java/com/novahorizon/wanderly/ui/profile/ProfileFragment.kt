@@ -149,6 +149,7 @@ class ProfileFragment : Fragment() {
                         onEditUsername = { showEditUsernameDialog() },
                         onCopyFriendCode = { copyFriendCode(it) },
                         onShareFriendCode = { shareFriendCode(it) },
+                        onUseStreakFreeze = { viewModel.useStreakFreeze() },
                         onRetry = { viewModel.loadProfile() }
                     )
                 }

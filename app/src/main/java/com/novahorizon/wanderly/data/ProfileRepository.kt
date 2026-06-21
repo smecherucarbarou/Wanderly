@@ -115,6 +115,13 @@ class ProfileRepository(
     )
 
     @Serializable
+    private data class StreakFreezeRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val freezes_left: Int? = null
+    )
+
+    @Serializable
     private data class UsernameUpdateRpcResponse(
         val success: Boolean,
         val error_code: String? = null,
@@ -432,6 +439,31 @@ class ProfileRepository(
                 SensitiveProfileMutationResult.Success(profile, response.reason)
             } else {
                 SensitiveProfileMutationResult.Rejected(response.reason ?: "not_restored")
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            mapSensitiveProfileMutationFailure(e)
+        }
+    }
+
+    suspend fun useStreakFreeze(): SensitiveProfileMutationResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+        session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("use_streak_freeze")
+                .decodeSingle<StreakFreezeRpcResponse>()
+            if (response.success) {
+                val freezesLeft = response.freezes_left ?: 0
+                val updated = _currentProfile.value?.copy(streak_freezes = freezesLeft)
+                if (updated != null) {
+                    _currentProfile.value = updated
+                }
+                SensitiveProfileMutationResult.Success(updated)
+            } else {
+                SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e

@@ -16,6 +16,7 @@ import com.novahorizon.wanderly.data.LogoutCoordinator
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.ProfileUpdateResult
+import com.novahorizon.wanderly.data.SensitiveProfileMutationResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
@@ -206,6 +207,56 @@ class ProfileViewModelTest {
         }
     }
 
+    @Test
+    fun `useStreakFreeze updates profile and emits success message`() = runTest {
+        val profile = testProfile().copy(streak_count = 5, streak_freezes = 2)
+        val refreshed = profile.copy(streak_freezes = 1)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            streakFreezeResult = SensitiveProfileMutationResult.Success(refreshed)
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.useStreakFreeze()
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_streak_freeze_used), event.message)
+            assertEquals(false, event.isError)
+            assertEquals(refreshed, viewModel.profile.value)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `useStreakFreeze emits no-freezes message when rejected`() = runTest {
+        val profile = testProfile().copy(streak_count = 5, streak_freezes = 0)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            streakFreezeResult = SensitiveProfileMutationResult.Rejected("no_freezes")
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.useStreakFreeze()
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_streak_freeze_none), event.message)
+            assertTrue(event.isError)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
     private fun createViewModel(
         repository: TestWanderlyRepository
     ): Pair<ProfileViewModel, ViewModelStore> {
@@ -269,7 +320,8 @@ class ProfileViewModelTest {
         private val refreshError: Exception? = null,
         private val uploadResult: AvatarUploadResult = AvatarUploadResult.Success(REMOTE_AVATAR_PATH),
         private val uploadError: Exception? = null,
-        private val updateSucceeds: Boolean = true
+        private val updateSucceeds: Boolean = true,
+        private val streakFreezeResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success()
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow(initialProfile)
         var updatedProfile: Profile? = null
@@ -304,6 +356,13 @@ class ProfileViewModelTest {
             uploadError?.let { throw it }
             uploadedProfileId = profileId
             return uploadResult
+        }
+
+        override suspend fun useStreakFreeze(): SensitiveProfileMutationResult {
+            (streakFreezeResult as? SensitiveProfileMutationResult.Success)?.profile?.let {
+                profileFlow.value = it
+            }
+            return streakFreezeResult
         }
     }
 
