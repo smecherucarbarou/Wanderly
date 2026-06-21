@@ -127,7 +127,11 @@ fun SocialScreen(
 
         when {
             isLoading -> {
-                LoadingState()
+                LoadingState(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                )
             }
 
             state is SocialViewModel.SocialUiState.Error -> {
