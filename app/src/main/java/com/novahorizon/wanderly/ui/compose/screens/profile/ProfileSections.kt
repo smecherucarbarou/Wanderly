@@ -494,7 +494,7 @@ private fun ProfileMilestoneRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = milestone.title,
+                text = stringResource(R.string.profile_streak_milestone_requirement, milestone.threshold),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -503,9 +503,7 @@ private fun ProfileMilestoneRow(
             )
             Spacer(modifier = Modifier.height(spacing.xs))
             Text(
-                text = stringResource(R.string.profile_streak_milestone_requirement, milestone.threshold) +
-                    "  ·  " +
-                    stringResource(R.string.profile_streak_milestone_reward, "%,d".format(milestone.rewardHoney)),
+                text = stringResource(R.string.profile_streak_milestone_reward, "%,d".format(milestone.rewardHoney)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

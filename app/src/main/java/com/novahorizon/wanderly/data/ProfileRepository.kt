@@ -131,7 +131,7 @@ class ProfileRepository(
         val success: Boolean,
         val error: String? = null,
         val reward_honey: Int? = null,
-        val honey: Int? = null
+        val badge: String? = null
     )
 
     @Serializable
@@ -511,8 +511,8 @@ class ProfileRepository(
             catalog.map { milestone ->
                 StreakMilestoneStatus(
                     threshold = milestone.threshold,
-                    title = milestone.title,
                     rewardHoney = milestone.reward_honey,
+                    badge = milestone.badge,
                     reached = streak >= milestone.threshold,
                     claimed = milestone.threshold in claimedThresholds
                 )
@@ -534,11 +534,9 @@ class ProfileRepository(
                 .rpc("claim_streak_milestone", ClaimMilestoneParams(threshold))
                 .decodeSingle<StreakMilestoneClaimRpcResponse>()
             if (response.success) {
-                val profile = applyProgressSnapshot(
-                    honey = response.honey,
-                    streakCount = null,
-                    lastMissionDate = null
-                )
+                // Live RPC grants honey + badge server-side and does not echo the new
+                // balance, so re-fetch the profile to reflect honey and badges.
+                val profile = getCurrentProfile()
                 SensitiveProfileMutationResult.Success(profile)
             } else {
                 SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")

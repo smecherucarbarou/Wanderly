@@ -294,6 +294,10 @@ class ProfileViewModel @Inject constructor(
                     )
                 }
                 is SensitiveProfileMutationResult.Rejected -> {
+                    if (result.reason == "not_authenticated") {
+                        _profileEvent.value = ProfileEvent.LoggedOut
+                        return@launch
+                    }
                     val message = when (result.reason) {
                         "already_claimed" -> R.string.profile_streak_milestone_already_claimed
                         "not_reached" -> R.string.profile_streak_milestone_locked

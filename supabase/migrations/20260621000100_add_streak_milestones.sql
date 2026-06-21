@@ -1,115 +1,68 @@
--- Streak milestones: catalog of streak-day rewards plus per-user claim ledger,
--- and the claim_streak_milestone RPC that grants the reward exactly once.
+-- Streak milestones. This mirrors the definition already applied to the LIVE database
+-- via the SQL editor (it was NOT applied through this migration). Kept idempotent so the
+-- repo matches live; do not add thresholds/columns that are not present in live.
 
 CREATE TABLE IF NOT EXISTS public.streak_milestones (
-    threshold integer PRIMARY KEY CHECK (threshold > 0),
-    title text NOT NULL,
-    reward_honey integer NOT NULL DEFAULT 0 CHECK (reward_honey >= 0)
+    threshold integer PRIMARY KEY,
+    reward_honey integer NOT NULL,
+    badge text
 );
 
-ALTER TABLE public.streak_milestones ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Anyone can view streak milestones" ON public.streak_milestones;
-CREATE POLICY "Anyone can view streak milestones"
-ON public.streak_milestones FOR SELECT
-TO authenticated
-USING (true);
-
-GRANT SELECT ON public.streak_milestones TO authenticated;
-
 CREATE TABLE IF NOT EXISTS public.streak_milestone_claims (
-    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    threshold integer NOT NULL REFERENCES public.streak_milestones(threshold) ON DELETE CASCADE,
+    user_id uuid NOT NULL,
+    threshold integer NOT NULL,
     claimed_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, threshold)
 );
 
+ALTER TABLE public.streak_milestones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.streak_milestone_claims ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can view own milestone claims" ON public.streak_milestone_claims;
-CREATE POLICY "Users can view own milestone claims"
+DROP POLICY IF EXISTS "streak_milestones_read" ON public.streak_milestones;
+CREATE POLICY "streak_milestones_read"
+ON public.streak_milestones FOR SELECT
+TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "smc_select_own" ON public.streak_milestone_claims;
+CREATE POLICY "smc_select_own"
 ON public.streak_milestone_claims FOR SELECT
 TO authenticated
-USING (auth.uid() = user_id);
+USING (user_id = auth.uid());
 
+GRANT SELECT ON public.streak_milestones TO authenticated;
 GRANT SELECT ON public.streak_milestone_claims TO authenticated;
 
--- Seed the default milestone ladder. Values live in the table so the client renders
--- whatever the catalog holds without any code changes.
-INSERT INTO public.streak_milestones (threshold, title, reward_honey) VALUES
-    (3, 'Warming Up', 50),
-    (7, 'One Week Strong', 150),
-    (30, 'Monthly Devotee', 750),
-    (100, 'Centurion', 3000)
+-- Live seed values; client renders whatever the catalog holds.
+INSERT INTO public.streak_milestones (threshold, reward_honey, badge) VALUES
+    (7, 50, 'week_warrior'),
+    (30, 250, 'month_master'),
+    (100, 1000, 'centurion')
 ON CONFLICT (threshold) DO NOTHING;
 
+-- Verbatim live body: returns jsonb, grants honey + badge server-side.
 CREATE OR REPLACE FUNCTION public.claim_streak_milestone(p_threshold integer)
-RETURNS TABLE (
-    success boolean,
-    error text,
-    reward_honey integer,
-    honey integer
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-VOLATILE
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_user_id uuid := auth.uid();
-    v_milestone public.streak_milestones%ROWTYPE;
-    v_profile public.profiles%ROWTYPE;
-    v_new_honey integer;
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'auth', 'extensions'
+AS $function$
+DECLARE v_uid uuid := auth.uid(); v_m public.streak_milestones%rowtype; v_streak int;
 BEGIN
-    IF v_user_id IS NULL THEN
-        RAISE EXCEPTION 'Authentication required'
-            USING ERRCODE = '28000';
-    END IF;
+  IF v_uid IS NULL THEN RETURN jsonb_build_object('success',false,'error','not_authenticated'); END IF;
+  SELECT * INTO v_m FROM public.streak_milestones WHERE threshold=p_threshold;
+  IF NOT FOUND THEN RETURN jsonb_build_object('success',false,'error','invalid_milestone'); END IF;
+  SELECT streak_count INTO v_streak FROM public.profiles WHERE id=v_uid;
+  IF v_streak < p_threshold THEN RETURN jsonb_build_object('success',false,'error','not_reached'); END IF;
+  IF EXISTS (SELECT 1 FROM public.streak_milestone_claims WHERE user_id=v_uid AND threshold=p_threshold) THEN
+    RETURN jsonb_build_object('success',false,'error','already_claimed'); END IF;
+  INSERT INTO public.streak_milestone_claims(user_id, threshold) VALUES (v_uid, p_threshold);
+  UPDATE public.profiles
+     SET honey = honey + v_m.reward_honey,
+         badges = CASE WHEN v_m.badge IS NOT NULL AND NOT (v_m.badge = ANY(badges))
+                       THEN array_append(badges, v_m.badge) ELSE badges END
+   WHERE id=v_uid;
+  RETURN jsonb_build_object('success',true,'reward_honey',v_m.reward_honey,'badge',v_m.badge);
+END $function$;
 
-    SELECT m.* INTO v_milestone
-    FROM public.streak_milestones AS m
-    WHERE m.threshold = p_threshold;
-
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT false, 'unknown_milestone'::text, NULL::integer, NULL::integer;
-        RETURN;
-    END IF;
-
-    SELECT p.* INTO v_profile
-    FROM public.profiles AS p
-    WHERE p.id = v_user_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Profile not found'
-            USING ERRCODE = 'P0002';
-    END IF;
-
-    IF COALESCE(v_profile.streak_count, 0) < p_threshold THEN
-        RETURN QUERY SELECT false, 'not_reached'::text, v_milestone.reward_honey, COALESCE(v_profile.honey, 0);
-        RETURN;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM public.streak_milestone_claims AS c
-        WHERE c.user_id = v_user_id AND c.threshold = p_threshold
-    ) THEN
-        RETURN QUERY SELECT false, 'already_claimed'::text, v_milestone.reward_honey, COALESCE(v_profile.honey, 0);
-        RETURN;
-    END IF;
-
-    INSERT INTO public.streak_milestone_claims (user_id, threshold)
-    VALUES (v_user_id, p_threshold);
-
-    UPDATE public.profiles AS p
-    SET honey = COALESCE(p.honey, 0) + v_milestone.reward_honey
-    WHERE p.id = v_user_id
-    RETURNING p.honey INTO v_new_honey;
-
-    RETURN QUERY SELECT true, NULL::text, v_milestone.reward_honey, v_new_honey;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.claim_streak_milestone(integer) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.claim_streak_milestone(integer) FROM anon;
 GRANT EXECUTE ON FUNCTION public.claim_streak_milestone(integer) TO authenticated;

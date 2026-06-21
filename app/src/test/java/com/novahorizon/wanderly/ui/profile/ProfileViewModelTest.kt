@@ -317,8 +317,8 @@ class ProfileViewModelTest {
         claimed: Boolean
     ): StreakMilestoneStatus = StreakMilestoneStatus(
         threshold = threshold,
-        title = "Milestone $threshold",
         rewardHoney = 150,
+        badge = "badge_$threshold",
         reached = reached,
         claimed = claimed
     )
