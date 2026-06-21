@@ -177,7 +177,7 @@ private fun ProfileContent(
                 citiesVisited = citiesVisited
             )
 
-            if (streak > 0 || streakFreezes > 0) {
+            if (streakFreezes > 0 || streakAtRisk) {
                 Spacer(modifier = Modifier.height(spacing.lg))
                 ProfileStreakFreezePanel(
                     freezesLeft = streakFreezes,

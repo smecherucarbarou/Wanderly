@@ -231,7 +231,10 @@
     <string name="profile_streak_label">Streak</string>
     <string name="profile_cities_label">Cities</string>
     <string name="profile_streak_freeze_title">Streak freeze</string>
-    <string name="profile_streak_freeze_available">%1$d freezes available</string>
+    <plurals name="profile_streak_freeze_available">
+        <item quantity="one">%1$d freeze available</item>
+        <item quantity="other">%1$d freezes available</item>
+    </plurals>
     <string name="profile_streak_freeze_at_risk">Your streak is at risk. Use a freeze to protect it.</string>
     <string name="profile_streak_freeze_button">Use freeze</string>
     <string name="profile_streak_freeze_used">Freeze used. Your streak is protected.</string>
