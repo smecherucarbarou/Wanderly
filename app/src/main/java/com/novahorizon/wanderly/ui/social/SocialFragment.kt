@@ -41,6 +41,8 @@ class SocialFragment : Fragment() {
                     SocialScreen(
                         viewModel = viewModel,
                         onAddFriend = { code -> viewModel.addFriend(code) },
+                        onAcceptFriendRequest = { requesterId -> viewModel.acceptFriendRequest(requesterId) },
+                        onRejectFriendRequest = { requesterId -> viewModel.rejectFriendRequest(requesterId) },
                         onBrowseMissions = { findNavController().navigate(R.id.missionsFragment) },
                         onCopyCode = { code -> copyFriendCode(code) },
                         onShareCode = { code -> shareFriendCode(code) }
@@ -64,7 +66,7 @@ class SocialFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val pendingInviteCode = repository.peekPendingInviteCode()
             if (pendingInviteCode.isNullOrBlank()) {
-                viewModel.loadLeaderboard()
+                viewModel.loadSocialHome()
             } else {
                 val code = repository.consumePendingInviteCode()
                 if (code != null) {

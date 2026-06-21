@@ -94,7 +94,10 @@ object AiResponseParser {
             val verified = parsed["verified"]?.jsonPrimitive?.booleanOrNull ?: return null
             PhotoVerificationDecision(
                 verified = verified,
-                reason = parsed["reason"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null }
+                reason = parsed["reason"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null },
+                verificationToken = parsed["verification_token"]?.jsonPrimitive?.contentOrNull
+                    ?.trim()
+                    ?.ifBlank { null }
             )
         }.getOrNull()
     }
@@ -102,5 +105,6 @@ object AiResponseParser {
 
 data class PhotoVerificationDecision(
     val verified: Boolean,
-    val reason: String?
+    val reason: String?,
+    val verificationToken: String? = null
 )

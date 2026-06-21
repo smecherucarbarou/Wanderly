@@ -167,6 +167,20 @@ class SocialRepository {
             successResult = FriendRequestActionResult.Rejected
         )
 
+    suspend fun getFriendLocations(): List<FriendLocation> = withContext(Dispatchers.IO) {
+        try {
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull() ?: return@withContext emptyList()
+            session.user?.id ?: return@withContext emptyList()
+
+            SupabaseClient.client.postgrest
+                .rpc("get_friend_locations")
+                .decodeList<FriendLocation>()
+        } catch (e: Exception) {
+            logError("Error getting friend locations", e)
+            emptyList()
+        }
+    }
+
     suspend fun getFriends(): List<Profile> = withContext(Dispatchers.IO) {
         try {
             val friendIds = getAcceptedFriendIds()

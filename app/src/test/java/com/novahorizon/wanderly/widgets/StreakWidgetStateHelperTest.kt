@@ -44,7 +44,7 @@ class StreakWidgetStateHelperTest {
         assertEquals(R.color.pollen_white, state.subtitleColorRes)
         assertFalse(state.inDanger)
         assertFalse(state.showStaleIndicator)
-        assertFalse(state.message?.isNotEmpty() == true)
+        assertEquals("Rising streak: 8 days", state.message)
     }
 
     @Test

@@ -68,6 +68,9 @@ class MapFragment : Fragment() {
                         onNavigateToMissions = {
                             findNavController().navigate(R.id.action_map_to_missions)
                         },
+                        onOpenGuide = {
+                            findNavController().navigate(R.id.action_map_to_wanderlyGuide)
+                        },
                         onMapViewCreated = { map -> onMapReady(map) },
                         onMapViewDisposed = { cleanupMap() }
                     )

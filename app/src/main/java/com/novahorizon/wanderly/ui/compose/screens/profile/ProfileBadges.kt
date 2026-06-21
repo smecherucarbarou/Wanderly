@@ -40,14 +40,50 @@ import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 internal fun ProfileBadgesPanel(profile: Profile) {
     val spacing = WanderlyTheme.spacing
     val badgeDefinitions = listOf(
-        BadgeDefinition(Icons.Filled.EmojiEvents, stringResource(R.string.badge_first_flight), "first_flight"),
-        BadgeDefinition(Icons.Filled.LocalFireDepartment, stringResource(R.string.badge_7_day_streak), "7-day_streak"),
-        BadgeDefinition(Icons.Filled.CameraAlt, stringResource(R.string.badge_photographer), "photographer"),
-        BadgeDefinition(Icons.Filled.Map, stringResource(R.string.badge_cartographer), "cartographer"),
-        BadgeDefinition(Icons.Filled.Diamond, stringResource(R.string.badge_gem_finder), "gem_finder"),
-        BadgeDefinition(Icons.Filled.Star, stringResource(R.string.badge_queen_bee), "queen_bee")
+        BadgeDefinition(
+            icon = Icons.Filled.EmojiEvents,
+            displayName = stringResource(R.string.badge_first_flight),
+            id = "first_flight",
+            aliases = setOf("Early Bee"),
+            requirement = stringResource(R.string.badge_first_flight_requirement)
+        ),
+        BadgeDefinition(
+            icon = Icons.Filled.LocalFireDepartment,
+            displayName = stringResource(R.string.badge_7_day_streak),
+            id = "7-day_streak",
+            aliases = setOf("Streak Master"),
+            requirement = stringResource(R.string.badge_7_day_streak_requirement)
+        ),
+        BadgeDefinition(
+            icon = Icons.Filled.CameraAlt,
+            displayName = stringResource(R.string.badge_photographer),
+            id = "photographer",
+            aliases = setOf("Photographer"),
+            requirement = stringResource(R.string.badge_photographer_requirement)
+        ),
+        BadgeDefinition(
+            icon = Icons.Filled.Map,
+            displayName = stringResource(R.string.badge_cartographer),
+            id = "cartographer",
+            aliases = setOf("Cartographer"),
+            requirement = stringResource(R.string.badge_cartographer_requirement)
+        ),
+        BadgeDefinition(
+            icon = Icons.Filled.Diamond,
+            displayName = stringResource(R.string.badge_gem_finder),
+            id = "gem_finder",
+            aliases = setOf("Gem Finder"),
+            requirement = stringResource(R.string.badge_gem_finder_requirement)
+        ),
+        BadgeDefinition(
+            icon = Icons.Filled.Star,
+            displayName = stringResource(R.string.badge_queen_bee),
+            id = "queen_bee",
+            aliases = setOf("Queen Explorer", "Honey Hoarder"),
+            requirement = stringResource(R.string.badge_queen_bee_requirement)
+        )
     )
-    val earnedBadges = profile.badges ?: emptyList()
+    val earnedBadges = profile.badges.orEmpty()
 
     Column(modifier = Modifier.fillMaxWidth()) {
         WanderlySectionHeader(title = stringResource(R.string.profile_badges_title))
@@ -60,7 +96,8 @@ internal fun ProfileBadgesPanel(profile: Profile) {
                 BadgeItem(
                     icon = badge.icon,
                     name = badge.displayName,
-                    locked = !earnedBadges.contains(badge.id),
+                    requirement = badge.requirement,
+                    locked = !badge.isEarned(earnedBadges),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -74,7 +111,8 @@ internal fun ProfileBadgesPanel(profile: Profile) {
                 BadgeItem(
                     icon = badge.icon,
                     name = badge.displayName,
-                    locked = !earnedBadges.contains(badge.id),
+                    requirement = badge.requirement,
+                    locked = !badge.isEarned(earnedBadges),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -86,6 +124,7 @@ internal fun ProfileBadgesPanel(profile: Profile) {
 private fun BadgeItem(
     icon: ImageVector,
     name: String,
+    requirement: String,
     locked: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -97,17 +136,17 @@ private fun BadgeItem(
     }
     val badgeDescription = stringResource(R.string.profile_badge_description, name, stateLabel)
     val iconColor = if (locked) {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
     } else {
         MaterialTheme.colorScheme.primary
     }
     val textColor = if (locked) {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
     } else {
         MaterialTheme.colorScheme.onSurface
     }
     val backgroundColor = if (locked) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f)
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
     } else {
         MaterialTheme.colorScheme.surface
     }
@@ -148,11 +187,12 @@ private fun BadgeItem(
             )
             Spacer(modifier = Modifier.height(spacing.xs))
             Text(
-                text = stateLabel,
+                text = if (locked) requirement else stateLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -161,5 +201,18 @@ private fun BadgeItem(
 private data class BadgeDefinition(
     val icon: ImageVector,
     val displayName: String,
-    val id: String
-)
+    val id: String,
+    val aliases: Set<String>,
+    val requirement: String
+) {
+    fun isEarned(earnedBadges: List<String>): Boolean {
+        val accepted = (aliases + id).map { it.normalizedBadgeId() }.toSet()
+        return earnedBadges.any { it.normalizedBadgeId() in accepted }
+    }
+}
+
+private fun String.normalizedBadgeId(): String =
+    trim()
+        .lowercase()
+        .replace('_', '-')
+        .replace(Regex("\\s+"), "-")

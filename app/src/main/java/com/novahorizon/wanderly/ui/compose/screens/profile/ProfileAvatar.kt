@@ -1,12 +1,7 @@
 package com.novahorizon.wanderly.ui.compose.screens.profile
 
-import android.graphics.Typeface
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.TextView as AndroidTextView
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,81 +36,75 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.novahorizon.wanderly.R
-import com.novahorizon.wanderly.ui.common.AvatarLoader
+import com.novahorizon.wanderly.ui.compose.components.AvatarImage
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.profile.ProfileFragment
 
 @Composable
 internal fun ProfileAvatar(
     avatarSource: String?,
     displayName: String,
+    streakCount: Int,
     isUploading: Boolean,
     onEditAvatar: () -> Unit
 ) {
     val editAvatarDescription = stringResource(R.string.cd_edit_avatar)
-    val initialTextColor = MaterialTheme.colorScheme.onPrimaryContainer.let { color ->
-        android.graphics.Color.argb(
-            (color.alpha * 255).toInt(),
-            (color.red * 255).toInt(),
-            (color.green * 255).toInt(),
-            (color.blue * 255).toInt()
-        )
-    }
+    val haloStyle = ProfileFragment.resolveProfileHaloStyle(streakCount)
     Box(
-        modifier = Modifier
-            .size(104.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-            .clickable(enabled = !isUploading, onClick = onEditAvatar)
-            .semantics {
-                role = Role.Button
-                contentDescription = editAvatarDescription
-            },
+        modifier = Modifier.size(if (haloStyle == null) 104.dp else 124.dp),
         contentAlignment = Alignment.Center
     ) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                FrameLayout(context).apply {
-                    val imageView = ImageView(context).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                        visibility = View.GONE
-                    }
-                    val initialView = AndroidTextView(context).apply {
-                        gravity = Gravity.CENTER
-                        textSize = 34f
-                        typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(initialTextColor)
-                    }
-                    addView(imageView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-                    addView(initialView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-                    tag = AvatarViews(imageView, initialView)
-                }
-            },
-            update = { avatarFrame ->
-                val avatarViews = avatarFrame.tag as AvatarViews
-                AvatarLoader.loadAvatar(
-                    imageView = avatarViews.imageView,
-                    initialView = avatarViews.initialView,
-                    avatarSource = avatarSource,
-                    displayName = displayName
-                )
-            }
-        )
+        haloStyle?.let { style ->
+            DrawableImage(
+                drawableRes = style.glowRes,
+                modifier = Modifier.fillMaxSize()
+            )
+            DrawableImage(
+                drawableRes = style.ringRes,
+                modifier = Modifier.fillMaxSize()
+            )
+            DrawableImage(
+                drawableRes = style.accentRes,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
-        if (isUploading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.74f)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(30.dp),
-                    strokeWidth = 3.dp
-                )
+        Box(
+            modifier = Modifier
+                .size(104.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                .clickable(enabled = !isUploading, onClick = onEditAvatar)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = editAvatarDescription
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            AvatarImage(
+                avatarSource = avatarSource,
+                displayName = displayName,
+                modifier = Modifier.fillMaxSize(),
+                initialTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                initialTextSize = 34.sp
+            )
+
+            if (isUploading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.74f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(30.dp),
+                        strokeWidth = 3.dp
+                    )
+                }
             }
         }
 
@@ -131,6 +120,26 @@ internal fun ProfileAvatar(
             tint = MaterialTheme.colorScheme.onPrimary
         )
     }
+}
+
+@Composable
+private fun DrawableImage(
+    @DrawableRes drawableRes: Int,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            ImageView(context).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                adjustViewBounds = false
+                setImageResource(drawableRes)
+            }
+        },
+        update = { view ->
+            view.setImageResource(drawableRes)
+        }
+    )
 }
 
 @Composable
@@ -183,8 +192,3 @@ internal fun FriendCodeRow(
         }
     }
 }
-
-private data class AvatarViews(
-    val imageView: ImageView,
-    val initialView: AndroidTextView
-)

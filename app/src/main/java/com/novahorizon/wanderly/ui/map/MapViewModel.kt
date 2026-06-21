@@ -8,8 +8,8 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.data.FriendLocation
 import com.novahorizon.wanderly.data.Mission
-import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
@@ -41,7 +41,11 @@ class MapViewModel @Inject constructor(
     val clusters: LiveData<List<FriendMapCluster>> = _clusters
 
     private var currentZoom: Double = 16.0
-    private var friendProfiles: List<Profile> = emptyList()
+    private var friendLocations: List<FriendLocation> = emptyList()
+
+    // Self location is tracked from the device only; it is never read back from `profiles`.
+    private var lastDeviceLat: Double? = null
+    private var lastDeviceLng: Double? = null
 
     fun onMapReady() {
         _isMapReady.value = true
@@ -56,8 +60,8 @@ class MapViewModel @Inject constructor(
     fun loadFriends() {
         viewModelScope.launch {
             try {
-                val friends = repository.getFriends()
-                friendProfiles = friends.filter { it.last_lat != null && it.last_lng != null }
+                val friends = repository.getFriendLocations()
+                friendLocations = friends.filter { it.last_lat != null && it.last_lng != null }
                 recomputeClusters()
             } catch (e: Exception) {
                 CrashReporter.recordNonFatal(
@@ -71,11 +75,11 @@ class MapViewModel @Inject constructor(
     }
 
     private fun recomputeClusters() {
-        if (friendProfiles.isEmpty()) {
+        if (friendLocations.isEmpty()) {
             _clusters.value = emptyList()
             return
         }
-        val points = friendProfiles.map { friend ->
+        val points = friendLocations.map { friend ->
             FriendMapPoint(
                 id = friend.id,
                 latitude = friend.last_lat ?: 0.0,
@@ -90,7 +94,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun getFriendUsername(friendId: String): String? {
-        return friendProfiles.find { it.id == friendId }?.username
+        return friendLocations.find { it.id == friendId }?.username
     }
 
     fun loadActiveMission() {
@@ -116,14 +120,20 @@ class MapViewModel @Inject constructor(
     fun updateUserLocation(lat: Double, lng: Double) {
         viewModelScope.launch {
             try {
-                val profile = repository.getCurrentProfile() ?: return@launch
+                val previousLat = lastDeviceLat
+                val previousLng = lastDeviceLng
 
-                val lastLat = profile.last_lat ?: 0.0
-                val lastLng = profile.last_lng ?: 0.0
-                val results = FloatArray(1)
-                Location.distanceBetween(lastLat, lastLng, lat, lng, results)
+                val movedFarEnough = if (previousLat == null || previousLng == null) {
+                    true
+                } else {
+                    val results = FloatArray(1)
+                    Location.distanceBetween(previousLat, previousLng, lat, lng, results)
+                    results[0] > 50.0
+                }
 
-                if (results[0] > 50.0 || profile.last_lat == null) {
+                if (movedFarEnough) {
+                    lastDeviceLat = lat
+                    lastDeviceLng = lng
                     repository.updateProfileLocation(lat, lng)
                 }
             } catch (e: Exception) {

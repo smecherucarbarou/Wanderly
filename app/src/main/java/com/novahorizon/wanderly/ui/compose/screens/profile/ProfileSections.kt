@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -48,6 +49,7 @@ import com.novahorizon.wanderly.ui.compose.components.WanderlyStatCard
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import com.novahorizon.wanderly.ui.compose.util.rankDisplayName
 import com.novahorizon.wanderly.ui.compose.util.rankProgress
+import com.novahorizon.wanderly.widgets.StreakTierHelper
 
 @Composable
 internal fun ProfileHero(
@@ -73,6 +75,7 @@ internal fun ProfileHero(
             ProfileAvatar(
                 avatarSource = avatarSource,
                 displayName = displayName,
+                streakCount = profile.streak_count ?: 0,
                 isUploading = isAvatarUploading,
                 onEditAvatar = onEditAvatar
             )
@@ -117,16 +120,16 @@ internal fun ProfileHero(
 
         Spacer(modifier = Modifier.height(spacing.lg))
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing.md)
+            verticalArrangement = Arrangement.spacedBy(spacing.sm)
         ) {
             Button(
                 onClick = onEditAvatar,
                 enabled = !isAvatarUploading,
                 modifier = Modifier
-                    .weight(1f)
-                    .height(spacing.minTouchTarget),
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = spacing.minTouchTarget),
                 shape = MaterialTheme.shapes.medium
             ) {
                 if (isAvatarUploading) {
@@ -138,8 +141,7 @@ internal fun ProfileHero(
                     Spacer(modifier = Modifier.width(spacing.sm))
                     Text(
                         text = stringResource(R.string.profile_avatar_uploading),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2
                     )
                 } else {
                     Icon(
@@ -150,16 +152,15 @@ internal fun ProfileHero(
                     Spacer(modifier = Modifier.width(spacing.sm))
                     Text(
                         text = stringResource(R.string.profile_avatar_change),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2
                     )
                 }
             }
             OutlinedButton(
                 onClick = onEditUsername,
                 modifier = Modifier
-                    .weight(1f)
-                    .height(spacing.minTouchTarget),
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = spacing.minTouchTarget),
                 shape = MaterialTheme.shapes.medium
             ) {
                 Icon(
@@ -170,8 +171,7 @@ internal fun ProfileHero(
                 Spacer(modifier = Modifier.width(spacing.sm))
                 Text(
                     text = stringResource(R.string.profile_edit_name),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 2
                 )
             }
         }
@@ -191,7 +191,7 @@ internal fun ProfileHero(
                 onClick = onSettings,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(spacing.minTouchTarget),
+                    .defaultMinSize(minHeight = spacing.minTouchTarget),
                 shape = MaterialTheme.shapes.medium
             ) {
                 Icon(
@@ -238,7 +238,7 @@ internal fun ProfileStatsRow(
         WanderlyStatCard(
             icon = {
                 Icon(
-                    painter = painterResource(R.drawable.ic_streak_fire),
+                    painter = painterResource(StreakTierHelper.resolve(streak).animFile),
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = Color.Unspecified
@@ -366,13 +366,13 @@ internal fun ProfileNotificationPanel(
             onClick = onAction,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(spacing.minTouchTarget),
+                .defaultMinSize(minHeight = spacing.minTouchTarget),
             shape = MaterialTheme.shapes.medium
         ) {
             Text(
                 text = actionLabel,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }

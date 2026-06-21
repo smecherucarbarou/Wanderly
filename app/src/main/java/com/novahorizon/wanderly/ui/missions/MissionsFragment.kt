@@ -32,6 +32,7 @@ import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,7 +48,7 @@ class MissionsFragment : Fragment() {
 
     private var tempImageUri: Uri? = null
     private var tempImageFile: File? = null
-    private var locationLookupInFlight = false
+    private val locationLookupGate = MissionLocationLookupGate()
     private val logTag = "MissionsFragment"
     private val locationPermissionController = LocationPermissionController(this)
 
@@ -72,14 +73,10 @@ class MissionsFragment : Fragment() {
             }
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        val resolver = requireContext().contentResolver
-                        MissionPhotoDecoder.decodeForVerification {
-                            resolver.openInputStream(imageUri)
-                        }
-                    }
+                    val bitmap = decodeCapturedPhoto(imageUri)
                     if (bitmap == null) {
                         if (!isAdded) return@launch
+                        logError("Mission photo could not be decoded after retries")
                         showSnackbar(getString(R.string.photo_read_failed), isError = true)
                         return@launch
                     }
@@ -94,6 +91,20 @@ class MissionsFragment : Fragment() {
         } else {
             showSnackbar(getString(R.string.mission_photo_missing), isError = true)
         }
+    }
+
+    private suspend fun decodeCapturedPhoto(imageUri: Uri): android.graphics.Bitmap? {
+        val context = requireContext().applicationContext
+        repeat(PHOTO_DECODE_ATTEMPTS) { attempt ->
+            val bitmap = withContext(Dispatchers.IO) {
+                MissionPhotoDecoder.decodeForVerification(context, imageUri)
+            }
+            if (bitmap != null) return bitmap
+            if (attempt < PHOTO_DECODE_ATTEMPTS - 1) {
+                delay(PHOTO_DECODE_RETRY_DELAY_MS * (attempt + 1))
+            }
+        }
+        return null
     }
 
     override fun onCreateView(
@@ -129,11 +140,12 @@ class MissionsFragment : Fragment() {
     }
 
     private fun checkLocationAndGenerate() {
-        if (locationLookupInFlight) return
+        if (!locationLookupGate.tryStart()) return
         when (val permissionState = locationPermissionController.resolveState()) {
             LocationPermissionGate.State.GRANTED -> Unit
             LocationPermissionGate.State.REQUEST,
             LocationPermissionGate.State.RATIONALE -> {
+                locationLookupGate.finish()
                 if (permissionState == LocationPermissionGate.State.RATIONALE) {
                     showSnackbar(getString(R.string.mission_location_permission_rationale), isError = true)
                 }
@@ -149,17 +161,20 @@ class MissionsFragment : Fragment() {
             }
 
             LocationPermissionGate.State.SETTINGS -> {
+                locationLookupGate.finish()
                 showSnackbar(getString(R.string.mission_location_permission_settings), isError = true)
                 locationPermissionController.openAppSettings()
                 return
             }
         }
-        locationLookupInFlight = true
 
         missionLocationProvider.requestCurrentLocation(
             fragment = this,
             onSuccess = onSuccess@{ location ->
-            if (!isAdded) return@onSuccess
+            if (!isAdded) {
+                locationLookupGate.finish()
+                return@onSuccess
+            }
             if (location != null) {
                 val lifecycleOwner = viewLifecycleOwner
                 lifecycleOwner.lifecycleScope.launch {
@@ -175,17 +190,22 @@ class MissionsFragment : Fragment() {
                         if (e is CancellationException) throw e
                         logError("Error getting city name", e)
                         viewModel.generateMission(location.latitude, location.longitude, null)
+                    } finally {
+                        locationLookupGate.finish()
                     }
                 }
             } else {
-                locationLookupInFlight = false
+                locationLookupGate.finish()
                 showSnackbar(getString(R.string.mission_location_failed), isError = true)
             }
         },
             onFailure = onFailure@{ error ->
-            if (!isAdded) return@onFailure
+            if (!isAdded) {
+                locationLookupGate.finish()
+                return@onFailure
+            }
             logError("Error getting precise location", error)
-            locationLookupInFlight = false
+            locationLookupGate.finish()
             showSnackbar(getString(R.string.mission_location_failed), isError = true)
         }
         )
@@ -306,5 +326,7 @@ class MissionsFragment : Fragment() {
     private companion object {
         private const val CAMERA_PERMISSION_PREFS = "mission_camera_permission"
         private const val KEY_CAMERA_PERMISSION_REQUESTED = "camera_permission_requested"
+        private const val PHOTO_DECODE_ATTEMPTS = 5
+        private const val PHOTO_DECODE_RETRY_DELAY_MS = 160L
     }
 }

@@ -1,18 +1,23 @@
 package com.novahorizon.wanderly.ui.compose.screens.map
 
 import android.view.View
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,6 +51,7 @@ fun MapScreen(
     isMapReady: Boolean,
     onMyLocation: () -> Unit,
     onNavigateToMissions: () -> Unit,
+    onOpenGuide: () -> Unit,
     onMapViewCreated: (MapView) -> Unit,
     onMapViewDisposed: () -> Unit
 ) {
@@ -131,14 +137,35 @@ fun MapScreen(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(12.dp))
-            HoneyButton(
-                text = if (activeMission != null) {
-                    stringResource(R.string.map_go_to_missions)
-                } else {
-                    stringResource(R.string.generate_mission)
-                },
-                onClick = onNavigateToMissions
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HoneyButton(
+                    text = if (activeMission != null) {
+                        stringResource(R.string.map_go_to_missions)
+                    } else {
+                        stringResource(R.string.generate_mission)
+                    },
+                    onClick = onNavigateToMissions,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = onOpenGuide,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Explore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(text = stringResource(R.string.wanderly_guide_open))
+                }
+            }
         }
     }
 }

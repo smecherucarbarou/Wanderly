@@ -17,6 +17,7 @@ sealed class MissionCompletionResult {
 
     object Unauthenticated : MissionCompletionResult()
     object Forbidden : MissionCompletionResult()
+    object MissionNotFound : MissionCompletionResult()
     object RateLimited : MissionCompletionResult()
     object NetworkFailure : MissionCompletionResult()
     object ServerFailure : MissionCompletionResult()

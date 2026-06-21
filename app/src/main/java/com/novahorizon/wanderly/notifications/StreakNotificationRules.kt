@@ -3,6 +3,8 @@ package com.novahorizon.wanderly.notifications
 import android.content.Context
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.data.WanderlyRepository
+import com.novahorizon.wanderly.streak.DailyStreakStatus
+import com.novahorizon.wanderly.streak.DailyStreakStatusEvaluator
 import com.novahorizon.wanderly.util.DateUtils
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -39,9 +41,13 @@ object StreakNotificationRules {
         val todayUtc = utcDate()
         val lastMissionDate = profile.last_mission_date?.takeIf { it.isNotBlank() }
             ?: repository.getLastVisitDate().orEmpty()
-        val yesterdayUtc = utcDateOffset(-1)
+        val streakStatus = DailyStreakStatusEvaluator.evaluate(
+            streakCount = streakCount,
+            lastMissionDate = lastMissionDate,
+            today = java.time.LocalDate.parse(todayUtc)
+        )
 
-        if (lastMissionDate.isNotBlank() && lastMissionDate != todayUtc && lastMissionDate != yesterdayUtc) {
+        if (streakStatus == DailyStreakStatus.HARD_LOST) {
             val lostSentDate = stateStore.getStreakLostDate()
             if (lostSentDate == todayUtc) {
                 NotificationCheckCoordinator.log("streak", source, "Streak lost already announced for $todayUtc.")
@@ -55,7 +61,7 @@ object StreakNotificationRules {
             return
         }
 
-        if (lastMissionDate == todayUtc) {
+        if (streakStatus == DailyStreakStatus.ACTIVE_TODAY) {
             NotificationCheckCoordinator.log("streak", source, "Skipped: today's mission already completed ($todayUtc).")
             return
         }
@@ -100,10 +106,6 @@ object StreakNotificationRules {
     }
 
     private fun utcDate(): String = DateUtils.formatUtcDate(Date())
-
-    private fun utcDateOffset(days: Int): String = DateUtils.formatUtcDate(Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
-        add(Calendar.DAY_OF_YEAR, days)
-    }.time)
 
     private fun localDate(date: Date): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
 }

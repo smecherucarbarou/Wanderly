@@ -120,4 +120,39 @@ SELECT
     'Direct PATCH honey/streak_count fails' AS check_name,
     true AS pass;
 
+-- Client supplied restore cost must match the server-calculated cost.
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config('request.jwt.claim.sub', :'user_a', true);
+
+UPDATE public.profiles
+SET honey = 100,
+    streak_count = 10,
+    last_mission_date = ((now() AT TIME ZONE 'utc')::date - 2)
+WHERE id = :'user_a'::uuid;
+
+CREATE TEMP TABLE stale_restore_result AS
+SELECT * FROM public.restore_streak(1);
+
+SELECT
+    'Restore rejects stale client cost' AS check_name,
+    restored = false
+    AND reason = 'stale_cost'
+    AND honey = 100
+    AND streak_count = 10 AS pass
+FROM stale_restore_result;
+
+CREATE TEMP TABLE valid_restore_result AS
+SELECT * FROM public.restore_streak(50);
+
+SELECT
+    'Restore accepts server-calculated cost' AS check_name,
+    restored = true
+    AND reason = 'restored'
+    AND honey = 50
+    AND streak_count = 10
+    AND last_mission_date = ((now() AT TIME ZONE 'utc')::date - 1) AS pass
+FROM valid_restore_result;
+
 ROLLBACK;

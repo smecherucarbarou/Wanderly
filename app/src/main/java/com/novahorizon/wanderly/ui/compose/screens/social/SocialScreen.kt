@@ -40,6 +40,7 @@ import androidx.lifecycle.asFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -51,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.ui.compose.components.AvatarImage
+import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.HoneyButton
 import com.novahorizon.wanderly.ui.compose.components.LoadingState
 import com.novahorizon.wanderly.ui.compose.components.WanderlyCard
@@ -62,14 +65,20 @@ import java.util.Locale
 fun SocialScreen(
     viewModel: SocialViewModel,
     onAddFriend: (String) -> Unit,
+    onAcceptFriendRequest: (String) -> Unit = {},
+    onRejectFriendRequest: (String) -> Unit = {},
     onBrowseMissions: () -> Unit = {},
     onCopyCode: (String) -> Unit = {},
     onShareCode: (String) -> Unit = {}
 ) {
-    val leaderboard by viewModel.leaderboard.asFlow().collectAsStateWithLifecycle(emptyList())
-    val friends by viewModel.friends.asFlow().collectAsStateWithLifecycle(emptyList())
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val currentProfile by viewModel.currentProfile.asFlow().collectAsStateWithLifecycle(null)
-    val isLoading by viewModel.isLoading.asFlow().collectAsStateWithLifecycle(false)
+    val context = LocalContext.current
+    val isLoading = state is SocialViewModel.SocialUiState.Loading
+    val loadedState = state as? SocialViewModel.SocialUiState.Loaded
+    val leaderboard = loadedState?.leaderboard.orEmpty()
+    val friends = loadedState?.friends.orEmpty()
+    val incomingRequests = loadedState?.incomingRequests.orEmpty()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var friendCode by rememberSaveable { mutableStateOf("") }
 
@@ -116,6 +125,141 @@ fun SocialScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        when {
+            isLoading -> {
+                LoadingState()
+            }
+
+            state is SocialViewModel.SocialUiState.Error -> {
+                ErrorState(
+                    message = (state as SocialViewModel.SocialUiState.Error).message.asString(context),
+                    onRetry = { viewModel.loadSocialHome() },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                )
+            }
+
+            else -> {
+                val profiles = if (selectedTab == 0) leaderboard else friends
+
+                if (selectedTab == 1 && profiles.isEmpty() && incomingRequests.isEmpty()) {
+                    FriendsEmptyState(
+                        friendCode = currentProfile?.friend_code,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        onCopyCode = onCopyCode,
+                        onShareCode = onShareCode
+                    )
+                } else if (selectedTab == 0 && profiles.isEmpty()) {
+                    LeaderboardEmptyState(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        onBrowseMissions = onBrowseMissions
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (selectedTab == 1 && incomingRequests.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.social_incoming_requests_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                                )
+                            }
+                            itemsIndexed(incomingRequests, key = { _, profile -> "request-${profile.id}" }) { _, profile ->
+                                FriendRequestRow(
+                                    profile = profile,
+                                    onAccept = { onAcceptFriendRequest(profile.id) },
+                                    onReject = { onRejectFriendRequest(profile.id) }
+                                )
+                            }
+                            if (friends.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = stringResource(R.string.social_friends_title),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                        itemsIndexed(profiles, key = { _, profile -> profile.id }) { index, profile ->
+                            FriendRow(
+                                rank = index + 1,
+                                profile = profile
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Add friend section
+        WanderlyCard {
+            Text(
+                text = stringResource(R.string.social_add_friend_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.social_add_friend_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = friendCode,
+                    onValueChange = { value ->
+                        friendCode = value
+                            .uppercase(Locale.US)
+                            .filter { it.isLetterOrDigit() }
+                            .take(6)
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = { Text(stringResource(R.string.social_add_friend_title)) },
+                    placeholder = { Text(stringResource(R.string.social_friend_code_placeholder)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                HoneyButton(
+                    text = if (isLoading) stringResource(R.string.social_adding_friend) else stringResource(R.string.social_add_button),
+                    onClick = {
+                        if (friendCode.length == 6) {
+                            onAddFriend(friendCode)
+                            friendCode = ""
+                        }
+                    },
+                    enabled = !isLoading && friendCode.length == 6,
+                    modifier = Modifier.width(96.dp)
+                )
+            }
+        }
+    }
+    }
+}
+
+/*
         if (isLoading) {
             LoadingState()
         } else {
@@ -208,6 +352,7 @@ fun SocialScreen(
     }
     }
 }
+*/
 
 @Composable
 private fun LeaderboardEmptyState(
@@ -302,11 +447,12 @@ private fun FriendRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = (profile.username?.firstOrNull() ?: '?').uppercase(),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+            AvatarImage(
+                avatarSource = profile.avatar_url,
+                displayName = profile.username ?: stringResource(R.string.social_default_username),
+                modifier = Modifier.fillMaxSize(),
+                initialTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                initialTextSize = 18.sp
             )
         }
 
@@ -331,7 +477,65 @@ private fun FriendRow(
     }
 }
 
-// ─── Previews ────────────────────────────────────────────────────────────────
+@Composable
+private fun FriendRequestRow(
+    profile: Profile,
+    onAccept: () -> Unit,
+    onReject: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp, horizontal = 4.dp)
+            .background(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .padding(12.dp)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            AvatarImage(
+                avatarSource = profile.avatar_url,
+                displayName = profile.username ?: stringResource(R.string.social_default_username),
+                modifier = Modifier.fillMaxSize(),
+                initialTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                initialTextSize = 18.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = profile.username ?: stringResource(R.string.social_default_username),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        TextButton(onClick = onReject) {
+            Text(stringResource(R.string.social_request_reject))
+        }
+        HoneyButton(
+            text = stringResource(R.string.social_request_accept),
+            onClick = onAccept,
+            modifier = Modifier.width(96.dp)
+        )
+    }
+}
+
+// Previews
 
 @Preview(name = "Light - Friend Row")
 @Preview(name = "Dark - Friend Row", uiMode = Configuration.UI_MODE_NIGHT_YES)
@@ -345,6 +549,22 @@ private fun PreviewFriendRow() {
                 username = "BuzzyExplorer",
                 honey = 2450
             )
+        )
+    }
+}
+
+@Preview(name = "Light - Friend Request Row")
+@Preview(name = "Dark - Friend Request Row", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewFriendRequestRow() {
+    WanderlyTheme {
+        FriendRequestRow(
+            profile = Profile(
+                id = "preview-2",
+                username = "PollenPal"
+            ),
+            onAccept = {},
+            onReject = {}
         )
     }
 }

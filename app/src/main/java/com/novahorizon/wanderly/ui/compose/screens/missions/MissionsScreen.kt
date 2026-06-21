@@ -162,6 +162,36 @@ fun MissionsScreen(
                     }
                 )
             }
+            is MissionState.FetchingDetails -> {
+                MissionCard(
+                    title = viewModel.currentMissionText() ?: stringResource(R.string.mission_ready_fallback),
+                    description = stringResource(R.string.mission_details_loading),
+                    stateLabel = stringResource(R.string.mission_details_label),
+                    primaryAction = {
+                        HoneyButton(text = stringResource(R.string.mission_verify_button), onClick = onVerifyPhoto)
+                    }
+                )
+            }
+            is MissionState.DetailsReceived -> {
+                MissionCard(
+                    title = viewModel.currentMissionText() ?: stringResource(R.string.mission_ready_fallback),
+                    description = state.info,
+                    stateLabel = stringResource(R.string.mission_details_label),
+                    descriptionMaxLines = Int.MAX_VALUE,
+                    primaryAction = {
+                        HoneyButton(text = stringResource(R.string.mission_verify_button), onClick = onVerifyPhoto)
+                    },
+                    secondaryAction = {
+                        OutlinedButton(
+                            onClick = onLearnMore,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(stringResource(R.string.mission_refresh_details))
+                        }
+                    }
+                )
+            }
             is MissionState.Verifying -> {
                 MissionCard(
                     title = stringResource(R.string.mission_verifying_title),
@@ -199,7 +229,7 @@ fun MissionsScreen(
             }
             is MissionState.Error -> {
                 MissionCard(
-                    title = stringResource(R.string.mission_error_title),
+                    title = viewModel.currentMissionText() ?: stringResource(R.string.mission_error_title),
                     description = uiTextToString(state.message, context),
                     stateLabel = stringResource(R.string.mission_error_label),
                     primaryAction = {
@@ -207,7 +237,6 @@ fun MissionsScreen(
                     }
                 )
             }
-            else -> {}
         }
         }
     }

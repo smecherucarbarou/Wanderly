@@ -83,6 +83,30 @@ object GeminiClient {
         return executeRequest(body, logLabel = "vision")
     }
 
+    suspend fun verifyMissionPhoto(
+        bitmap: Bitmap,
+        targetName: String,
+        targetCity: String,
+        isFallbackMission: Boolean
+    ): String {
+        val encodedImage = withContext(Dispatchers.IO) {
+            val imageBytes = ByteArrayOutputStream().use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                outputStream.toByteArray()
+            }
+            Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+        }
+        val body = JSONObject().apply {
+            put("mode", "mission_photo_verification")
+            put("target_name", targetName)
+            put("target_city", targetCity)
+            put("is_fallback_mission", isFallbackMission)
+            put("image_mime_type", "image/jpeg")
+            put("image_data", encodedImage)
+        }
+        return executeRequest(body, logLabel = "mission-photo", extractGeminiText = false)
+    }
+
     private fun buildTextBody(prompt: String, useSearch: Boolean, systemInstruction: String? = null): JSONObject {
         return JSONObject().apply {
             put("contents", JSONArray().put(JSONObject().apply {
@@ -107,7 +131,11 @@ object GeminiClient {
         }
     }
 
-    private suspend fun executeRequest(body: JSONObject, logLabel: String): String {
+    private suspend fun executeRequest(
+        body: JSONObject,
+        logLabel: String,
+        extractGeminiText: Boolean = true
+    ): String {
         val auth = SupabaseClient.client.auth
         var accessToken = auth.currentAccessTokenOrNull()
             ?: throw Exception("Authentication required for Gemini proxy")
@@ -170,7 +198,11 @@ object GeminiClient {
                             throw GeminiHttpException(error.status ?: resp.code, error.message)
                         }
                         logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
-                        extractText(responseBody).getOrElse { throw it }
+                        if (extractGeminiText) {
+                            extractText(responseBody).getOrElse { throw it }
+                        } else {
+                            responseBody
+                        }
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e

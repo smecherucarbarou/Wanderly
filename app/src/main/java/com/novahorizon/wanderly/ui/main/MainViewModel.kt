@@ -62,13 +62,18 @@ class MainViewModel @Inject constructor(
                     }
 
                     DailyStreakStatus.HARD_LOST -> {
-                        when (repository.acceptStreakLoss()) {
-                            is SensitiveProfileMutationResult.Success,
-                            is SensitiveProfileMutationResult.Rejected -> {
+                        when (val lossResult = repository.acceptStreakLoss()) {
+                            is SensitiveProfileMutationResult.Success -> {
                                 _streakStatus.postValue(StreakStatus.Active)
-                                _streakMessage.postValue(
-                                    "Streak lost for good. Freeze only saves one missed day."
-                                )
+                                if (lossResult.profile?.streak_count == 0) {
+                                    _streakMessage.postValue(
+                                        "Streak lost for good. Freeze only saves one missed day."
+                                    )
+                                }
+                            }
+                            is SensitiveProfileMutationResult.Rejected -> {
+                                repository.getCurrentProfile()
+                                _streakStatus.postValue(StreakStatus.Active)
                             }
                             else -> {
                                 _streakMessage.postValue("Failed to reset lost streak. Check connection.")
@@ -136,11 +141,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             repository.getCurrentProfile() ?: return@launch
 
-            when (repository.acceptStreakLoss()) {
-                is SensitiveProfileMutationResult.Success,
-                is SensitiveProfileMutationResult.Rejected -> {
+            when (val lossResult = repository.acceptStreakLoss()) {
+                is SensitiveProfileMutationResult.Success -> {
                     _streakStatus.postValue(StreakStatus.Active)
-                    _streakMessage.postValue("Streak reset to 0. Time to rebuild!")
+                    if (lossResult.profile?.streak_count == 0) {
+                        _streakMessage.postValue("Streak reset to 0. Time to rebuild!")
+                    }
+                }
+                is SensitiveProfileMutationResult.Rejected -> {
+                    repository.getCurrentProfile()
+                    _streakStatus.postValue(StreakStatus.Active)
                 }
                 else -> {
                     _streakMessage.postValue("Failed to reset streak. Check connection.")

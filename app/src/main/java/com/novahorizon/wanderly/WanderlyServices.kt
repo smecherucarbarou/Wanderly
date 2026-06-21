@@ -38,7 +38,12 @@ object SupabaseEmailAuthService : EmailAuthService {
 interface MissionGenerationService {
     suspend fun generateText(prompt: String): String
     suspend fun generateWithSearch(prompt: String): String
-    suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String
+    suspend fun verifyMissionPhoto(
+        bitmap: Bitmap,
+        targetName: String,
+        targetCity: String,
+        isFallbackMission: Boolean
+    ): String
     suspend fun resolveCoordinates(
         placeName: String,
         targetCity: String,
@@ -54,8 +59,17 @@ object DefaultMissionGenerationService : MissionGenerationService {
     override suspend fun generateWithSearch(prompt: String): String =
         GeminiClient.generateWithSearch(prompt)
 
-    override suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String =
-        GeminiClient.analyzeImage(bitmap, prompt)
+    override suspend fun verifyMissionPhoto(
+        bitmap: Bitmap,
+        targetName: String,
+        targetCity: String,
+        isFallbackMission: Boolean
+    ): String = GeminiClient.verifyMissionPhoto(
+        bitmap = bitmap,
+        targetName = targetName,
+        targetCity = targetCity,
+        isFallbackMission = isFallbackMission
+    )
 
     override suspend fun resolveCoordinates(
         placeName: String,

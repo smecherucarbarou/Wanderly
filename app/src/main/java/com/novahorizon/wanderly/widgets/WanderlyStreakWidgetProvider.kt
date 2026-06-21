@@ -139,6 +139,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
                 val streakCount = snapshotToRender?.streakCount ?: 0
                 val subtitle = appContext.getString(visualState.subtitleRes)
                 val views = RemoteViews(appContext.packageName, R.layout.widget_streak).apply {
+                    setTextViewText(R.id.widget_label, visualState.message)
                     setTextViewText(R.id.widget_streak_count, streakCount.toString())
                     setTextViewText(R.id.widget_subtitle, subtitle)
                     setImageViewResource(R.id.widget_mascot, visualState.mascotRes)

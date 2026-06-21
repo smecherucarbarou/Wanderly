@@ -230,15 +230,19 @@ class ProfileFragment : Fragment() {
         val status = NotificationPermissionManager.status(context)
         val systemNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-        notificationStatusText = when {
-            status == NotificationPermissionManager.Status.NOT_REQUIRED && systemNotificationsEnabled ->
-                getString(R.string.profile_notifications_not_required)
-            status == NotificationPermissionManager.Status.GRANTED && systemNotificationsEnabled ->
-                getString(R.string.profile_notifications_enabled)
-            !systemNotificationsEnabled ->
-                getString(R.string.profile_notifications_system_disabled)
-            else ->
-                getString(R.string.profile_notifications_permission_denied)
+        if (
+            systemNotificationsEnabled &&
+            (status == NotificationPermissionManager.Status.GRANTED || status == NotificationPermissionManager.Status.NOT_REQUIRED)
+        ) {
+            notificationStatusText = null
+            notificationActionLabel = null
+            return
+        }
+
+        notificationStatusText = if (!systemNotificationsEnabled) {
+            getString(R.string.profile_notifications_system_disabled)
+        } else {
+            getString(R.string.profile_notifications_permission_denied)
         }
 
         notificationActionLabel = if (

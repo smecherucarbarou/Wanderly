@@ -241,7 +241,7 @@ class MissionsViewModelTest {
             assertEquals(MissionsViewModel.FALLBACK_MISSION_TARGET, repository.savedMission?.target)
             assertEquals(44.4268, repository.savedMission?.targetLat)
             assertEquals(26.1025, repository.savedMission?.targetLng)
-            assertEquals(0, repository.completeMissionCalls)
+            assertEquals(0, repository.logMissionCompletionCalls)
             assertFalse(states.any { it is MissionsViewModel.MissionState.Error })
         } finally {
             store.clear()
@@ -332,11 +332,45 @@ class MissionsViewModelTest {
             viewModel.completeMission()
             advanceUntilIdle()
 
-            assertEquals(0, repository.completeMissionCalls)
+            assertEquals(0, repository.logMissionCompletionCalls)
             assertTrue(states.last() is MissionsViewModel.MissionState.Error)
         } finally {
             store.clear()
             viewModel.missionState.removeObserver(states.observer)
+        }
+    }
+
+    @Test
+    fun `completeMission logs mission completion after photo verification`() = runTest {
+        val repository = TestWanderlyRepository(context = context)
+        val missionGenerationService = FakePhotoVerificationService(
+            response = """{"verified":true,"reason":"Matches."}"""
+        )
+        val (viewModel, store) = createViewModel(
+            detailsRepository = FakeMissionDetailsRepository("details"),
+            repository = repository,
+            missionGenerationService = missionGenerationService
+        )
+        val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+
+        try {
+            viewModel.generateMission(44.4268, 26.1025, "Bucharest")
+            advanceUntilIdle()
+
+            viewModel.verifyPhoto(bitmap)
+            advanceUntilIdle()
+
+            viewModel.completeMission()
+            advanceUntilIdle()
+
+            assertEquals("Test Cafe", missionGenerationService.lastTargetName)
+            assertEquals("Bucharest", missionGenerationService.lastTargetCity)
+            assertEquals("mission-1", repository.lastMissionId)
+            assertEquals(1, repository.createMissionCalls)
+            assertEquals(1, repository.logMissionCompletionCalls)
+        } finally {
+            bitmap.recycle()
+            store.clear()
         }
     }
 
@@ -391,7 +425,11 @@ class MissionsViewModelTest {
         private val profileFlow = MutableStateFlow<Profile?>(null)
         var savedMission: SavedMission? = null
             private set
-        var completeMissionCalls = 0
+        var createMissionCalls = 0
+            private set
+        var logMissionCompletionCalls = 0
+            private set
+        var lastMissionId: String? = null
             private set
 
         override val currentProfile: StateFlow<Profile?> = profileFlow
@@ -418,8 +456,23 @@ class MissionsViewModelTest {
             savedMission = SavedMission(text, target, history, city, targetLat, targetLng)
         }
 
-        override suspend fun completeMission(): MissionCompletionResult {
-            completeMissionCalls++
+        override suspend fun createMission(
+            title: String,
+            description: String?,
+            category: String?,
+            placeId: String?,
+            placeName: String?,
+            lat: Double?,
+            lng: Double?,
+            source: String
+        ): String {
+            createMissionCalls++
+            return "mission-1"
+        }
+
+        override suspend fun logMissionCompletion(missionId: String, photoPath: String?): MissionCompletionResult {
+            logMissionCompletionCalls++
+            lastMissionId = missionId
             return MissionCompletionResult.Completed(
                 honey = 10,
                 streakCount = 1,
@@ -538,8 +591,42 @@ class MissionsViewModelTest {
     private class NoOpMissionGenerationService : MissionGenerationService {
         override suspend fun generateText(prompt: String): String = ""
         override suspend fun generateWithSearch(prompt: String): String = ""
-        override suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String =
+        override suspend fun verifyMissionPhoto(
+            bitmap: Bitmap,
+            targetName: String,
+            targetCity: String,
+            isFallbackMission: Boolean
+        ): String =
             """{"verified":false,"reason":"test stub"}"""
+        override suspend fun resolveCoordinates(
+            placeName: String,
+            targetCity: String,
+            userLat: Double,
+            userLng: Double,
+            radiusKm: Double
+        ): PlacesGeocoder.VerifiedPlace? = null
+    }
+
+    private class FakePhotoVerificationService(
+        private val response: String
+    ) : MissionGenerationService {
+        var lastTargetName: String? = null
+            private set
+        var lastTargetCity: String? = null
+            private set
+
+        override suspend fun generateText(prompt: String): String = ""
+        override suspend fun generateWithSearch(prompt: String): String = ""
+        override suspend fun verifyMissionPhoto(
+            bitmap: Bitmap,
+            targetName: String,
+            targetCity: String,
+            isFallbackMission: Boolean
+        ): String {
+            lastTargetName = targetName
+            lastTargetCity = targetCity
+            return response
+        }
         override suspend fun resolveCoordinates(
             placeName: String,
             targetCity: String,

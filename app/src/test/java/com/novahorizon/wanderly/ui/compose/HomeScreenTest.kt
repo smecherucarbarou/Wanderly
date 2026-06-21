@@ -94,7 +94,18 @@ class HomeScreenTest {
             override suspend fun getMissionHistory(): String = ""
             override suspend fun getMissionTarget(): String = "Test"
             override suspend fun getMissionCity(): String = "Bucharest"
-            override suspend fun completeMission() = MissionCompletionResult.Unauthenticated
+            override suspend fun createMission(
+                title: String,
+                description: String?,
+                category: String?,
+                placeId: String?,
+                placeName: String?,
+                lat: Double?,
+                lng: Double?,
+                source: String
+            ): String? = null
+            override suspend fun logMissionCompletion(missionId: String, photoPath: String?) =
+                MissionCompletionResult.Unauthenticated
         }
         val candidateProvider = object : MissionCandidateProvider {
             override suspend fun generateCandidates(

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.widgets.StreakTierHelper
 
 @Composable
 fun StreakPill(
@@ -46,7 +47,7 @@ fun StreakPill(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            painter = painterResource(id = R.drawable.ic_streak_fire),
+            painter = painterResource(id = StreakTierHelper.resolve(count).animFile),
             contentDescription = null,
             modifier = Modifier.size(16.dp),
             tint = Color.Unspecified

@@ -52,6 +52,7 @@ fun SplashScreen(
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         WanderlyColors.DarkBackground,
+                        WanderlyColors.DarkPrimary.copy(alpha = 0.18f),
                         WanderlyColors.DarkCardBackground
                     )
                 )

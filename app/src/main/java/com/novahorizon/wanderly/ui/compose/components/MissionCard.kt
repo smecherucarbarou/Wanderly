@@ -22,6 +22,7 @@ fun MissionCard(
     description: String,
     stateLabel: String,
     modifier: Modifier = Modifier,
+    descriptionMaxLines: Int = 3,
     primaryAction: (@Composable () -> Unit)? = null,
     secondaryAction: (@Composable () -> Unit)? = null
 ) {
@@ -40,8 +41,12 @@ fun MissionCard(
             text = description,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
+            maxLines = descriptionMaxLines,
+            overflow = if (descriptionMaxLines == Int.MAX_VALUE) {
+                TextOverflow.Clip
+            } else {
+                TextOverflow.Ellipsis
+            }
         )
         if (primaryAction != null) {
             Spacer(modifier = Modifier.height(spacing.xl))

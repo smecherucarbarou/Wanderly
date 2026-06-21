@@ -13,6 +13,7 @@ open class WanderlyRepository(context: Context) {
     private val preferencesStore = PreferencesStore(this.context)
     private val profileRepository = ProfileRepository(this.context, preferencesStore)
     private val socialRepository = SocialRepository()
+    private val missionRepository = MissionRepository()
     private val discoveryRepository = DiscoveryRepository()
     private val gemCurationRepository = GemCurationRepository(this.context)
 
@@ -31,7 +32,28 @@ open class WanderlyRepository(context: Context) {
     open suspend fun adminUpdateProfileStats(profileId: String, honey: Int, streakCount: Int): Boolean =
         profileRepository.adminUpdateProfileStats(profileId, honey, streakCount)
 
-    open suspend fun completeMission(): MissionCompletionResult = profileRepository.completeMission()
+    open suspend fun createMission(
+        title: String,
+        description: String?,
+        category: String?,
+        placeId: String?,
+        placeName: String?,
+        lat: Double?,
+        lng: Double?,
+        source: String
+    ): String? = missionRepository.insertMission(
+        title = title,
+        description = description,
+        category = category,
+        placeId = placeId,
+        placeName = placeName,
+        lat = lat,
+        lng = lng,
+        source = source
+    )
+
+    open suspend fun logMissionCompletion(missionId: String, photoPath: String? = null): MissionCompletionResult =
+        profileRepository.logMissionCompletion(missionId, photoPath)
 
     open suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
         profileRepository.updateProfileLocation(lat, lng)
@@ -60,6 +82,8 @@ open class WanderlyRepository(context: Context) {
     open suspend fun removeFriend(friendId: String): Boolean = socialRepository.removeFriend(friendId)
 
     open suspend fun getFriends(): List<Profile> = socialRepository.getFriends()
+
+    open suspend fun getFriendLocations(): List<FriendLocation> = socialRepository.getFriendLocations()
 
     open suspend fun fetchNearbyPlaces(lat: Double, lng: Double, radius: Int): List<String> =
         discoveryRepository.fetchNearbyPlaces(lat, lng, radius)

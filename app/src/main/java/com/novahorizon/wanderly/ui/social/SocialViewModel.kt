@@ -316,6 +316,38 @@ class SocialViewModel @Inject constructor(
         }
     }
 
+    fun loadSocialHome() {
+        _isLoading.value = true
+        _state.value = SocialUiState.Loading
+        viewModelScope.launch {
+            try {
+                val leaderboard = repository.getLeaderboard()
+                val acceptedFriends = repository.getFriends()
+                val incomingRequests = repository.getIncomingFriendRequests()
+                _leaderboard.postValue(leaderboard)
+                _friends.postValue(acceptedFriends)
+                _incomingFriendRequests.postValue(incomingRequests)
+                _state.value = if (
+                    leaderboard.isEmpty() &&
+                    acceptedFriends.isEmpty() &&
+                    incomingRequests.isEmpty()
+                ) {
+                    SocialUiState.Empty
+                } else {
+                    SocialUiState.Loaded(
+                        friends = acceptedFriends,
+                        leaderboard = leaderboard,
+                        incomingRequests = incomingRequests
+                    )
+                }
+            } catch (_: Exception) {
+                _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
+            } finally {
+                _isLoading.postValue(false)
+            }
+        }
+    }
+
     private companion object {
         val FRIEND_CODE_PATTERN = Regex("^[A-Z0-9]{6}$")
     }

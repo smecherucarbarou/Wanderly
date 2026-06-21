@@ -1,13 +1,44 @@
 package com.novahorizon.wanderly.ui.missions
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
 import androidx.core.graphics.scale
 import java.io.InputStream
 import kotlin.math.roundToInt
 
 object MissionPhotoDecoder {
     const val MAX_DIMENSION_PX = 1_280
+
+    fun decodeForVerification(context: Context, uri: Uri): Bitmap? {
+        val resolver = context.contentResolver
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val decoded = runCatching {
+                val source = ImageDecoder.createSource(resolver, uri)
+                ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.setTargetSampleSize(
+                        calculateInSampleSize(
+                            width = info.size.width,
+                            height = info.size.height,
+                            maxDimension = MAX_DIMENSION_PX
+                        )
+                    )
+                }
+            }.getOrNull()
+
+            if (decoded != null) {
+                return scaleDownIfNeeded(decoded)
+            }
+        }
+
+        return decodeForVerification {
+            resolver.openInputStream(uri)
+        }
+    }
 
     fun decodeForVerification(openInputStream: () -> InputStream?): Bitmap? {
         if (!hasSupportedImageHeader(openInputStream)) {

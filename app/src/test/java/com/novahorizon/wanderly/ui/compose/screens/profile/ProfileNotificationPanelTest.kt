@@ -34,7 +34,7 @@ class ProfileNotificationPanelTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Notifications").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Streak alerts are off").assertIsDisplayed()
         composeTestRule.onNodeWithText("Notifications off").assertIsDisplayed()
         composeTestRule.onNodeWithText("Enable notifications").performClick()
 

@@ -72,6 +72,15 @@ class MissionsViewModel @Inject constructor(
         set(value) {
             savedStateHandle[KEY_VERIFICATION_STEP] = value
         }
+    private var missionId: String?
+        get() = savedStateHandle[KEY_MISSION_ID]
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>(KEY_MISSION_ID)
+            } else {
+                savedStateHandle[KEY_MISSION_ID] = value
+            }
+        }
 
     init {
         startProfileCollector()
@@ -157,6 +166,19 @@ class MissionsViewModel @Inject constructor(
                     }
                 }
 
+                // Persist the mission server-side so it has a stable id used at completion.
+                // Insert failures are non-fatal: the mission still shows locally.
+                missionId = repository.createMission(
+                    title = preparedMission.target,
+                    description = preparedMission.text,
+                    category = preparedMission.category,
+                    placeId = preparedMission.placeId,
+                    placeName = preparedMission.target,
+                    lat = preparedMission.targetLat,
+                    lng = preparedMission.targetLng,
+                    source = MISSION_SOURCE_AI
+                )
+
                 repository.saveMissionData(
                     text = preparedMission.text,
                     target = preparedMission.target,
@@ -190,7 +212,9 @@ class MissionsViewModel @Inject constructor(
             target = verifiedTargetName,
             history = (verifiedTargetName + "|" + history).take(500),
             targetLat = place.latitude,
-            targetLng = place.longitude
+            targetLng = place.longitude,
+            category = DEFAULT_MISSION_TYPE,
+            placeId = place.placesId
         )
     }
 
@@ -212,7 +236,9 @@ class MissionsViewModel @Inject constructor(
             target = FALLBACK_MISSION_TARGET,
             history = (FALLBACK_MISSION_TARGET + "|" + history).take(500),
             targetLat = lat,
-            targetLng = lng
+            targetLng = lng,
+            category = DEFAULT_MISSION_TYPE,
+            placeId = null
         )
     }
 
@@ -248,9 +274,16 @@ class MissionsViewModel @Inject constructor(
                 }
 
                 val resultText = missionGenerationService
-                    .analyzeImage(bitmap, prompt)
+                    .verifyMissionPhoto(
+                        bitmap = bitmap,
+                        targetName = targetName,
+                        targetCity = targetCity,
+                        isFallbackMission = targetName == FALLBACK_MISSION_TARGET
+                    )
                     .trim()
                 val verification = AiResponseParser.parsePhotoVerification(resultText)
+                // The per-mission model no longer relies on a server verification token;
+                // photo verification is purely the AI's verified/false signal.
                 if (verification.verified) {
                     verificationStep = VERIFICATION_STEP_VERIFIED
                     _missionState.postValue(
@@ -309,15 +342,25 @@ class MissionsViewModel @Inject constructor(
             )
             return
         }
+        val activeMissionId = missionId
+        if (activeMissionId.isNullOrBlank()) {
+            _missionState.postValue(
+                MissionState.Error(
+                    UiText.DynamicString("This mission could not be synced. Generate a new mission.")
+                )
+            )
+            return
+        }
         _missionState.postValue(MissionState.Completing)
 
         viewModelScope.launch {
             try {
-                when (val result = repository.completeMission()) {
+                when (val result = repository.logMissionCompletion(activeMissionId, null)) {
                     is MissionCompletionResult.Completed -> {
                         repository.updateLastVisitDate(result.lastMissionDate)
                         repository.clearMissionData()
                         currentMission = null
+                        missionId = null
                         verificationStep = VERIFICATION_STEP_IDLE
 
                         val refreshedProfile = profileStateProvider.refreshProfile()
@@ -344,6 +387,7 @@ class MissionsViewModel @Inject constructor(
                     is MissionCompletionResult.AlreadyCompleted -> {
                         repository.clearMissionData()
                         currentMission = null
+                        missionId = null
                         verificationStep = VERIFICATION_STEP_IDLE
                         _missionState.postValue(MissionState.Idle)
                         _streakMessage.postValue("Mission already completed today.")
@@ -365,6 +409,8 @@ class MissionsViewModel @Inject constructor(
                 UiText.DynamicString("Please sign in again to complete missions.")
             MissionCompletionResult.Forbidden ->
                 UiText.DynamicString("Mission completion is not allowed for this account.")
+            MissionCompletionResult.MissionNotFound ->
+                UiText.DynamicString("This mission is no longer available. Generate a new one.")
             MissionCompletionResult.RateLimited ->
                 UiText.DynamicString("Too many mission completion attempts. Try again later.")
             MissionCompletionResult.NetworkFailure,
@@ -432,14 +478,18 @@ class MissionsViewModel @Inject constructor(
         val target: String,
         val history: String,
         val targetLat: Double,
-        val targetLng: Double
+        val targetLng: Double,
+        val category: String,
+        val placeId: String?
     )
 
     companion object {
         internal const val FALLBACK_MISSION_TARGET = "nearby public place"
         private const val DEFAULT_MISSION_TYPE = "landmark"
+        private const val MISSION_SOURCE_AI = "ai"
         private const val KEY_CURRENT_MISSION = "current_mission"
         private const val KEY_VERIFICATION_STEP = "verification_step"
+        private const val KEY_MISSION_ID = "mission_id"
         private const val VERIFICATION_STEP_IDLE = "idle"
         private const val VERIFICATION_STEP_RECEIVED = "received"
         private const val VERIFICATION_STEP_VERIFIED = "verified"

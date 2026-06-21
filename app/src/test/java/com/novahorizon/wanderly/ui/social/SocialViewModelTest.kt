@@ -268,6 +268,40 @@ class SocialViewModelTest {
     }
 
     @Test
+    fun `loadSocialHome emits one loaded state with leaderboard friends and requests`() = runTest {
+        val leader = testProfile("leader", "Queen Bee", honey = 400)
+        val friend = testProfile("friend", "Friend Bee", honey = 120)
+        val requester = testProfile("requester", "Request Bee", honey = 90)
+        val (viewModel, store) = createViewModel(
+            TestWanderlyRepository(
+                context = context,
+                leaderboard = listOf(leader),
+                friends = listOf(friend),
+                incomingFriendRequests = listOf(requester)
+            )
+        )
+
+        try {
+            viewModel.loadSocialHome()
+            advanceUntilIdle()
+
+            assertEquals(listOf(leader), viewModel.leaderboard.value)
+            assertEquals(listOf(friend), viewModel.friends.value)
+            assertEquals(listOf(requester), viewModel.incomingFriendRequests.value)
+            assertEquals(
+                SocialViewModel.SocialUiState.Loaded(
+                    friends = listOf(friend),
+                    leaderboard = listOf(leader),
+                    incomingRequests = listOf(requester)
+                ),
+                viewModel.state.value
+            )
+        } finally {
+            store.clear()
+        }
+    }
+
+    @Test
     fun `addFriend rejects special characters before repository call`() = runTest {
         val repository = TestWanderlyRepository(context)
         val (viewModel, store) = createViewModel(repository)

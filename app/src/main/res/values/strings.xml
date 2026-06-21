@@ -73,10 +73,8 @@
     <string name="profile_avatar_crop_failed">Could not use that cropped image. Please try again.</string>
     <string name="profile_avatar_change">Change photo</string>
     <string name="profile_avatar_uploading">Uploading photo...</string>
-    <string name="profile_notifications_title">Notifications</string>
-    <string name="profile_notifications_description">Use notifications for streak reminders and social updates without opening the app.</string>
-    <string name="profile_notifications_enabled">Notifications are enabled.</string>
-    <string name="profile_notifications_not_required">Notifications are available on this Android version.</string>
+    <string name="profile_notifications_title">Streak alerts are off</string>
+    <string name="profile_notifications_description">Turn them on for streak reminders and social updates when Wanderly needs your attention.</string>
     <string name="profile_notifications_permission_denied">Notifications are off.</string>
     <string name="profile_notifications_system_disabled">Notifications are disabled in system settings.</string>
     <string name="profile_notifications_enable">Enable notifications</string>
@@ -218,6 +216,10 @@
     <string name="social_copy_code">Copy Code</string>
     <string name="social_share">Share</string>
     <string name="social_default_username">Explorer</string>
+    <string name="social_incoming_requests_title">Incoming requests</string>
+    <string name="social_friends_title">Friends</string>
+    <string name="social_request_accept">Accept</string>
+    <string name="social_request_reject">Decline</string>
 
     <!-- Profile screen -->
     <string name="profile_loading">Preparing your hive</string>
@@ -246,6 +248,12 @@
     <string name="badge_cartographer">Cartographer</string>
     <string name="badge_gem_finder">Gem Finder</string>
     <string name="badge_queen_bee">Queen Bee</string>
+    <string name="badge_first_flight_requirement">Complete your first mission</string>
+    <string name="badge_7_day_streak_requirement">Keep a 7-day streak</string>
+    <string name="badge_photographer_requirement">Verify a mission photo</string>
+    <string name="badge_cartographer_requirement">Visit 3 cities</string>
+    <string name="badge_gem_finder_requirement">Discover a hidden gem</string>
+    <string name="badge_queen_bee_requirement">Earn 1,000 honey</string>
     <string name="onboarding_skip">Skip</string>
 
     <!-- Splash -->
@@ -275,6 +283,9 @@
     <string name="mission_received_label">Active mission</string>
     <string name="mission_verify_button">Verify with Photo</string>
     <string name="mission_learn_more">Learn More</string>
+    <string name="mission_details_loading">Checking reliable details for this place...</string>
+    <string name="mission_details_label">Place details</string>
+    <string name="mission_refresh_details">Refresh details</string>
     <string name="mission_verifying_title_home">Checking your photo</string>
     <string name="mission_verifying_title">Verifying your photo…</string>
     <string name="mission_verifying_description_home">Our AI is checking your photo to confirm you visited the location.</string>
@@ -309,4 +320,41 @@
     <string name="gems_idle_hint">Use your current location to scout nearby places worth a detour.</string>
     <string name="gems_find_button">Find Gems</string>
     <string name="cd_gem_view_details">View gem details</string>
+
+    <!-- Wanderly Guide / Plus -->
+    <string name="wanderly_guide_title">Wanderly Guide</string>
+    <string name="wanderly_guide_subtitle">Trip planning, local ideas, and pacing help.</string>
+    <string name="wanderly_guide_open">Ask Guide</string>
+    <string name="wanderly_guide_input_label">Message Wanderly Guide</string>
+    <string name="wanderly_guide_input_placeholder">Ask for a route, food idea, or rainy-day plan</string>
+    <string name="wanderly_guide_send">Send</string>
+    <string name="wanderly_guide_location_permission_rationale">Allow location so Wanderly Guide can use your current city.</string>
+    <string name="wanderly_guide_location_permission_required">Location permission denied. I will ask for your city instead.</string>
+    <string name="wanderly_guide_location_permission_settings">Location is off for Wanderly. I will ask for your city instead.</string>
+    <string name="wanderly_guide_loading">Thinking&#8230;</string>
+    <string name="wanderly_guide_empty_title">Where should we go next?</string>
+    <string name="wanderly_guide_empty_subtitle">Ask for itinerary ideas, cheap activities, trip pacing, food suggestions, or hidden gems.</string>
+    <string name="wanderly_guide_prompt_two_day">Plan a 2-day trip</string>
+    <string name="wanderly_guide_prompt_cheap_food">Find cheap food nearby</string>
+    <string name="wanderly_guide_prompt_rainy_day">Rainy-day ideas</string>
+    <string name="wanderly_guide_prompt_hidden_gems">Hidden gems around me</string>
+    <string name="wanderly_guide_quota_title">Daily Guide limit reached</string>
+    <string name="wanderly_guide_quota_body">Your free Guide requests are used for today. Wanderly Plus includes a higher daily limit.</string>
+    <string name="wanderly_guide_quota_reset_format">Resets on %1$s</string>
+    <string name="wanderly_guide_quota_remaining_format">%1$d/%2$d Guide requests left today</string>
+    <string name="wanderly_guide_login_title">Sign in to use Wanderly Guide</string>
+    <string name="wanderly_guide_login_body">Wanderly Guide uses your account to protect quota and keep Plus status server-controlled.</string>
+    <string name="wanderly_guide_login_action">Log in</string>
+    <string name="wanderly_guide_error_retry">Try again</string>
+    <string name="wanderly_plus_title">Wanderly Plus</string>
+    <string name="wanderly_plus_active">Plus active</string>
+    <string name="wanderly_plus_coming_soon">Coming soon</string>
+    <string name="wanderly_plus_dev_note">Plus can be enabled from Supabase for testing.</string>
+    <string name="wanderly_plus_benefit_usage">More Wanderly Guide usage</string>
+    <string name="wanderly_plus_benefit_itinerary">AI itinerary generator</string>
+    <string name="wanderly_plus_benefit_planning">Smarter trip planning</string>
+    <string name="wanderly_plus_benefit_recommendations">Better local recommendations</string>
+    <string name="wanderly_plus_benefit_badge">Exclusive profile badge and cosmetics</string>
+    <string name="wanderly_plus_benefit_no_ads">Future no-ads benefit</string>
+    <string name="cd_back">Back</string>
 </resources>

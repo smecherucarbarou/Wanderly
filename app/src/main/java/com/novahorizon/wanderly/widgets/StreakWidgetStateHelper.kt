@@ -119,7 +119,7 @@ object StreakWidgetStateHelper {
             subtitleColorRes = if (inDanger) R.color.accent else R.color.pollen_white,
             inDanger = inDanger,
             showStaleIndicator = showStaleIndicator,
-            message = resolveMessage(streakCount),
+            message = resolveMessage(streakCount, tier),
             frameIndex = resolveFrameIndex(now.toEpochMillis())
         )
     }
@@ -191,8 +191,12 @@ object StreakWidgetStateHelper {
         WidgetMood.STRESSED -> R.string.widget_streak_subtitle_stressed
     }
 
-    private fun resolveMessage(streakCount: Int): String? {
-        return if (streakCount <= 0) "Start again today." else null
+    private fun resolveMessage(streakCount: Int, tier: ResolvedStreakTier): String {
+        return if (streakCount <= 0) {
+            "Start again today."
+        } else {
+            "${tier.label} streak: $streakCount ${if (streakCount == 1) "day" else "days"}"
+        }
     }
 
     private fun parseDate(rawDate: String?): LocalDate? {

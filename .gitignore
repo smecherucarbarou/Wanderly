@@ -40,11 +40,16 @@ google-services.json
 /screen_*.png
 
 # Local generated audit/work outputs
+audits/
 /audit/
 /audit-artifacts/
 /mds/
 /site/
 /attached_assets/
+
+# Local Claude / AI tooling and notes
+.claude/
+CLAUDE.md
 
 # Local scripts / one-off tooling
 *.local.ps1

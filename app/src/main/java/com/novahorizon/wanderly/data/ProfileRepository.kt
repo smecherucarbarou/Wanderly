@@ -11,9 +11,11 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.util.DateUtils
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.CancellationException
@@ -26,6 +28,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import java.io.IOException
+import java.util.Date
 
 sealed class ProfileError {
     object SchemaCache : ProfileError()
@@ -59,14 +62,19 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class MissionCompletionRpcResponse(
-        val completed: Boolean,
-        val duplicate: Boolean,
-        val honey: Int,
-        val streak_count: Int,
-        val last_mission_date: String? = null,
-        val reward_honey: Int,
-        val streak_bonus_honey: Int
+    private data class MissionLogRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val reward_honey: Int? = null,
+        val streak_bonus: Int? = null,
+        val streak_count: Int? = null,
+        val honey: Int? = null
+    )
+
+    @Serializable
+    private data class MissionLogParams(
+        val p_mission_id: String,
+        val p_photo_path: String? = null
     )
 
     @Serializable
@@ -142,7 +150,10 @@ class ProfileRepository(
                 return@withContext null
             }
 
-            var profile = normalizeProfile(loadedProfile)
+            // last_mission_date is no longer selectable from profiles; hydrate it from local
+            // state (written by mission-completion RPCs) so streak logic keeps working.
+            val cachedMissionDate = preferencesStore.getStoredLastMissionDate()
+            var profile = normalizeProfile(loadedProfile).copy(last_mission_date = cachedMissionDate)
 
             _currentProfile.value = profile
             preferencesStore.cacheProfileStreakState(
@@ -307,48 +318,58 @@ class ProfileRepository(
         }
     }
 
-    suspend fun completeMission(): MissionCompletionResult = withContext(Dispatchers.IO) {
+    suspend fun logMissionCompletion(
+        missionId: String,
+        photoPath: String? = null
+    ): MissionCompletionResult = withContext(Dispatchers.IO) {
         val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
             ?: return@withContext MissionCompletionResult.Unauthenticated
         session.user?.id ?: return@withContext MissionCompletionResult.Unauthenticated
 
         try {
             val response = SupabaseClient.client.postgrest
-                .rpc("complete_mission")
-                .decodeSingle<MissionCompletionRpcResponse>()
+                .rpc("log_mission_completion", MissionLogParams(p_mission_id = missionId, p_photo_path = photoPath))
+                .decodeSingle<MissionLogRpcResponse>()
 
-            if (response.duplicate) {
+            if (response.success) {
+                // The new RPC does not echo a mission date; completing now means today (UTC).
+                val today = DateUtils.formatUtcDate(Date())
                 applyProgressSnapshot(
                     honey = response.honey,
                     streakCount = response.streak_count,
-                    lastMissionDate = response.last_mission_date
-                )
-                MissionCompletionResult.AlreadyCompleted(
-                    honey = response.honey,
-                    streakCount = response.streak_count,
-                    lastMissionDate = response.last_mission_date
-                )
-            } else if (response.completed && response.last_mission_date != null) {
-                applyProgressSnapshot(
-                    honey = response.honey,
-                    streakCount = response.streak_count,
-                    lastMissionDate = response.last_mission_date
+                    lastMissionDate = today
                 )
                 MissionCompletionResult.Completed(
-                    honey = response.honey,
-                    streakCount = response.streak_count,
-                    lastMissionDate = response.last_mission_date,
-                    rewardHoney = response.reward_honey,
-                    streakBonusHoney = response.streak_bonus_honey
+                    honey = response.honey ?: 0,
+                    streakCount = response.streak_count ?: 0,
+                    lastMissionDate = today,
+                    rewardHoney = response.reward_honey ?: 0,
+                    streakBonusHoney = response.streak_bonus ?: 0
                 )
             } else {
-                MissionCompletionResult.ServerFailure
+                mapMissionLogError(response.error)
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             mapMissionCompletionFailure(e)
         }
     }
+
+    private fun mapMissionLogError(error: String?): MissionCompletionResult =
+        when (error) {
+            "already_completed" -> {
+                val snapshot = _currentProfile.value
+                MissionCompletionResult.AlreadyCompleted(
+                    honey = snapshot?.honey ?: 0,
+                    streakCount = snapshot?.streak_count ?: 0,
+                    lastMissionDate = snapshot?.last_mission_date
+                )
+            }
+            "not_your_mission" -> MissionCompletionResult.Forbidden
+            "mission_not_found" -> MissionCompletionResult.MissionNotFound
+            "not_authenticated" -> MissionCompletionResult.Unauthenticated
+            else -> MissionCompletionResult.ServerFailure
+        }
 
     suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
         withContext(Dispatchers.IO) {
@@ -454,8 +475,10 @@ class ProfileRepository(
 
     private suspend fun selectProfileWithSchemaRetry(userId: String): Profile? =
         withPostgrestSchemaCacheRetry {
+            // Only request columns the client is still allowed to read; hidden server-owned
+            // columns (last_*, updated_at, admin_role) are no longer selectable directly.
             SupabaseClient.client.postgrest[Constants.TABLE_PROFILES]
-                .select { filter { eq("id", userId) } }
+                .select(Columns.list(*PROFILE_VISIBLE_COLUMNS.toTypedArray())) { filter { eq("id", userId) } }
                 .decodeSingleOrNull<Profile>()
         }
 

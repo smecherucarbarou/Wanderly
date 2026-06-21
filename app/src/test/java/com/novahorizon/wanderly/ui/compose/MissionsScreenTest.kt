@@ -31,8 +31,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -135,7 +137,35 @@ class MissionsScreenTest {
         }
     }
 
-    private fun createViewModel(): Pair<MissionsViewModel, ViewModelStore> {
+    @Test
+    fun `shows mission details inline after learn more result`() = runTest {
+        val (viewModel, store) = createViewModel(detailsResponse = "A verified local summary.")
+
+        try {
+            composeTestRule.setContent {
+                WanderlyTheme {
+                    MissionsScreen(
+                        viewModel = viewModel,
+                        onGenerateMission = {},
+                        onVerifyPhoto = {},
+                        onCompleteMission = {},
+                        onLearnMore = {}
+                    )
+                }
+            }
+
+            viewModel.fetchPlaceDetails()
+            advanceUntilIdle()
+            composeTestRule.waitForIdle()
+            composeTestRule.onNodeWithText("A verified local summary.").fetchSemanticsNode()
+        } finally {
+            store.clear()
+        }
+    }
+
+    private fun createViewModel(
+        detailsResponse: String = ""
+    ): Pair<MissionsViewModel, ViewModelStore> {
         val repository = object : WanderlyRepository(context) {
             private val profileFlow = MutableStateFlow<Profile?>(null)
             override val currentProfile: StateFlow<Profile?> = profileFlow
@@ -143,7 +173,18 @@ class MissionsScreenTest {
             override suspend fun getMissionHistory(): String = ""
             override suspend fun getMissionTarget(): String = "Test"
             override suspend fun getMissionCity(): String = "Bucharest"
-            override suspend fun completeMission() = MissionCompletionResult.Unauthenticated
+            override suspend fun createMission(
+                title: String,
+                description: String?,
+                category: String?,
+                placeId: String?,
+                placeName: String?,
+                lat: Double?,
+                lng: Double?,
+                source: String
+            ): String? = null
+            override suspend fun logMissionCompletion(missionId: String, photoPath: String?) =
+                MissionCompletionResult.Unauthenticated
         }
         val candidateProvider = object : MissionCandidateProvider {
             override suspend fun generateCandidates(
@@ -159,7 +200,7 @@ class MissionsScreenTest {
             ) = MissionPlaceSelectionResult.Fallback("test")
         }
         val detailsRepo = object : MissionDetailsRepository() {
-            override suspend fun getPlaceDetails(placeName: String, targetCity: String) = ""
+            override suspend fun getPlaceDetails(placeName: String, targetCity: String) = detailsResponse
         }
 
         val store = ViewModelStore()
