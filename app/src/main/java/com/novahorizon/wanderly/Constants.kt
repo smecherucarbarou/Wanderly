@@ -37,6 +37,8 @@ object Constants {
         "$WEB_SCHEME://$WEB_HOST/$INVITE_PATH_SEGMENT/$friendCode"
 
     const val TABLE_PROFILES = "profiles"
+    const val TABLE_STREAK_MILESTONES = "streak_milestones"
+    const val TABLE_STREAK_MILESTONE_CLAIMS = "streak_milestone_claims"
     const val STORAGE_BUCKET_AVATARS = "avatars"
     
     const val DAILY_HONEY_REWARD = 10

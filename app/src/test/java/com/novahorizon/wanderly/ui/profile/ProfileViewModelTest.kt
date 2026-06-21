@@ -17,6 +17,7 @@ import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.ProfileUpdateResult
 import com.novahorizon.wanderly.data.SensitiveProfileMutationResult
+import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
 import kotlinx.coroutines.Dispatchers
@@ -257,6 +258,71 @@ class ProfileViewModelTest {
         }
     }
 
+    @Test
+    fun `claimStreakMilestone updates profile and reloads milestones on success`() = runTest {
+        val profile = testProfile().copy(streak_count = 7, honey = 100)
+        val claimedProfile = profile.copy(honey = 250)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            milestones = listOf(milestoneStatus(threshold = 7, reached = true, claimed = false)),
+            claimMilestoneResult = SensitiveProfileMutationResult.Success(claimedProfile),
+            milestonesAfterClaim = listOf(milestoneStatus(threshold = 7, reached = true, claimed = true))
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.claimStreakMilestone(7)
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_streak_milestone_claimed), event.message)
+            assertEquals(false, event.isError)
+            assertEquals(claimedProfile, viewModel.profile.value)
+            assertEquals(true, viewModel.streakMilestones.value?.single()?.claimed)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `claimStreakMilestone emits already-claimed message when rejected`() = runTest {
+        val profile = testProfile().copy(streak_count = 7)
+        val repository = TestWanderlyRepository(
+            context = context,
+            initialProfile = profile,
+            claimMilestoneResult = SensitiveProfileMutationResult.Rejected("already_claimed")
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeProfileEvents()
+
+        try {
+            viewModel.claimStreakMilestone(7)
+            advanceUntilIdle()
+
+            val event = events.last() as ProfileViewModel.ProfileEvent.ShowMessage
+            assertEquals(UiText.StringResource(R.string.profile_streak_milestone_already_claimed), event.message)
+            assertTrue(event.isError)
+        } finally {
+            store.clear()
+            viewModel.profileEvent.removeObserver(events.observer)
+        }
+    }
+
+    private fun milestoneStatus(
+        threshold: Int,
+        reached: Boolean,
+        claimed: Boolean
+    ): StreakMilestoneStatus = StreakMilestoneStatus(
+        threshold = threshold,
+        title = "Milestone $threshold",
+        rewardHoney = 150,
+        reached = reached,
+        claimed = claimed
+    )
+
     private fun createViewModel(
         repository: TestWanderlyRepository
     ): Pair<ProfileViewModel, ViewModelStore> {
@@ -321,9 +387,13 @@ class ProfileViewModelTest {
         private val uploadResult: AvatarUploadResult = AvatarUploadResult.Success(REMOTE_AVATAR_PATH),
         private val uploadError: Exception? = null,
         private val updateSucceeds: Boolean = true,
-        private val streakFreezeResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success()
+        private val streakFreezeResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success(),
+        private val milestones: List<StreakMilestoneStatus> = emptyList(),
+        private val claimMilestoneResult: SensitiveProfileMutationResult = SensitiveProfileMutationResult.Success(),
+        private val milestonesAfterClaim: List<StreakMilestoneStatus>? = null
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow(initialProfile)
+        private var hasClaimed = false
         var updatedProfile: Profile? = null
             private set
         var uploadedProfileId: String? = null
@@ -363,6 +433,20 @@ class ProfileViewModelTest {
                 profileFlow.value = it
             }
             return streakFreezeResult
+        }
+
+        override suspend fun getStreakMilestones(): List<StreakMilestoneStatus> {
+            return if (hasClaimed && milestonesAfterClaim != null) milestonesAfterClaim else milestones
+        }
+
+        override suspend fun claimStreakMilestone(threshold: Int): SensitiveProfileMutationResult {
+            (claimMilestoneResult as? SensitiveProfileMutationResult.Success)?.profile?.let {
+                profileFlow.value = it
+            }
+            if (claimMilestoneResult is SensitiveProfileMutationResult.Success) {
+                hasClaimed = true
+            }
+            return claimMilestoneResult
         }
     }
 

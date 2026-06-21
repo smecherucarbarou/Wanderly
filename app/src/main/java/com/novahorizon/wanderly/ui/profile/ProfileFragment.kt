@@ -150,6 +150,7 @@ class ProfileFragment : Fragment() {
                         onCopyFriendCode = { copyFriendCode(it) },
                         onShareFriendCode = { shareFriendCode(it) },
                         onUseStreakFreeze = { viewModel.useStreakFreeze() },
+                        onClaimMilestone = { viewModel.claimStreakMilestone(it) },
                         onRetry = { viewModel.loadProfile() }
                     )
                 }

@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.LoadingState
 import com.novahorizon.wanderly.ui.compose.components.WanderlyEmptyState
@@ -49,11 +50,14 @@ fun ProfileScreen(
     onCopyFriendCode: (String) -> Unit = {},
     onShareFriendCode: (String) -> Unit = {},
     onUseStreakFreeze: () -> Unit = {},
+    onClaimMilestone: (Int) -> Unit = {},
     onRetry: () -> Unit = { viewModel.loadProfile() }
 ) {
     val profileState by viewModel.profileState.asFlow().collectAsStateWithLifecycle(ProfileUiState.Loading)
     val avatarUploadState by viewModel.avatarUploadState.asFlow()
         .collectAsStateWithLifecycle(ProfileViewModel.AvatarUploadState.Idle)
+    val streakMilestones by viewModel.streakMilestones.asFlow()
+        .collectAsStateWithLifecycle(emptyList())
 
     when (profileState) {
         is ProfileUiState.Loading -> {
@@ -83,7 +87,9 @@ fun ProfileScreen(
                 onEditUsername = onEditUsername,
                 onCopyFriendCode = onCopyFriendCode,
                 onShareFriendCode = onShareFriendCode,
-                onUseStreakFreeze = onUseStreakFreeze
+                onUseStreakFreeze = onUseStreakFreeze,
+                streakMilestones = streakMilestones,
+                onClaimMilestone = onClaimMilestone
             )
         }
     }
@@ -124,7 +130,9 @@ private fun ProfileContent(
     onEditUsername: () -> Unit,
     onCopyFriendCode: (String) -> Unit,
     onShareFriendCode: (String) -> Unit,
-    onUseStreakFreeze: () -> Unit
+    onUseStreakFreeze: () -> Unit,
+    streakMilestones: List<StreakMilestoneStatus>,
+    onClaimMilestone: (Int) -> Unit
 ) {
     val spacing = WanderlyTheme.spacing
     val honey = profile.honey ?: 0
@@ -183,6 +191,14 @@ private fun ProfileContent(
                     freezesLeft = streakFreezes,
                     atRisk = streakAtRisk,
                     onUseFreeze = onUseStreakFreeze
+                )
+            }
+
+            if (streakMilestones.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(spacing.lg))
+                ProfileMilestonesPanel(
+                    milestones = streakMilestones,
+                    onClaim = onClaimMilestone
                 )
             }
 

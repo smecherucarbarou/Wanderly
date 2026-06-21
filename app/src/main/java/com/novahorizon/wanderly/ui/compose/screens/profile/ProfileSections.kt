@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.ui.compose.components.RankChip
 import com.novahorizon.wanderly.ui.compose.components.WanderlyCard
 import com.novahorizon.wanderly.ui.compose.components.WanderlyStatCard
@@ -440,6 +443,113 @@ internal fun ProfileNotificationPanel(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+@Composable
+internal fun ProfileMilestonesPanel(
+    milestones: List<StreakMilestoneStatus>,
+    onClaim: (Int) -> Unit
+) {
+    if (milestones.isEmpty()) return
+    val spacing = WanderlyTheme.spacing
+
+    WanderlyCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing.md)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.profile_streak_milestones_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        milestones.forEach { milestone ->
+            Spacer(modifier = Modifier.height(spacing.md))
+            ProfileMilestoneRow(milestone = milestone, onClaim = onClaim)
+        }
+    }
+}
+
+@Composable
+private fun ProfileMilestoneRow(
+    milestone: StreakMilestoneStatus,
+    onClaim: (Int) -> Unit
+) {
+    val spacing = WanderlyTheme.spacing
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = milestone.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(spacing.xs))
+            Text(
+                text = stringResource(R.string.profile_streak_milestone_requirement, milestone.threshold) +
+                    "  ·  " +
+                    stringResource(R.string.profile_streak_milestone_reward, "%,d".format(milestone.rewardHoney)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        when {
+            milestone.claimable -> {
+                Button(
+                    onClick = { onClaim(milestone.threshold) },
+                    contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = stringResource(R.string.profile_streak_milestone_claim),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            milestone.claimed -> {
+                MilestoneStatusChip(text = stringResource(R.string.profile_streak_milestone_claimed_label))
+            }
+            else -> {
+                MilestoneStatusChip(text = stringResource(R.string.profile_streak_milestone_locked_label))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MilestoneStatusChip(text: String) {
+    val spacing = WanderlyTheme.spacing
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.small
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = spacing.sm, vertical = spacing.xs),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
     }
 }
 

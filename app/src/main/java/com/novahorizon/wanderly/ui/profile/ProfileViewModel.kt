@@ -14,6 +14,7 @@ import com.novahorizon.wanderly.data.ProfileError
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.ProfileUpdateResult
 import com.novahorizon.wanderly.data.SensitiveProfileMutationResult
+import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +44,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _avatarUploadState = MutableLiveData<AvatarUploadState>(AvatarUploadState.Idle)
     val avatarUploadState: LiveData<AvatarUploadState> = _avatarUploadState
+
+    private val _streakMilestones = MutableLiveData<List<StreakMilestoneStatus>>(emptyList())
+    val streakMilestones: LiveData<List<StreakMilestoneStatus>> = _streakMilestones
 
     init {
         startProfileCollector()
@@ -83,6 +87,7 @@ class ProfileViewModel @Inject constructor(
                 val displayProfile = mergeWithOptimisticProfile(profile)
                 _profile.value = displayProfile
                 _profileState.value = ProfileUiState.Loaded(displayProfile)
+                loadStreakMilestones()
                 if (!hasCheckedBadgesThisSession) {
                     hasCheckedBadgesThisSession = true
                     checkAndUnlockBadges(displayProfile)
@@ -272,6 +277,48 @@ class ProfileViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun claimStreakMilestone(threshold: Int) {
+        viewModelScope.launch {
+            when (val result = repository.claimStreakMilestone(threshold)) {
+                is SensitiveProfileMutationResult.Success -> {
+                    result.profile?.let { updated ->
+                        _profile.value = updated
+                        _profileState.value = ProfileUiState.Loaded(updated)
+                    }
+                    loadStreakMilestones()
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_streak_milestone_claimed),
+                        isError = false
+                    )
+                }
+                is SensitiveProfileMutationResult.Rejected -> {
+                    val message = when (result.reason) {
+                        "already_claimed" -> R.string.profile_streak_milestone_already_claimed
+                        "not_reached" -> R.string.profile_streak_milestone_locked
+                        else -> R.string.profile_streak_milestone_failed
+                    }
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(message),
+                        isError = true
+                    )
+                }
+                SensitiveProfileMutationResult.Unauthenticated -> {
+                    _profileEvent.value = ProfileEvent.LoggedOut
+                }
+                else -> {
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_streak_milestone_failed),
+                        isError = true
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun loadStreakMilestones() {
+        _streakMilestones.value = repository.getStreakMilestones()
     }
 
     fun clearProfileEvent() {

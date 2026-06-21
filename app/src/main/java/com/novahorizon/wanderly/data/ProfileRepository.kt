@@ -122,6 +122,24 @@ class ProfileRepository(
     )
 
     @Serializable
+    private data class ClaimMilestoneParams(
+        val p_threshold: Int
+    )
+
+    @Serializable
+    private data class StreakMilestoneClaimRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val reward_honey: Int? = null,
+        val honey: Int? = null
+    )
+
+    @Serializable
+    private data class StreakMilestoneClaimRow(
+        val threshold: Int
+    )
+
+    @Serializable
     private data class UsernameUpdateRpcResponse(
         val success: Boolean,
         val error_code: String? = null,
@@ -462,6 +480,66 @@ class ProfileRepository(
                     _currentProfile.value = updated
                 }
                 SensitiveProfileMutationResult.Success(updated)
+            } else {
+                SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            mapSensitiveProfileMutationFailure(e)
+        }
+    }
+
+    suspend fun getStreakMilestones(): List<StreakMilestoneStatus> = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext emptyList()
+        val userId = session.user?.id ?: return@withContext emptyList()
+
+        try {
+            val catalog = withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest[Constants.TABLE_STREAK_MILESTONES]
+                    .select()
+                    .decodeList<StreakMilestone>()
+            }.sortedBy { it.threshold }
+
+            val claimedThresholds = withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest[Constants.TABLE_STREAK_MILESTONE_CLAIMS]
+                    .select(Columns.list("threshold")) { filter { eq("user_id", userId) } }
+                    .decodeList<StreakMilestoneClaimRow>()
+            }.map { it.threshold }.toSet()
+
+            val streak = _currentProfile.value?.streak_count ?: 0
+            catalog.map { milestone ->
+                StreakMilestoneStatus(
+                    threshold = milestone.threshold,
+                    title = milestone.title,
+                    rewardHoney = milestone.reward_honey,
+                    reached = streak >= milestone.threshold,
+                    claimed = milestone.threshold in claimedThresholds
+                )
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Failed to load streak milestones: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun claimStreakMilestone(threshold: Int): SensitiveProfileMutationResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+        session.user?.id ?: return@withContext SensitiveProfileMutationResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("claim_streak_milestone", ClaimMilestoneParams(threshold))
+                .decodeSingle<StreakMilestoneClaimRpcResponse>()
+            if (response.success) {
+                val profile = applyProgressSnapshot(
+                    honey = response.honey,
+                    streakCount = null,
+                    lastMissionDate = null
+                )
+                SensitiveProfileMutationResult.Success(profile)
             } else {
                 SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
             }

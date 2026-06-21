@@ -240,6 +240,16 @@
     <string name="profile_streak_freeze_used">Freeze used. Your streak is protected.</string>
     <string name="profile_streak_freeze_none">No freezes left.</string>
     <string name="profile_streak_freeze_failed">Couldn\'t use freeze. Check your connection.</string>
+    <string name="profile_streak_milestones_title">Streak milestones</string>
+    <string name="profile_streak_milestone_reward">+%1$s honey</string>
+    <string name="profile_streak_milestone_requirement">%1$d-day streak</string>
+    <string name="profile_streak_milestone_claim">Claim</string>
+    <string name="profile_streak_milestone_claimed_label">Claimed</string>
+    <string name="profile_streak_milestone_locked_label">Locked</string>
+    <string name="profile_streak_milestone_claimed">Milestone claimed. Honey added.</string>
+    <string name="profile_streak_milestone_already_claimed">You already claimed this milestone.</string>
+    <string name="profile_streak_milestone_locked">Keep your streak going to unlock this milestone.</string>
+    <string name="profile_streak_milestone_failed">Couldn\'t claim milestone. Check your connection.</string>
     <string name="profile_rank_progress">Hive progress</string>
     <string name="profile_rank_progress_format">%1$s / %2$s honey to next rank</string>
     <string name="profile_badges_title">Badges</string>
