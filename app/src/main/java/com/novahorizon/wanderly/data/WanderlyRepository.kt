@@ -76,6 +76,14 @@ open class WanderlyRepository(context: Context) {
     open suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult =
         profileRepository.claimReferral(friendCode)
 
+    open suspend fun getShopItems(): List<ShopItemStatus> = profileRepository.getShopItems()
+
+    open suspend fun purchaseShopItem(itemId: String): ShopPurchaseResult =
+        profileRepository.purchaseShopItem(itemId)
+
+    open suspend fun equipCosmetic(itemId: String): ShopEquipResult =
+        profileRepository.equipCosmetic(itemId)
+
     open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
     open suspend fun addFriendByCode(friendCode: String): String = socialRepository.addFriendByCode(friendCode)

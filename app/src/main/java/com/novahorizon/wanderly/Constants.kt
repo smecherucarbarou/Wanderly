@@ -40,6 +40,8 @@ object Constants {
     const val TABLE_STREAK_MILESTONES = "streak_milestones"
     const val TABLE_STREAK_MILESTONE_CLAIMS = "streak_milestone_claims"
     const val TABLE_REFERRALS = "referrals"
+    const val TABLE_SHOP_ITEMS = "shop_items"
+    const val TABLE_USER_INVENTORY = "user_inventory"
     const val STORAGE_BUCKET_AVATARS = "avatars"
     
     const val DAILY_HONEY_REWARD = 10

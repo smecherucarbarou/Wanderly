@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -49,10 +50,17 @@ internal fun ProfileAvatar(
     displayName: String,
     streakCount: Int,
     isUploading: Boolean,
-    onEditAvatar: () -> Unit
+    onEditAvatar: () -> Unit,
+    equippedFrameSku: String? = null
 ) {
     val editAvatarDescription = stringResource(R.string.cd_edit_avatar)
     val haloStyle = ProfileFragment.resolveProfileHaloStyle(streakCount)
+    val frameColor = when (equippedFrameSku) {
+        "frame_gold" -> Color(0xFFFFD24A)
+        "frame_hex" -> Color(0xFFF2A03D)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val frameWidth = if (equippedFrameSku == null) 3.dp else 4.dp
     Box(
         modifier = Modifier.size(if (haloStyle == null) 104.dp else 124.dp),
         contentAlignment = Alignment.Center
@@ -77,7 +85,7 @@ internal fun ProfileAvatar(
                 .size(104.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                .border(frameWidth, frameColor, CircleShape)
                 .clickable(enabled = !isUploading, onClick = onEditAvatar)
                 .semantics {
                     role = Role.Button

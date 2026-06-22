@@ -158,6 +158,26 @@ class ProfileRepository(
     )
 
     @Serializable
+    private data class ShopItemParams(
+        val p_item_id: String
+    )
+
+    @Serializable
+    internal data class PurchaseShopItemRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val honey: Int? = null,
+        val item: String? = null
+    )
+
+    @Serializable
+    internal data class EquipCosmeticRpcResponse(
+        val success: Boolean,
+        val error: String? = null,
+        val type: String? = null
+    )
+
+    @Serializable
     private data class UsernameUpdateRpcResponse(
         val success: Boolean,
         val error_code: String? = null,
@@ -604,6 +624,104 @@ class ProfileRepository(
         }
     }
 
+    suspend fun getShopItems(): List<ShopItemStatus> = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext emptyList()
+        val userId = session.user?.id ?: return@withContext emptyList()
+
+        try {
+            val catalog = withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest[Constants.TABLE_SHOP_ITEMS]
+                    .select { filter { eq("active", true) } }
+                    .decodeList<ShopItem>()
+            }.sortedWith(compareBy({ it.type }, { it.cost_honey }))
+
+            val ownedIds = withPostgrestSchemaCacheRetry {
+                SupabaseClient.client.postgrest[Constants.TABLE_USER_INVENTORY]
+                    .select(Columns.list("item_id")) { filter { eq("user_id", userId) } }
+                    .decodeList<UserInventoryItemRow>()
+            }.map { it.item_id }.toSet()
+
+            val profile = _currentProfile.value
+            val honey = profile?.honey ?: 0
+            val equippedIds = setOfNotNull(
+                profile?.equipped_frame,
+                profile?.equipped_skin,
+                profile?.equipped_widget_theme
+            )
+
+            catalog.map { item ->
+                ShopItemStatus(
+                    id = item.id,
+                    sku = item.sku,
+                    name = item.name,
+                    type = item.type,
+                    costHoney = item.cost_honey,
+                    owned = item.id in ownedIds,
+                    equipped = item.id in equippedIds,
+                    affordable = honey >= item.cost_honey
+                )
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Failed to load shop items: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun purchaseShopItem(itemId: String): ShopPurchaseResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext ShopPurchaseResult.Unauthenticated
+        session.user?.id ?: return@withContext ShopPurchaseResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("purchase_shop_item", ShopItemParams(itemId))
+                .decodeRpc<PurchaseShopItemRpcResponse>()
+            val result = mapPurchaseResponse(response)
+            if (result is ShopPurchaseResult.Success) {
+                // RPC echoes the post-debit balance; refresh honey in the shared profile state.
+                _currentProfile.value?.let { _currentProfile.value = it.copy(honey = result.newHoney) }
+            }
+            result
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Shop purchase failed: ${e.message}", e)
+            ShopPurchaseResult.Failure
+        }
+    }
+
+    suspend fun equipCosmetic(itemId: String): ShopEquipResult = withContext(Dispatchers.IO) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+            ?: return@withContext ShopEquipResult.Unauthenticated
+        session.user?.id ?: return@withContext ShopEquipResult.Unauthenticated
+
+        try {
+            val response = SupabaseClient.client.postgrest
+                .rpc("equip_cosmetic", ShopItemParams(itemId))
+                .decodeRpc<EquipCosmeticRpcResponse>()
+            val result = mapEquipResponse(response)
+            if (result is ShopEquipResult.Success) {
+                applyEquippedCosmetic(result.type, itemId)
+            }
+            result
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Shop equip failed: ${e.message}", e)
+            ShopEquipResult.Failure
+        }
+    }
+
+    private fun applyEquippedCosmetic(type: String?, itemId: String) {
+        val current = _currentProfile.value ?: return
+        _currentProfile.value = when (type) {
+            CosmeticType.AVATAR_FRAME -> current.copy(equipped_frame = itemId)
+            CosmeticType.BUZZY_SKIN -> current.copy(equipped_skin = itemId)
+            CosmeticType.WIDGET_THEME -> current.copy(equipped_widget_theme = itemId)
+            else -> current
+        }
+    }
+
     suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
         val result = avatarRepository.uploadAvatar(uri, profileId)
         if (result is AvatarUploadResult.Success && _currentProfile.value?.id == profileId) {
@@ -738,6 +856,26 @@ class ProfileRepository(
                 avatar_url = normalizeAvatarUrl(profile.avatar_url),
             )
         }
+
+        internal fun mapPurchaseResponse(response: PurchaseShopItemRpcResponse): ShopPurchaseResult =
+            if (response.success) {
+                ShopPurchaseResult.Success(newHoney = response.honey ?: 0, sku = response.item)
+            } else when (response.error) {
+                "item_unavailable" -> ShopPurchaseResult.ItemUnavailable
+                "already_owned" -> ShopPurchaseResult.AlreadyOwned
+                "insufficient_honey" -> ShopPurchaseResult.InsufficientHoney
+                "not_authenticated" -> ShopPurchaseResult.Unauthenticated
+                else -> ShopPurchaseResult.Failure
+            }
+
+        internal fun mapEquipResponse(response: EquipCosmeticRpcResponse): ShopEquipResult =
+            if (response.success) {
+                ShopEquipResult.Success(type = response.type)
+            } else when (response.error) {
+                "not_owned" -> ShopEquipResult.NotOwned
+                "not_authenticated" -> ShopEquipResult.Unauthenticated
+                else -> ShopEquipResult.Failure
+            }
 
         internal fun mapUsernameRpcErrorCode(errorCode: String?): ProfileError {
             return when (errorCode) {

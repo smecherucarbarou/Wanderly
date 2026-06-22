@@ -14,6 +14,9 @@ import com.novahorizon.wanderly.data.ProfileError
 import com.novahorizon.wanderly.data.ProfileStateProvider
 import com.novahorizon.wanderly.data.ProfileUpdateResult
 import com.novahorizon.wanderly.data.SensitiveProfileMutationResult
+import com.novahorizon.wanderly.data.ShopEquipResult
+import com.novahorizon.wanderly.data.ShopItemStatus
+import com.novahorizon.wanderly.data.ShopPurchaseResult
 import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.ui.common.UiText
@@ -53,6 +56,9 @@ class ProfileViewModel @Inject constructor(
 
     private val _gemsFound = MutableLiveData(0)
     val gemsFound: LiveData<Int> = _gemsFound
+
+    private val _shopItems = MutableLiveData<List<ShopItemStatus>>(emptyList())
+    val shopItems: LiveData<List<ShopItemStatus>> = _shopItems
 
     init {
         startProfileCollector()
@@ -96,6 +102,7 @@ class ProfileViewModel @Inject constructor(
                 loadStreakMilestones()
                 loadReferralState()
                 loadGemsFound()
+                loadShopItems()
                 if (!hasCheckedBadgesThisSession) {
                     hasCheckedBadgesThisSession = true
                     checkAndUnlockBadges(displayProfile)
@@ -394,6 +401,67 @@ class ProfileViewModel @Inject constructor(
 
     private suspend fun loadGemsFound() {
         _gemsFound.value = repository.countGemDiscoveries()
+    }
+
+    private suspend fun loadShopItems() {
+        _shopItems.value = repository.getShopItems()
+    }
+
+    fun purchaseShopItem(itemId: String) {
+        viewModelScope.launch {
+            when (val result = repository.purchaseShopItem(itemId)) {
+                is ShopPurchaseResult.Success -> {
+                    repository.currentProfile.value?.let { updated ->
+                        _profile.value = updated
+                        _profileState.value = ProfileUiState.Loaded(updated)
+                    }
+                    loadShopItems()
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_shop_purchase_success),
+                        isError = false
+                    )
+                }
+                ShopPurchaseResult.InsufficientHoney -> showShopError(R.string.profile_shop_insufficient_honey)
+                ShopPurchaseResult.AlreadyOwned -> {
+                    loadShopItems()
+                    showShopError(R.string.profile_shop_already_owned)
+                }
+                ShopPurchaseResult.ItemUnavailable -> {
+                    loadShopItems()
+                    showShopError(R.string.profile_shop_item_unavailable)
+                }
+                ShopPurchaseResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
+                ShopPurchaseResult.Failure -> showShopError(R.string.profile_shop_purchase_failed)
+            }
+        }
+    }
+
+    fun equipCosmetic(itemId: String) {
+        viewModelScope.launch {
+            when (val result = repository.equipCosmetic(itemId)) {
+                is ShopEquipResult.Success -> {
+                    repository.currentProfile.value?.let { updated ->
+                        _profile.value = updated
+                        _profileState.value = ProfileUiState.Loaded(updated)
+                    }
+                    loadShopItems()
+                    _profileEvent.value = ProfileEvent.ShowMessage(
+                        UiText.resource(R.string.profile_shop_equipped_message),
+                        isError = false
+                    )
+                }
+                ShopEquipResult.NotOwned -> {
+                    loadShopItems()
+                    showShopError(R.string.profile_shop_not_owned)
+                }
+                ShopEquipResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
+                ShopEquipResult.Failure -> showShopError(R.string.profile_shop_equip_failed)
+            }
+        }
+    }
+
+    private fun showShopError(messageRes: Int) {
+        _profileEvent.value = ProfileEvent.ShowMessage(UiText.resource(messageRes), isError = true)
     }
 
     fun clearProfileEvent() {

@@ -83,4 +83,52 @@ class RpcResponseDecodingTest {
         assertTrue(response.success)
         assertEquals(100, response.reward_honey)
     }
+
+    @Test
+    fun `purchase_shop_item success payload decodes all keys and maps to Success`() {
+        // Real shape: jsonb_build_object('success',true,'honey',v_honey,'item',v_item.sku)
+        val payload = """{"success":true,"honey":120,"item":"frame_hex"}"""
+        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.PurchaseShopItemRpcResponse>(payload)
+        assertTrue(response.success)
+        assertEquals(120, response.honey)
+        assertEquals("frame_hex", response.item)
+        assertEquals(
+            ShopPurchaseResult.Success(newHoney = 120, sku = "frame_hex"),
+            ProfileRepository.mapPurchaseResponse(response)
+        )
+    }
+
+    @Test
+    fun `purchase_shop_item insufficient_honey payload maps correctly`() {
+        val payload = """{"success":false,"error":"insufficient_honey"}"""
+        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.PurchaseShopItemRpcResponse>(payload)
+        assertEquals(ShopPurchaseResult.InsufficientHoney, ProfileRepository.mapPurchaseResponse(response))
+    }
+
+    @Test
+    fun `purchase_shop_item already_owned payload maps correctly`() {
+        val payload = """{"success":false,"error":"already_owned"}"""
+        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.PurchaseShopItemRpcResponse>(payload)
+        assertEquals(ShopPurchaseResult.AlreadyOwned, ProfileRepository.mapPurchaseResponse(response))
+    }
+
+    @Test
+    fun `equip_cosmetic success payload decodes all keys and maps to Success`() {
+        // Real shape: jsonb_build_object('success',true,'type',v_type)
+        val payload = """{"success":true,"type":"avatar_frame"}"""
+        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.EquipCosmeticRpcResponse>(payload)
+        assertTrue(response.success)
+        assertEquals("avatar_frame", response.type)
+        assertEquals(
+            ShopEquipResult.Success(type = "avatar_frame"),
+            ProfileRepository.mapEquipResponse(response)
+        )
+    }
+
+    @Test
+    fun `equip_cosmetic not_owned payload maps correctly`() {
+        val payload = """{"success":false,"error":"not_owned"}"""
+        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.EquipCosmeticRpcResponse>(payload)
+        assertEquals(ShopEquipResult.NotOwned, ProfileRepository.mapEquipResponse(response))
+    }
 }

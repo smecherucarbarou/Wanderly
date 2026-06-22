@@ -22,7 +22,9 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.HiveRank
+import com.novahorizon.wanderly.data.CosmeticType
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ShopItemStatus
 import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.LoadingState
@@ -52,6 +54,8 @@ fun ProfileScreen(
     onUseStreakFreeze: () -> Unit = {},
     onClaimMilestone: (Int) -> Unit = {},
     onClaimReferral: (String) -> Unit = {},
+    onPurchaseItem: (String) -> Unit = {},
+    onEquipItem: (String) -> Unit = {},
     onRetry: () -> Unit = { viewModel.loadProfile() }
 ) {
     val profileState by viewModel.profileState.asFlow().collectAsStateWithLifecycle(ProfileUiState.Loading)
@@ -63,6 +67,8 @@ fun ProfileScreen(
         .collectAsStateWithLifecycle(false)
     val gemsFound by viewModel.gemsFound.asFlow()
         .collectAsStateWithLifecycle(0)
+    val shopItems by viewModel.shopItems.asFlow()
+        .collectAsStateWithLifecycle(emptyList())
 
     when (profileState) {
         is ProfileUiState.Loading -> {
@@ -97,7 +103,10 @@ fun ProfileScreen(
                 onClaimMilestone = onClaimMilestone,
                 referralAvailable = referralAvailable,
                 onClaimReferral = onClaimReferral,
-                gemsFound = gemsFound
+                gemsFound = gemsFound,
+                shopItems = shopItems,
+                onPurchaseItem = onPurchaseItem,
+                onEquipItem = onEquipItem
             )
         }
     }
@@ -143,9 +152,15 @@ private fun ProfileContent(
     onClaimMilestone: (Int) -> Unit,
     referralAvailable: Boolean,
     onClaimReferral: (String) -> Unit,
-    gemsFound: Int
+    gemsFound: Int,
+    shopItems: List<ShopItemStatus>,
+    onPurchaseItem: (String) -> Unit,
+    onEquipItem: (String) -> Unit
 ) {
     val spacing = WanderlyTheme.spacing
+    val equippedFrameSku = shopItems.firstOrNull {
+        it.equipped && it.type == CosmeticType.AVATAR_FRAME
+    }?.sku
     val honey = profile.honey ?: 0
     val streak = profile.streak_count ?: 0
     val streakFreezes = profile.streak_freezes ?: 0
@@ -181,6 +196,7 @@ private fun ProfileContent(
                 avatarSource = avatarSource,
                 isAvatarUploading = isAvatarUploading,
                 rankInt = rankInt,
+                equippedFrameSku = equippedFrameSku,
                 showDevPanel = showDevPanel,
                 onEditAvatar = onEditAvatar,
                 onEditUsername = onEditUsername,
@@ -229,6 +245,15 @@ private fun ProfileContent(
             if (referralAvailable) {
                 Spacer(modifier = Modifier.height(spacing.lg))
                 ProfileReferralPanel(onClaim = onClaimReferral)
+            }
+
+            if (shopItems.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(spacing.lg))
+                ProfileShopPanel(
+                    items = shopItems,
+                    onPurchase = onPurchaseItem,
+                    onEquip = onEquipItem
+                )
             }
 
             Spacer(modifier = Modifier.height(spacing.xl))

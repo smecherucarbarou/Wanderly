@@ -152,6 +152,8 @@ class ProfileFragment : Fragment() {
                         onUseStreakFreeze = { viewModel.useStreakFreeze() },
                         onClaimMilestone = { viewModel.claimStreakMilestone(it) },
                         onClaimReferral = { viewModel.claimReferral(it) },
+                        onPurchaseItem = { viewModel.purchaseShopItem(it) },
+                        onEquipItem = { viewModel.equipCosmetic(it) },
                         onRetry = { viewModel.loadProfile() }
                     )
                 }

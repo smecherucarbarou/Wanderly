@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,8 +52,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.CosmeticType
 import com.novahorizon.wanderly.data.HiveRank
 import com.novahorizon.wanderly.data.Profile
+import com.novahorizon.wanderly.data.ShopItemStatus
 import com.novahorizon.wanderly.data.StreakMilestoneStatus
 import com.novahorizon.wanderly.ui.compose.components.RankChip
 import com.novahorizon.wanderly.ui.compose.components.WanderlyCard
@@ -74,7 +77,8 @@ internal fun ProfileHero(
     onEditUsername: () -> Unit,
     onSettings: () -> Unit,
     onCopyFriendCode: (String) -> Unit,
-    onShareFriendCode: (String) -> Unit
+    onShareFriendCode: (String) -> Unit,
+    equippedFrameSku: String? = null
 ) {
     val spacing = WanderlyTheme.spacing
 
@@ -88,7 +92,8 @@ internal fun ProfileHero(
                 displayName = displayName,
                 streakCount = profile.streak_count ?: 0,
                 isUploading = isAvatarUploading,
-                onEditAvatar = onEditAvatar
+                onEditAvatar = onEditAvatar,
+                equippedFrameSku = equippedFrameSku
             )
 
             Spacer(modifier = Modifier.width(spacing.lg))
@@ -624,6 +629,147 @@ internal fun ProfileReferralPanel(onClaim: (String) -> Unit) {
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
+}
+
+@Composable
+internal fun ProfileShopPanel(
+    items: List<ShopItemStatus>,
+    onPurchase: (String) -> Unit,
+    onEquip: (String) -> Unit
+) {
+    if (items.isEmpty()) return
+    val spacing = WanderlyTheme.spacing
+
+    WanderlyCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing.md)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Storefront,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.profile_shop_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.xs))
+        Text(
+            text = stringResource(R.string.profile_shop_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        items.forEach { item ->
+            Spacer(modifier = Modifier.height(spacing.md))
+            ProfileShopRow(item = item, onPurchase = onPurchase, onEquip = onEquip)
+        }
+    }
+}
+
+@Composable
+private fun ProfileShopRow(
+    item: ShopItemStatus,
+    onPurchase: (String) -> Unit,
+    onEquip: (String) -> Unit
+) {
+    val spacing = WanderlyTheme.spacing
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(spacing.xs))
+            Text(
+                text = shopTypeLabel(item.type),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!item.owned) {
+                Spacer(modifier = Modifier.height(spacing.xs))
+                Text(
+                    text = stringResource(R.string.profile_shop_price, "%,d".format(item.costHoney)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        when {
+            item.equipped -> ShopStatusChip(text = stringResource(R.string.profile_shop_equipped))
+            item.owned -> {
+                Button(
+                    onClick = { onEquip(item.id) },
+                    contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = stringResource(R.string.profile_shop_equip),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            else -> {
+                Button(
+                    onClick = { onPurchase(item.id) },
+                    enabled = item.affordable,
+                    contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = stringResource(R.string.profile_shop_buy),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun shopTypeLabel(type: String): String = stringResource(
+    when (type) {
+        CosmeticType.AVATAR_FRAME -> R.string.profile_shop_type_avatar_frame
+        CosmeticType.BUZZY_SKIN -> R.string.profile_shop_type_buzzy_skin
+        CosmeticType.WIDGET_THEME -> R.string.profile_shop_type_widget_theme
+        else -> R.string.profile_shop_title
+    }
+)
+
+@Composable
+private fun ShopStatusChip(text: String) {
+    val spacing = WanderlyTheme.spacing
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = MaterialTheme.shapes.small
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = spacing.sm, vertical = spacing.xs),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
     }
 }
 
