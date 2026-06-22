@@ -42,6 +42,8 @@ object Constants {
     const val TABLE_REFERRALS = "referrals"
     const val TABLE_SHOP_ITEMS = "shop_items"
     const val TABLE_USER_INVENTORY = "user_inventory"
+    const val TABLE_HIVE_CHALLENGES = "hive_challenges"
+    const val TABLE_HIVE_CHALLENGE_PROGRESS = "hive_challenge_progress"
     const val STORAGE_BUCKET_AVATARS = "avatars"
     
     const val DAILY_HONEY_REWARD = 10

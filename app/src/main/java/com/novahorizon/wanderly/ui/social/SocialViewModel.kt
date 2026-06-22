@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.ActiveHiveChallenge
 import com.novahorizon.wanderly.data.AddFriendResult
 import com.novahorizon.wanderly.data.FriendRequestActionResult
 import com.novahorizon.wanderly.data.Profile
@@ -40,6 +41,9 @@ class SocialViewModel @Inject constructor(
 
     private val _addFriendResult = MutableLiveData<SocialMessage?>()
     val addFriendResult: LiveData<SocialMessage?> = _addFriendResult
+
+    private val _hiveChallenge = MutableLiveData<ActiveHiveChallenge?>(null)
+    val hiveChallenge: LiveData<ActiveHiveChallenge?> = _hiveChallenge
 
     private val _state = MutableStateFlow<SocialUiState>(SocialUiState.Loading)
     val state: StateFlow<SocialUiState> = _state
@@ -320,6 +324,8 @@ class SocialViewModel @Inject constructor(
         _isLoading.value = true
         _state.value = SocialUiState.Loading
         viewModelScope.launch {
+            // Hive challenge is best-effort: its failure must not error the whole Social screen.
+            _hiveChallenge.postValue(runCatching { repository.getActiveHiveChallenge() }.getOrNull())
             try {
                 val leaderboard = repository.getLeaderboard()
                 val acceptedFriends = repository.getFriends()

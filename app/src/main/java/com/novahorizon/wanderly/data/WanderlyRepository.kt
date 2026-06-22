@@ -17,6 +17,7 @@ open class WanderlyRepository(context: Context) {
     private val discoveryRepository = DiscoveryRepository()
     private val gemCurationRepository = GemCurationRepository(this.context)
     private val gemDiscoveryRepository = GemDiscoveryRepository()
+    private val hiveChallengeRepository = HiveChallengeRepository()
 
     open val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
 
@@ -53,8 +54,19 @@ open class WanderlyRepository(context: Context) {
         source = source
     )
 
-    open suspend fun logMissionCompletion(missionId: String, photoPath: String? = null): MissionCompletionResult =
-        profileRepository.logMissionCompletion(missionId, photoPath)
+    open suspend fun logMissionCompletion(missionId: String, photoPath: String? = null): MissionCompletionResult {
+        val result = profileRepository.logMissionCompletion(missionId, photoPath)
+        if (result is MissionCompletionResult.Completed) {
+            // Fire-and-forget hive co-op contributions; only the goal_type matching the active
+            // challenge actually counts, the rest are silent no-ops.
+            hiveChallengeRepository.contributeIfMatches(HiveGoalType.MISSIONS, 1)
+            hiveChallengeRepository.contributeIfMatches(
+                HiveGoalType.HONEY,
+                result.rewardHoney + result.streakBonusHoney
+            )
+        }
+        return result
+    }
 
     open suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
         profileRepository.updateProfileLocation(lat, lng)
@@ -129,10 +141,19 @@ open class WanderlyRepository(context: Context) {
         seenGemsHistory: Set<String>
     ): List<Gem> = gemCurationRepository.curateGems(city, candidates, seenGemsHistory)
 
-    open suspend fun discoverGem(gem: Gem, currentLat: Double, currentLng: Double): GemDiscoveryResult =
-        gemDiscoveryRepository.discoverGem(gem, currentLat, currentLng)
+    open suspend fun discoverGem(gem: Gem, currentLat: Double, currentLng: Double): GemDiscoveryResult {
+        val result = gemDiscoveryRepository.discoverGem(gem, currentLat, currentLng)
+        if (result is GemDiscoveryResult.Success) {
+            hiveChallengeRepository.contributeIfMatches(HiveGoalType.GEMS, 1)
+            hiveChallengeRepository.contributeIfMatches(HiveGoalType.HONEY, result.rewardHoney)
+        }
+        return result
+    }
 
     open suspend fun countGemDiscoveries(): Int = gemDiscoveryRepository.countMyDiscoveries()
+
+    open suspend fun getActiveHiveChallenge(): ActiveHiveChallenge? =
+        hiveChallengeRepository.getActiveChallenge()
 
     suspend fun getCachedUsername(): String? = preferencesStore.getCachedUsername()
 

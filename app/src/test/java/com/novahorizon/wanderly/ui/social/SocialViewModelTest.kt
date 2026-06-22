@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.ActiveHiveChallenge
 import com.novahorizon.wanderly.data.AddFriendResult
 import com.novahorizon.wanderly.data.FriendRequestActionResult
 import com.novahorizon.wanderly.data.Profile
@@ -479,6 +480,8 @@ class SocialViewModelTest {
         override val currentProfile: StateFlow<Profile?> = profileFlow
 
         override suspend fun getCurrentProfile(): Profile? = profileFlow.value
+
+        override suspend fun getActiveHiveChallenge(): ActiveHiveChallenge? = null
 
         override suspend fun getLeaderboard(): List<Profile> {
             leaderboardError?.let { throw it }

@@ -3,6 +3,7 @@ package com.novahorizon.wanderly.data
 import com.novahorizon.wanderly.api.SupabaseRpcJson
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -130,5 +131,49 @@ class RpcResponseDecodingTest {
         val payload = """{"success":false,"error":"not_owned"}"""
         val response = SupabaseRpcJson.decodeFromString<ProfileRepository.EquipCosmeticRpcResponse>(payload)
         assertEquals(ShopEquipResult.NotOwned, ProfileRepository.mapEquipResponse(response))
+    }
+
+    @Test
+    fun `contribute_to_challenge success payload decodes`() {
+        // Real shape: jsonb_build_object('success',true)
+        val payload = """{"success":true}"""
+        val response = SupabaseRpcJson.decodeFromString<HiveChallengeRepository.ContributeChallengeRpcResponse>(payload)
+        assertTrue(response.success)
+    }
+
+    @Test
+    fun `contribute_to_challenge challenge_inactive payload decodes`() {
+        val payload = """{"success":false,"error":"challenge_inactive"}"""
+        val response = SupabaseRpcJson.decodeFromString<HiveChallengeRepository.ContributeChallengeRpcResponse>(payload)
+        assertFalse(response.success)
+        assertEquals("challenge_inactive", response.error)
+    }
+
+    @Test
+    fun `hive progress aggregates client-side and compares to goal_target`() {
+        val rows = listOf(
+            HiveChallengeProgressRow(contribution = 5),
+            HiveChallengeProgressRow(contribution = 8),
+            HiveChallengeProgressRow(contribution = 7)
+        )
+        val total = HiveChallengeRepository.totalContribution(rows)
+        assertEquals(20, total)
+
+        val reached = ActiveHiveChallenge(
+            id = "c1",
+            title = "Weekend Explorers",
+            description = null,
+            goalType = "missions",
+            goalTarget = 20,
+            rewardHoney = 100,
+            endsAt = "2026-06-29T16:23:46Z",
+            totalContribution = total
+        )
+        assertTrue(reached.goalReached)
+        assertEquals(1f, reached.progressFraction, 0.0001f)
+
+        val partial = reached.copy(totalContribution = 12)
+        assertFalse(partial.goalReached)
+        assertEquals(0.6f, partial.progressFraction, 0.0001f)
     }
 }

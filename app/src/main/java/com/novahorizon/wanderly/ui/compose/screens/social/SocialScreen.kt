@@ -20,6 +20,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -51,6 +55,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.data.ActiveHiveChallenge
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.ui.compose.components.AvatarImage
 import com.novahorizon.wanderly.ui.compose.components.ErrorState
@@ -73,6 +78,7 @@ fun SocialScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentProfile by viewModel.currentProfile.asFlow().collectAsStateWithLifecycle(null)
+    val hiveChallenge by viewModel.hiveChallenge.asFlow().collectAsStateWithLifecycle(null)
     val context = LocalContext.current
     val isLoading = state is SocialViewModel.SocialUiState.Loading
     val loadedState = state as? SocialViewModel.SocialUiState.Loaded
@@ -99,6 +105,11 @@ fun SocialScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        hiveChallenge?.let { challenge ->
+            HiveChallengePanel(challenge = challenge)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         TabRow(
             selectedTabIndex = selectedTab,
@@ -357,6 +368,86 @@ fun SocialScreen(
     }
 }
 */
+
+@Composable
+private fun HiveChallengePanel(challenge: ActiveHiveChallenge) {
+    WanderlyCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Groups,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.social_hive_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = challenge.title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        challenge.description?.takeIf { it.isNotBlank() }?.let { description ->
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        LinearProgressIndicator(
+            progress = { challenge.progressFraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(6.dp)),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(
+                    R.string.social_hive_progress,
+                    "%,d".format(challenge.totalContribution),
+                    "%,d".format(challenge.goalTarget)
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = if (challenge.goalReached) {
+                    stringResource(R.string.social_hive_goal_reached)
+                } else {
+                    stringResource(R.string.social_hive_reward, "%,d".format(challenge.rewardHoney))
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
 
 @Composable
 private fun LeaderboardEmptyState(

@@ -209,6 +209,10 @@
 
     <!-- Social screen -->
     <string name="social_title">The Hive</string>
+    <string name="social_hive_title">Hive challenge</string>
+    <string name="social_hive_progress">%1$s / %2$s contributions</string>
+    <string name="social_hive_reward">+%1$s honey each</string>
+    <string name="social_hive_goal_reached">Goal reached!</string>
     <string name="social_tab_leaderboard">Leaderboard</string>
     <string name="social_tab_friends">Friends</string>
     <string name="social_add_friend_title">Add a Friend</string>
