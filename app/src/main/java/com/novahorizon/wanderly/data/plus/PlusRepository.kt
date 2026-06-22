@@ -4,6 +4,7 @@ import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.api.decodeRpc
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.CancellationException
@@ -30,7 +31,7 @@ open class PlusRepository @Inject constructor() {
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("get_my_plus_entitlement")
-                .decodeSingle<PlusEntitlementResponse>()
+                .decodeRpc<PlusEntitlementResponse>()
 
             Result.success(mapEntitlementResponse(response))
         } catch (e: Exception) {

@@ -27,7 +27,10 @@ internal data class DiscoverGemRpcResponse(
     val success: Boolean,
     val error: String? = null,
     val reward_honey: Int? = null,
-    val gem_id: String? = null
+    val gem_id: String? = null,
+    // The RPC returns 'gem_finder' on the first-ever discovery, else null. Modeled for completeness;
+    // the first-gem toast is derived from the discovery count, not this field.
+    val badge: String? = null
 )
 
 @Serializable

@@ -2,6 +2,7 @@ package com.novahorizon.wanderly.data
 
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.api.decodeRpc
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
@@ -35,7 +36,7 @@ open class GemDiscoveryRepository {
         }
 
         try {
-            val response = SupabaseClient.client.postgrest
+            val rpcResult = SupabaseClient.client.postgrest
                 .rpc(
                     "discover_gem_by_place",
                     DiscoverGemParams(
@@ -45,8 +46,7 @@ open class GemDiscoveryRepository {
                         p_category = gem.category
                     )
                 )
-                .decodeSingle<DiscoverGemRpcResponse>()
-            mapDiscoverGemResponse(response)
+            mapDiscoverGemResponse(rpcResult.decodeRpc())
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Gem discovery failed", e)

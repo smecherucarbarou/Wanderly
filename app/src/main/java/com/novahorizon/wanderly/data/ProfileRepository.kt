@@ -5,6 +5,7 @@ import android.net.Uri
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.api.decodeRpc
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.CrashEvent
@@ -115,7 +116,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class StreakFreezeRpcResponse(
+    internal data class StreakFreezeRpcResponse(
         val success: Boolean,
         val error: String? = null,
         val freezes_left: Int? = null
@@ -127,7 +128,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class StreakMilestoneClaimRpcResponse(
+    internal data class StreakMilestoneClaimRpcResponse(
         val success: Boolean,
         val error: String? = null,
         val reward_honey: Int? = null,
@@ -145,7 +146,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class ReferralClaimRpcResponse(
+    internal data class ReferralClaimRpcResponse(
         val success: Boolean,
         val error: String? = null,
         val reward_honey: Int? = null
@@ -263,7 +264,7 @@ class ProfileRepository(
             val response = withPostgrestSchemaCacheRetry {
                 SupabaseClient.client.postgrest
                     .rpc("update_profile_username", mapOf("p_username" to newUsername))
-                    .decodeSingle<UsernameUpdateRpcResponse>()
+                    .decodeRpc<UsernameUpdateRpcResponse>()
             }
 
             if (!response.success) {
@@ -327,7 +328,7 @@ class ProfileRepository(
                         new_hive_rank = payload.hive_rank
                     )
                 )
-                .decodeSingle<AdminStatsUpdateResponse>()
+                .decodeRpc<AdminStatsUpdateResponse>()
 
             if (!response.success) {
                 logWarn("Admin stats update did not persist for profile.")
@@ -371,7 +372,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("log_mission_completion", MissionLogParams(p_mission_id = missionId, p_photo_path = photoPath))
-                .decodeSingle<MissionLogRpcResponse>()
+                .decodeRpc<MissionLogRpcResponse>()
 
             if (response.success) {
                 // The new RPC does not echo a mission date; completing now means today (UTC).
@@ -439,7 +440,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("accept_streak_loss")
-                .decodeSingle<StreakMutationRpcResponse>()
+                .decodeRpc<StreakMutationRpcResponse>()
             if (response.updated == true) {
                 val profile = applyProgressSnapshot(
                     honey = response.honey,
@@ -464,7 +465,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("restore_streak", RestoreStreakParams(cost))
-                .decodeSingle<StreakMutationRpcResponse>()
+                .decodeRpc<StreakMutationRpcResponse>()
             if (response.restored == true) {
                 val profile = applyProgressSnapshot(
                     honey = response.honey,
@@ -489,7 +490,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("use_streak_freeze")
-                .decodeSingle<StreakFreezeRpcResponse>()
+                .decodeRpc<StreakFreezeRpcResponse>()
             if (response.success) {
                 val freezesLeft = response.freezes_left ?: 0
                 val updated = _currentProfile.value?.copy(streak_freezes = freezesLeft)
@@ -549,7 +550,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("claim_streak_milestone", ClaimMilestoneParams(threshold))
-                .decodeSingle<StreakMilestoneClaimRpcResponse>()
+                .decodeRpc<StreakMilestoneClaimRpcResponse>()
             if (response.success) {
                 // Live RPC grants honey + badge server-side and does not echo the new
                 // balance, so re-fetch the profile to reflect honey and badges.
@@ -588,7 +589,7 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("claim_referral", ReferralClaimParams(friendCode))
-                .decodeSingle<ReferralClaimRpcResponse>()
+                .decodeRpc<ReferralClaimRpcResponse>()
             if (response.success) {
                 // RPC credits honey to both parties server-side without echoing the new
                 // balance, so re-fetch the profile. Reward amount is carried in `reason`.

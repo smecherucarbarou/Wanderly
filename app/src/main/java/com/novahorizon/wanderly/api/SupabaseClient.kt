@@ -12,6 +12,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.ktor.client.engine.okhttp.OkHttp
 import java.util.concurrent.TimeUnit
 
@@ -33,6 +34,8 @@ object SupabaseClient {
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY
         ) {
+            // Tolerate unknown RPC keys (e.g. server adds a new jsonb field) across all repositories.
+            defaultSerializer = KotlinXSerializer(SupabaseRpcJson)
             httpEngine = OkHttp.create {
                 config {
                     connectTimeout(60, TimeUnit.SECONDS)

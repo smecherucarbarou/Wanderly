@@ -2,6 +2,7 @@ package com.novahorizon.wanderly.data
 
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.api.decodeRpc
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
@@ -210,7 +211,7 @@ class SocialRepository {
 
             val response = SupabaseClient.client.postgrest
                 .rpc(rpcName, FriendRequestActionParams(requesterId))
-                .decodeSingle<FriendRequestActionResponse>()
+                .decodeRpc<FriendRequestActionResponse>()
 
             if (response.success) {
                 successResult
