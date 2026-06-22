@@ -13,7 +13,7 @@ object ProfileBadgeEvaluator {
         if (currentStreak >= 7) unlockedBadges.add("7-day_streak")
         if (currentHoney >= 50 || !profile.last_mission_date.isNullOrBlank()) unlockedBadges.add("photographer")
         if (visitedCities >= 3) unlockedBadges.add("cartographer")
-        if (visitedCities >= 1) unlockedBadges.add("gem_finder")
+        // gem_finder is awarded server-side by discover_gem_by_place on first discovery.
         if (currentHoney >= 1000) unlockedBadges.add("queen_bee")
 
         return profile.copy(badges = unlockedBadges.toList())

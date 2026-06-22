@@ -23,6 +23,13 @@
     <string name="gems_invalid_response">Buzzy could not understand the hidden gems response. Please try again.</string>
     <string name="gems_fallback_description">A local spot worth checking out while you wander.</string>
     <string name="gems_fallback_reason">It stands out from the usual route.</string>
+    <string name="gems_discover_button">Discover</string>
+    <string name="gems_discover_too_far">Get closer to discover this gem.</string>
+    <string name="gems_discovered_label">Discovered</string>
+    <string name="gems_discovered_reward">Gem discovered! +%1$d honey</string>
+    <string name="gems_gem_finder_unlocked">Gem Finder badge unlocked!</string>
+    <string name="gems_already_discovered">You already discovered this gem.</string>
+    <string name="gems_discover_failed">Couldn\'t discover this gem. Please try again.</string>
     <string name="social_friend_request_sent">Friend request sent!</string>
     <string name="social_friend_request_pending">Friend request already pending</string>
     <string name="social_friend_request_accepted">Friend request accepted</string>
@@ -230,6 +237,7 @@
     <string name="profile_honey_label">Honey</string>
     <string name="profile_streak_label">Streak</string>
     <string name="profile_cities_label">Cities</string>
+    <string name="profile_gems_label">Gems</string>
     <string name="profile_streak_freeze_title">Streak freeze</string>
     <plurals name="profile_streak_freeze_available">
         <item quantity="one">%1$d freeze available</item>

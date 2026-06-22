@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.data.GemDiscoveryResult
 import com.novahorizon.wanderly.data.HiddenGemCandidateResult
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.observability.CrashEvent
@@ -32,6 +33,18 @@ class GemsViewModel @Inject constructor(
     private val _message = MutableLiveData<UiText?>()
     val message: LiveData<UiText?> = _message
 
+    private val _discoverEvent = MutableLiveData<DiscoverEvent?>()
+    val discoverEvent: LiveData<DiscoverEvent?> = _discoverEvent
+
+    private val _discoveredGems = MutableLiveData<Set<String>>(emptySet())
+    val discoveredGems: LiveData<Set<String>> = _discoveredGems
+
+    private val _currentLocation = MutableLiveData<Pair<Double, Double>?>(null)
+    val currentLocation: LiveData<Pair<Double, Double>?> = _currentLocation
+
+    private var currentLat: Double? = null
+    private var currentLng: Double? = null
+
     sealed class GemsState {
         object Idle : GemsState()
         data class Loading(val message: UiText) : GemsState()
@@ -40,7 +53,58 @@ class GemsViewModel @Inject constructor(
         data class Error(val message: UiText) : GemsState()
     }
 
+    sealed class DiscoverEvent {
+        data class Discovered(val rewardHoney: Int, val firstGem: Boolean) : DiscoverEvent()
+        object AlreadyDiscovered : DiscoverEvent()
+        object TooFar : DiscoverEvent()
+        object Failed : DiscoverEvent()
+    }
+
+    fun updateCurrentLocation(lat: Double, lng: Double) {
+        currentLat = lat
+        currentLng = lng
+        _currentLocation.postValue(lat to lng)
+    }
+
+    fun discoverGem(gem: Gem) {
+        val lat = currentLat
+        val lng = currentLng
+        if (lat == null || lng == null) {
+            _discoverEvent.postValue(DiscoverEvent.TooFar)
+            return
+        }
+        viewModelScope.launch {
+            when (val result = repository.discoverGem(gem, lat, lng)) {
+                is GemDiscoveryResult.Success -> {
+                    markDiscovered(gem.name)
+                    val total = repository.countGemDiscoveries()
+                    // reward_honey is a delta; re-fetch authoritative balance for the UI.
+                    repository.getCurrentProfile()
+                    _discoverEvent.postValue(
+                        DiscoverEvent.Discovered(result.rewardHoney, firstGem = total == 1)
+                    )
+                }
+                GemDiscoveryResult.AlreadyDiscovered -> {
+                    markDiscovered(gem.name)
+                    _discoverEvent.postValue(DiscoverEvent.AlreadyDiscovered)
+                }
+                GemDiscoveryResult.TooFar -> _discoverEvent.postValue(DiscoverEvent.TooFar)
+                GemDiscoveryResult.Unauthenticated,
+                GemDiscoveryResult.Error -> _discoverEvent.postValue(DiscoverEvent.Failed)
+            }
+        }
+    }
+
+    private fun markDiscovered(name: String) {
+        _discoveredGems.postValue((_discoveredGems.value ?: emptySet()) + name)
+    }
+
+    fun clearDiscoverEvent() {
+        _discoverEvent.value = null
+    }
+
     fun loadGems(lat: Double, lng: Double, city: String) {
+        updateCurrentLocation(lat, lng)
         viewModelScope.launch {
             try {
                 _gemsState.postValue(

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.data.GemProximity
 import com.novahorizon.wanderly.ui.compose.components.ErrorState
 import com.novahorizon.wanderly.ui.compose.components.HoneyButton
 import com.novahorizon.wanderly.ui.compose.components.LoadingState
@@ -40,14 +42,18 @@ import com.novahorizon.wanderly.ui.compose.components.WanderlyCard
 import com.novahorizon.wanderly.ui.compose.util.uiTextToString
 import com.novahorizon.wanderly.ui.gems.GemsViewModel
 import com.novahorizon.wanderly.ui.gems.GemsViewModel.GemsState
+import com.novahorizon.wanderly.util.GeoMath
 
 @Composable
 fun GemsScreen(
     viewModel: GemsViewModel,
     onRetry: () -> Unit,
-    onGemClick: (Gem) -> Unit
+    onGemClick: (Gem) -> Unit,
+    onDiscover: (Gem) -> Unit
 ) {
     val gemsState by viewModel.gemsState.asFlow().collectAsStateWithLifecycle(GemsState.Idle)
+    val discoveredGems by viewModel.discoveredGems.asFlow().collectAsStateWithLifecycle(emptySet())
+    val currentLocation by viewModel.currentLocation.asFlow().collectAsStateWithLifecycle(null)
     val context = LocalContext.current
 
     Box(
@@ -90,12 +96,18 @@ fun GemsScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(state.gems, key = { it.name }) { gem ->
+                        val withinRange = currentLocation?.let { (lat, lng) ->
+                            GemProximity.isWithinRange(GeoMath.distanceKm(lat, lng, gem.lat, gem.lng))
+                        } ?: false
                         GemCard(
                             name = gem.name,
                             location = gem.location,
                             description = gem.description,
                             reason = gem.reason,
-                            onClick = { onGemClick(gem) }
+                            discovered = discoveredGems.contains(gem.name),
+                            discoverEnabled = withinRange,
+                            onClick = { onGemClick(gem) },
+                            onDiscover = { onDiscover(gem) }
                         )
                     }
                 }
@@ -132,7 +144,10 @@ private fun GemCard(
     location: String,
     description: String,
     reason: String,
-    onClick: () -> Unit
+    discovered: Boolean,
+    discoverEnabled: Boolean,
+    onClick: () -> Unit,
+    onDiscover: () -> Unit
 ) {
     WanderlyCard(
         modifier = Modifier
@@ -180,6 +195,38 @@ private fun GemCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontStyle = FontStyle.Italic
             )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        if (discovered) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.gems_discovered_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        } else {
+            HoneyButton(
+                text = stringResource(R.string.gems_discover_button),
+                onClick = onDiscover,
+                enabled = discoverEnabled
+            )
+            if (!discoverEnabled) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.gems_discover_too_far),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

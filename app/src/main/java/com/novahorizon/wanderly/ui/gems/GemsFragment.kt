@@ -11,6 +11,7 @@ import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,6 +23,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.novahorizon.wanderly.BuildConfig
@@ -47,6 +51,7 @@ class GemsFragment : Fragment() {
 
     private val viewModel: GemsViewModel by viewModels()
     private val locationPermissionController = LocationPermissionController(this)
+    private var locationCallback: LocationCallback? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -61,7 +66,8 @@ class GemsFragment : Fragment() {
                     GemsScreen(
                         viewModel = viewModel,
                         onRetry = { requestGemsLoad(isUserInitiated = true) },
-                        onGemClick = { gem -> openInMaps(gem) }
+                        onGemClick = { gem -> openInMaps(gem) },
+                        onDiscover = { gem -> viewModel.discoverGem(gem) }
                     )
                 }
             }
@@ -78,9 +84,85 @@ class GemsFragment : Fragment() {
             viewModel.clearMessage()
         }
 
+        viewModel.discoverEvent.observe(viewLifecycleOwner) { event ->
+            event ?: return@observe
+            handleDiscoverEvent(event)
+            viewModel.clearDiscoverEvent()
+        }
+
         if (GemsLoadGate.shouldAutoLoad(viewModel.gemsState.value)) {
             requestGemsLoad()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        startLocationUpdates()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopLocationUpdates()
+    }
+
+    private fun handleDiscoverEvent(event: GemsViewModel.DiscoverEvent) {
+        when (event) {
+            is GemsViewModel.DiscoverEvent.Discovered -> {
+                val reward = getString(R.string.gems_discovered_reward, event.rewardHoney)
+                val text = if (event.firstGem) {
+                    "$reward ${getString(R.string.gems_gem_finder_unlocked)}"
+                } else {
+                    reward
+                }
+                showSnackbar(text, isError = false)
+            }
+            GemsViewModel.DiscoverEvent.AlreadyDiscovered ->
+                showSnackbar(getString(R.string.gems_already_discovered), isError = false)
+            GemsViewModel.DiscoverEvent.TooFar ->
+                showSnackbar(getString(R.string.gems_discover_too_far), isError = true)
+            GemsViewModel.DiscoverEvent.Failed ->
+                showSnackbar(getString(R.string.gems_discover_failed), isError = true)
+        }
+    }
+
+    private fun startLocationUpdates() {
+        if (!isAdded) return
+        val fragmentContext = context ?: return
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            fragmentContext,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(
+            fragmentContext,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFineLocation && !hasCoarseLocation) return
+
+        val request = LocationRequest.Builder(
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            LOCATION_UPDATE_INTERVAL_MS
+        ).build()
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val location = result.lastLocation ?: return
+                viewModel.updateCurrentLocation(location.latitude, location.longitude)
+            }
+        }
+        locationCallback = callback
+        try {
+            LocationServices.getFusedLocationProviderClient(requireActivity())
+                .requestLocationUpdates(request, callback, Looper.getMainLooper())
+        } catch (_: SecurityException) {
+            locationCallback = null
+        }
+    }
+
+    private fun stopLocationUpdates() {
+        val callback = locationCallback ?: return
+        val fragmentContext = context ?: return
+        LocationServices.getFusedLocationProviderClient(fragmentContext)
+            .removeLocationUpdates(callback)
+        locationCallback = null
     }
 
     private fun requestGemsLoad(isUserInitiated: Boolean = false) {
@@ -261,5 +343,9 @@ class GemsFragment : Fragment() {
         if (BuildConfig.DEBUG) {
             AppLogger.d(logTag, message)
         }
+    }
+
+    private companion object {
+        private const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     }
 }

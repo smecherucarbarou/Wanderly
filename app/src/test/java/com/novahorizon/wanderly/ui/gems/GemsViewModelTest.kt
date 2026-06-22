@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.DiscoveredPlace
 import com.novahorizon.wanderly.data.Gem
+import com.novahorizon.wanderly.data.GemDiscoveryResult
 import com.novahorizon.wanderly.data.HiddenGemCandidateResult
 import com.novahorizon.wanderly.data.Profile
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -164,6 +165,125 @@ class GemsViewModelTest {
         }
     }
 
+    @Test
+    fun `discoverGem without location emits TooFar and skips repository`() = runTest {
+        val repository = TestWanderlyRepository(context = context)
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeDiscoverEvents()
+
+        try {
+            viewModel.discoverGem(testGem())
+            advanceUntilIdle()
+
+            assertEquals(GemsViewModel.DiscoverEvent.TooFar, events.last())
+            assertEquals(0, repository.discoverCalls)
+        } finally {
+            store.clear()
+            viewModel.discoverEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `discoverGem success marks gem discovered and flags first gem`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            discoverResult = GemDiscoveryResult.Success(10),
+            discoveryCount = 1
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeDiscoverEvents()
+        val discovered = viewModel.observeDiscoveredGems()
+
+        try {
+            viewModel.updateCurrentLocation(44.4268, 26.1025)
+            viewModel.discoverGem(testGem())
+            advanceUntilIdle()
+
+            assertEquals(
+                GemsViewModel.DiscoverEvent.Discovered(rewardHoney = 10, firstGem = true),
+                events.last()
+            )
+            assertTrue(discovered.last().contains("Test Cafe"))
+            assertEquals(1, repository.discoverCalls)
+            assertTrue(repository.getCurrentProfileCalls >= 1)
+        } finally {
+            store.clear()
+            viewModel.discoverEvent.removeObserver(events.observer)
+            viewModel.discoveredGems.removeObserver(discovered.observer)
+        }
+    }
+
+    @Test
+    fun `discoverGem success with existing discoveries is not first gem`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            discoverResult = GemDiscoveryResult.Success(10),
+            discoveryCount = 3
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeDiscoverEvents()
+
+        try {
+            viewModel.updateCurrentLocation(44.4268, 26.1025)
+            viewModel.discoverGem(testGem())
+            advanceUntilIdle()
+
+            assertEquals(
+                GemsViewModel.DiscoverEvent.Discovered(rewardHoney = 10, firstGem = false),
+                events.last()
+            )
+        } finally {
+            store.clear()
+            viewModel.discoverEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `discoverGem out of range emits TooFar`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            discoverResult = GemDiscoveryResult.TooFar
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeDiscoverEvents()
+
+        try {
+            viewModel.updateCurrentLocation(40.0, 20.0)
+            viewModel.discoverGem(testGem())
+            advanceUntilIdle()
+
+            assertEquals(GemsViewModel.DiscoverEvent.TooFar, events.last())
+            assertEquals(1, repository.discoverCalls)
+        } finally {
+            store.clear()
+            viewModel.discoverEvent.removeObserver(events.observer)
+        }
+    }
+
+    @Test
+    fun `discoverGem already discovered still marks gem discovered`() = runTest {
+        val repository = TestWanderlyRepository(
+            context = context,
+            discoverResult = GemDiscoveryResult.AlreadyDiscovered
+        )
+        val (viewModel, store) = createViewModel(repository)
+        val events = viewModel.observeDiscoverEvents()
+        val discovered = viewModel.observeDiscoveredGems()
+
+        try {
+            viewModel.updateCurrentLocation(44.4268, 26.1025)
+            viewModel.discoverGem(testGem())
+            advanceUntilIdle()
+
+            assertEquals(GemsViewModel.DiscoverEvent.AlreadyDiscovered, events.last())
+            assertTrue(discovered.last().contains("Test Cafe"))
+        } finally {
+            store.clear()
+            viewModel.discoverEvent.removeObserver(events.observer)
+            viewModel.discoveredGems.removeObserver(discovered.observer)
+        }
+    }
+
     private fun createViewModel(
         repository: TestWanderlyRepository
     ): Pair<GemsViewModel, ViewModelStore> {
@@ -189,6 +309,18 @@ class GemsViewModelTest {
         return messages
     }
 
+    private fun GemsViewModel.observeDiscoverEvents(): ObservedDiscoverEvents {
+        val events = ObservedDiscoverEvents()
+        discoverEvent.observeForever(events.observer)
+        return events
+    }
+
+    private fun GemsViewModel.observeDiscoveredGems(): ObservedDiscoveredGems {
+        val discovered = ObservedDiscoveredGems()
+        discoveredGems.observeForever(discovered.observer)
+        return discovered
+    }
+
     private class ObservedGemStates : ArrayList<GemsViewModel.GemsState>() {
         val observer = Observer<GemsViewModel.GemsState> { add(it) }
     }
@@ -197,20 +329,48 @@ class GemsViewModelTest {
         val observer = Observer<UiText?> { add(it) }
     }
 
+    private class ObservedDiscoverEvents : ArrayList<GemsViewModel.DiscoverEvent?>() {
+        val observer = Observer<GemsViewModel.DiscoverEvent?> { add(it) }
+    }
+
+    private class ObservedDiscoveredGems : ArrayList<Set<String>>() {
+        val observer = Observer<Set<String>> { add(it) }
+    }
+
     private class TestWanderlyRepository(
         context: Context,
         private val candidates: List<DiscoveredPlace> = emptyList(),
         private val gems: List<Gem> = emptyList(),
         private val candidateResult: HiddenGemCandidateResult? = null,
-        private val fetchError: Exception? = null
+        private val fetchError: Exception? = null,
+        private val discoverResult: GemDiscoveryResult = GemDiscoveryResult.Error,
+        private val discoveryCount: Int = 0
     ) : WanderlyRepository(context) {
         private val profileFlow = MutableStateFlow<Profile?>(null)
         var curateCalls = 0
             private set
+        var discoverCalls = 0
+            private set
+        var getCurrentProfileCalls = 0
+            private set
 
         override val currentProfile: StateFlow<Profile?> = profileFlow
 
-        override suspend fun getCurrentProfile(): Profile? = profileFlow.value
+        override suspend fun getCurrentProfile(): Profile? {
+            getCurrentProfileCalls++
+            return profileFlow.value
+        }
+
+        override suspend fun discoverGem(
+            gem: Gem,
+            currentLat: Double,
+            currentLng: Double
+        ): GemDiscoveryResult {
+            discoverCalls++
+            return discoverResult
+        }
+
+        override suspend fun countGemDiscoveries(): Int = discoveryCount
 
         override suspend fun fetchHiddenGemCandidates(
             lat: Double,

@@ -225,13 +225,14 @@ internal fun ProfileStatsRow(
     honey: Int,
     streak: Int,
     citiesVisited: Int,
+    gemsFound: Int,
     modifier: Modifier = Modifier
 ) {
     val spacing = WanderlyTheme.spacing
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(spacing.md)
+        horizontalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
         WanderlyStatCard(
             icon = {
@@ -270,6 +271,19 @@ internal fun ProfileStatsRow(
             },
             label = stringResource(R.string.profile_cities_label),
             value = citiesVisited.toString(),
+            modifier = Modifier.weight(1f)
+        )
+        WanderlyStatCard(
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            label = stringResource(R.string.profile_gems_label),
+            value = gemsFound.toString(),
             modifier = Modifier.weight(1f)
         )
     }
@@ -669,7 +683,7 @@ private fun PreviewProfileSummary() {
                 onCopyFriendCode = {},
                 onShareFriendCode = {}
             )
-            ProfileStatsRow(honey = 1450, streak = 7, citiesVisited = 3)
+            ProfileStatsRow(honey = 1450, streak = 7, citiesVisited = 3, gemsFound = 5)
             ProfileProgressPanel(honey = 1450, rankInt = 2)
             ProfileBadgesPanel(
                 profile = Profile(

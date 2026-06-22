@@ -16,6 +16,7 @@ open class WanderlyRepository(context: Context) {
     private val missionRepository = MissionRepository()
     private val discoveryRepository = DiscoveryRepository()
     private val gemCurationRepository = GemCurationRepository(this.context)
+    private val gemDiscoveryRepository = GemDiscoveryRepository()
 
     open val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
 
@@ -119,6 +120,11 @@ open class WanderlyRepository(context: Context) {
         candidates: List<DiscoveredPlace>,
         seenGemsHistory: Set<String>
     ): List<Gem> = gemCurationRepository.curateGems(city, candidates, seenGemsHistory)
+
+    open suspend fun discoverGem(gem: Gem, currentLat: Double, currentLng: Double): GemDiscoveryResult =
+        gemDiscoveryRepository.discoverGem(gem, currentLat, currentLng)
+
+    open suspend fun countGemDiscoveries(): Int = gemDiscoveryRepository.countMyDiscoveries()
 
     suspend fun getCachedUsername(): String? = preferencesStore.getCachedUsername()
 

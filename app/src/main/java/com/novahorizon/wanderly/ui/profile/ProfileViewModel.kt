@@ -51,6 +51,9 @@ class ProfileViewModel @Inject constructor(
     private val _referralAvailable = MutableLiveData(false)
     val referralAvailable: LiveData<Boolean> = _referralAvailable
 
+    private val _gemsFound = MutableLiveData(0)
+    val gemsFound: LiveData<Int> = _gemsFound
+
     init {
         startProfileCollector()
     }
@@ -92,6 +95,7 @@ class ProfileViewModel @Inject constructor(
                 _profileState.value = ProfileUiState.Loaded(displayProfile)
                 loadStreakMilestones()
                 loadReferralState()
+                loadGemsFound()
                 if (!hasCheckedBadgesThisSession) {
                     hasCheckedBadgesThisSession = true
                     checkAndUnlockBadges(displayProfile)
@@ -386,6 +390,10 @@ class ProfileViewModel @Inject constructor(
 
     private suspend fun loadReferralState() {
         _referralAvailable.value = !repository.hasClaimedReferral()
+    }
+
+    private suspend fun loadGemsFound() {
+        _gemsFound.value = repository.countGemDiscoveries()
     }
 
     fun clearProfileEvent() {

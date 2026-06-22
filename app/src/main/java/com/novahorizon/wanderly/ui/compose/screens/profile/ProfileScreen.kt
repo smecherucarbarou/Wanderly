@@ -61,6 +61,8 @@ fun ProfileScreen(
         .collectAsStateWithLifecycle(emptyList())
     val referralAvailable by viewModel.referralAvailable.asFlow()
         .collectAsStateWithLifecycle(false)
+    val gemsFound by viewModel.gemsFound.asFlow()
+        .collectAsStateWithLifecycle(0)
 
     when (profileState) {
         is ProfileUiState.Loading -> {
@@ -94,7 +96,8 @@ fun ProfileScreen(
                 streakMilestones = streakMilestones,
                 onClaimMilestone = onClaimMilestone,
                 referralAvailable = referralAvailable,
-                onClaimReferral = onClaimReferral
+                onClaimReferral = onClaimReferral,
+                gemsFound = gemsFound
             )
         }
     }
@@ -139,7 +142,8 @@ private fun ProfileContent(
     streakMilestones: List<StreakMilestoneStatus>,
     onClaimMilestone: (Int) -> Unit,
     referralAvailable: Boolean,
-    onClaimReferral: (String) -> Unit
+    onClaimReferral: (String) -> Unit,
+    gemsFound: Int
 ) {
     val spacing = WanderlyTheme.spacing
     val honey = profile.honey ?: 0
@@ -189,7 +193,8 @@ private fun ProfileContent(
             ProfileStatsRow(
                 honey = honey,
                 streak = streak,
-                citiesVisited = citiesVisited
+                citiesVisited = citiesVisited,
+                gemsFound = gemsFound
             )
 
             if (streakFreezes > 0 || streakAtRisk) {
