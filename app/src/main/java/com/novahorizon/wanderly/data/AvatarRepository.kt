@@ -285,7 +285,7 @@ class AvatarRepository(
         private const val UPLOAD_AVATAR_URL_MARKER = "/storage/v1/object/avatars/"
         private const val PUBLIC_AVATAR_URL_MARKER = "/storage/v1/object/public/avatars/"
         private const val AUTHENTICATED_AVATAR_URL_MARKER = "/storage/v1/object/authenticated/avatars/"
-        internal const val MAX_AVATAR_UPLOAD_BYTES = 2L * 1024L * 1024L
+        internal const val MAX_AVATAR_UPLOAD_BYTES = 5L * 1024L * 1024L
         private const val MAX_AVATAR_DIMENSION = 512
         private const val JPEG_QUALITY = 80
         private val ALLOWED_MIME = setOf("image/jpeg", "image/png", "image/webp")

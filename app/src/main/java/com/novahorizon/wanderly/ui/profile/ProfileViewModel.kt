@@ -23,6 +23,9 @@ import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,7 +36,6 @@ class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val logoutCoordinator: LogoutCoordinator
 ) : ViewModel() {
-    private var hasCheckedBadgesThisSession = false
     private var profileCollectorJob: Job? = null
 
     private val _profile = MutableLiveData<Profile?>()
@@ -59,6 +61,18 @@ class ProfileViewModel @Inject constructor(
 
     private val _shopItems = MutableLiveData<List<ShopItemStatus>>(emptyList())
     val shopItems: LiveData<List<ShopItemStatus>> = _shopItems
+
+    private val _purchaseInFlight = MutableStateFlow(false)
+    val purchaseInFlight: StateFlow<Boolean> = _purchaseInFlight.asStateFlow()
+
+    private val _claimReferralInFlight = MutableStateFlow(false)
+    val claimReferralInFlight: StateFlow<Boolean> = _claimReferralInFlight.asStateFlow()
+
+    private val _claimMilestoneInFlight = MutableStateFlow(false)
+    val claimMilestoneInFlight: StateFlow<Boolean> = _claimMilestoneInFlight.asStateFlow()
+
+    private val _equipInFlight = MutableStateFlow(false)
+    val equipInFlight: StateFlow<Boolean> = _equipInFlight.asStateFlow()
 
     init {
         startProfileCollector()
@@ -103,10 +117,6 @@ class ProfileViewModel @Inject constructor(
                 loadReferralState()
                 loadGemsFound()
                 loadShopItems()
-                if (!hasCheckedBadgesThisSession) {
-                    hasCheckedBadgesThisSession = true
-                    checkAndUnlockBadges(displayProfile)
-                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _profileState.value = ProfileUiState.Error(UiText.resource(R.string.profile_load_failed))
@@ -295,43 +305,48 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun claimStreakMilestone(threshold: Int) {
+        if (!_claimMilestoneInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            when (val result = repository.claimStreakMilestone(threshold)) {
-                is SensitiveProfileMutationResult.Success -> {
-                    result.profile?.let { updated ->
-                        _profile.value = updated
-                        _profileState.value = ProfileUiState.Loaded(updated)
+            try {
+                when (val result = repository.claimStreakMilestone(threshold)) {
+                    is SensitiveProfileMutationResult.Success -> {
+                        result.profile?.let { updated ->
+                            _profile.value = updated
+                            _profileState.value = ProfileUiState.Loaded(updated)
+                        }
+                        loadStreakMilestones()
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_streak_milestone_claimed),
+                            isError = false
+                        )
                     }
-                    loadStreakMilestones()
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_streak_milestone_claimed),
-                        isError = false
-                    )
-                }
-                is SensitiveProfileMutationResult.Rejected -> {
-                    if (result.reason == "not_authenticated") {
+                    is SensitiveProfileMutationResult.Rejected -> {
+                        if (result.reason == "not_authenticated") {
+                            _profileEvent.value = ProfileEvent.LoggedOut
+                            return@launch
+                        }
+                        val message = when (result.reason) {
+                            "already_claimed" -> R.string.profile_streak_milestone_already_claimed
+                            "not_reached" -> R.string.profile_streak_milestone_locked
+                            else -> R.string.profile_streak_milestone_failed
+                        }
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(message),
+                            isError = true
+                        )
+                    }
+                    SensitiveProfileMutationResult.Unauthenticated -> {
                         _profileEvent.value = ProfileEvent.LoggedOut
-                        return@launch
                     }
-                    val message = when (result.reason) {
-                        "already_claimed" -> R.string.profile_streak_milestone_already_claimed
-                        "not_reached" -> R.string.profile_streak_milestone_locked
-                        else -> R.string.profile_streak_milestone_failed
+                    else -> {
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_streak_milestone_failed),
+                            isError = true
+                        )
                     }
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(message),
-                        isError = true
-                    )
                 }
-                SensitiveProfileMutationResult.Unauthenticated -> {
-                    _profileEvent.value = ProfileEvent.LoggedOut
-                }
-                else -> {
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_streak_milestone_failed),
-                        isError = true
-                    )
-                }
+            } finally {
+                _claimMilestoneInFlight.value = false
             }
         }
     }
@@ -349,48 +364,53 @@ class ProfileViewModel @Inject constructor(
             )
             return
         }
+        if (!_claimReferralInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            when (val result = repository.claimReferral(code)) {
-                is SensitiveProfileMutationResult.Success -> {
-                    result.profile?.let { updated ->
-                        _profile.value = updated
-                        _profileState.value = ProfileUiState.Loaded(updated)
-                    }
-                    _referralAvailable.value = false
-                    val reward = result.reason?.toIntOrNull() ?: 0
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_referral_claimed, reward),
-                        isError = false
-                    )
-                }
-                is SensitiveProfileMutationResult.Rejected -> {
-                    if (result.reason == "not_authenticated") {
-                        _profileEvent.value = ProfileEvent.LoggedOut
-                        return@launch
-                    }
-                    if (result.reason == "already_referred") {
+            try {
+                when (val result = repository.claimReferral(code)) {
+                    is SensitiveProfileMutationResult.Success -> {
+                        result.profile?.let { updated ->
+                            _profile.value = updated
+                            _profileState.value = ProfileUiState.Loaded(updated)
+                        }
                         _referralAvailable.value = false
+                        val reward = result.reason?.toIntOrNull() ?: 0
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_referral_claimed, reward),
+                            isError = false
+                        )
                     }
-                    val message = when (result.reason) {
-                        "code_not_found" -> R.string.profile_referral_not_found
-                        "self_referral" -> R.string.profile_referral_self
-                        "already_referred" -> R.string.profile_referral_already
-                        else -> R.string.profile_referral_failed
+                    is SensitiveProfileMutationResult.Rejected -> {
+                        if (result.reason == "not_authenticated") {
+                            _profileEvent.value = ProfileEvent.LoggedOut
+                            return@launch
+                        }
+                        if (result.reason == "already_referred") {
+                            _referralAvailable.value = false
+                        }
+                        val message = when (result.reason) {
+                            "code_not_found" -> R.string.profile_referral_not_found
+                            "self_referral" -> R.string.profile_referral_self
+                            "already_referred" -> R.string.profile_referral_already
+                            else -> R.string.profile_referral_failed
+                        }
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(message),
+                            isError = true
+                        )
                     }
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(message),
-                        isError = true
-                    )
+                    SensitiveProfileMutationResult.Unauthenticated -> {
+                        _profileEvent.value = ProfileEvent.LoggedOut
+                    }
+                    else -> {
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_referral_failed),
+                            isError = true
+                        )
+                    }
                 }
-                SensitiveProfileMutationResult.Unauthenticated -> {
-                    _profileEvent.value = ProfileEvent.LoggedOut
-                }
-                else -> {
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_referral_failed),
-                        isError = true
-                    )
-                }
+            } finally {
+                _claimReferralInFlight.value = false
             }
         }
     }
@@ -408,54 +428,64 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun purchaseShopItem(itemId: String) {
+        if (!_purchaseInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            when (val result = repository.purchaseShopItem(itemId)) {
-                is ShopPurchaseResult.Success -> {
-                    repository.currentProfile.value?.let { updated ->
-                        _profile.value = updated
-                        _profileState.value = ProfileUiState.Loaded(updated)
+            try {
+                when (val result = repository.purchaseShopItem(itemId)) {
+                    is ShopPurchaseResult.Success -> {
+                        repository.currentProfile.value?.let { updated ->
+                            _profile.value = updated
+                            _profileState.value = ProfileUiState.Loaded(updated)
+                        }
+                        loadShopItems()
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_shop_purchase_success),
+                            isError = false
+                        )
                     }
-                    loadShopItems()
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_shop_purchase_success),
-                        isError = false
-                    )
+                    ShopPurchaseResult.InsufficientHoney -> showShopError(R.string.profile_shop_insufficient_honey)
+                    ShopPurchaseResult.AlreadyOwned -> {
+                        loadShopItems()
+                        showShopError(R.string.profile_shop_already_owned)
+                    }
+                    ShopPurchaseResult.ItemUnavailable -> {
+                        loadShopItems()
+                        showShopError(R.string.profile_shop_item_unavailable)
+                    }
+                    ShopPurchaseResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
+                    ShopPurchaseResult.Failure -> showShopError(R.string.profile_shop_purchase_failed)
                 }
-                ShopPurchaseResult.InsufficientHoney -> showShopError(R.string.profile_shop_insufficient_honey)
-                ShopPurchaseResult.AlreadyOwned -> {
-                    loadShopItems()
-                    showShopError(R.string.profile_shop_already_owned)
-                }
-                ShopPurchaseResult.ItemUnavailable -> {
-                    loadShopItems()
-                    showShopError(R.string.profile_shop_item_unavailable)
-                }
-                ShopPurchaseResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
-                ShopPurchaseResult.Failure -> showShopError(R.string.profile_shop_purchase_failed)
+            } finally {
+                _purchaseInFlight.value = false
             }
         }
     }
 
     fun equipCosmetic(itemId: String) {
+        if (!_equipInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            when (val result = repository.equipCosmetic(itemId)) {
-                is ShopEquipResult.Success -> {
-                    repository.currentProfile.value?.let { updated ->
-                        _profile.value = updated
-                        _profileState.value = ProfileUiState.Loaded(updated)
+            try {
+                when (val result = repository.equipCosmetic(itemId)) {
+                    is ShopEquipResult.Success -> {
+                        repository.currentProfile.value?.let { updated ->
+                            _profile.value = updated
+                            _profileState.value = ProfileUiState.Loaded(updated)
+                        }
+                        loadShopItems()
+                        _profileEvent.value = ProfileEvent.ShowMessage(
+                            UiText.resource(R.string.profile_shop_equipped_message),
+                            isError = false
+                        )
                     }
-                    loadShopItems()
-                    _profileEvent.value = ProfileEvent.ShowMessage(
-                        UiText.resource(R.string.profile_shop_equipped_message),
-                        isError = false
-                    )
+                    ShopEquipResult.NotOwned -> {
+                        loadShopItems()
+                        showShopError(R.string.profile_shop_not_owned)
+                    }
+                    ShopEquipResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
+                    ShopEquipResult.Failure -> showShopError(R.string.profile_shop_equip_failed)
                 }
-                ShopEquipResult.NotOwned -> {
-                    loadShopItems()
-                    showShopError(R.string.profile_shop_not_owned)
-                }
-                ShopEquipResult.Unauthenticated -> _profileEvent.value = ProfileEvent.LoggedOut
-                ShopEquipResult.Failure -> showShopError(R.string.profile_shop_equip_failed)
+            } finally {
+                _equipInFlight.value = false
             }
         }
     }
@@ -466,16 +496,6 @@ class ProfileViewModel @Inject constructor(
 
     fun clearProfileEvent() {
         _profileEvent.value = null
-    }
-
-    suspend fun checkAndUnlockBadges(profile: Profile) {
-        val updatedProfile = ProfileBadgeEvaluator.updatedProfileWithUnlockedBadges(profile)
-        val currentBadges = profile.badges?.toSet().orEmpty()
-        val newBadges = updatedProfile.badges?.toSet().orEmpty()
-
-        if (newBadges.size > currentBadges.size) {
-            // Badge persistence is server-owned in release builds; avoid direct profile-field updates.
-        }
     }
 
     private fun startProfileCollector() {

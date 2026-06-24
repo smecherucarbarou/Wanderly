@@ -69,6 +69,14 @@ fun ProfileScreen(
         .collectAsStateWithLifecycle(0)
     val shopItems by viewModel.shopItems.asFlow()
         .collectAsStateWithLifecycle(emptyList())
+    val purchaseInFlight by viewModel.purchaseInFlight
+        .collectAsStateWithLifecycle(false)
+    val claimReferralInFlight by viewModel.claimReferralInFlight
+        .collectAsStateWithLifecycle(false)
+    val claimMilestoneInFlight by viewModel.claimMilestoneInFlight
+        .collectAsStateWithLifecycle(false)
+    val equipInFlight by viewModel.equipInFlight
+        .collectAsStateWithLifecycle(false)
 
     when (profileState) {
         is ProfileUiState.Loading -> {
@@ -106,7 +114,11 @@ fun ProfileScreen(
                 gemsFound = gemsFound,
                 shopItems = shopItems,
                 onPurchaseItem = onPurchaseItem,
-                onEquipItem = onEquipItem
+                onEquipItem = onEquipItem,
+                purchaseInFlight = purchaseInFlight,
+                claimReferralInFlight = claimReferralInFlight,
+                claimMilestoneInFlight = claimMilestoneInFlight,
+                equipInFlight = equipInFlight
             )
         }
     }
@@ -155,7 +167,11 @@ private fun ProfileContent(
     gemsFound: Int,
     shopItems: List<ShopItemStatus>,
     onPurchaseItem: (String) -> Unit,
-    onEquipItem: (String) -> Unit
+    onEquipItem: (String) -> Unit,
+    purchaseInFlight: Boolean = false,
+    claimReferralInFlight: Boolean = false,
+    claimMilestoneInFlight: Boolean = false,
+    equipInFlight: Boolean = false
 ) {
     val spacing = WanderlyTheme.spacing
     val equippedFrameSku = shopItems.firstOrNull {
@@ -226,7 +242,8 @@ private fun ProfileContent(
                 Spacer(modifier = Modifier.height(spacing.lg))
                 ProfileMilestonesPanel(
                     milestones = streakMilestones,
-                    onClaim = onClaimMilestone
+                    onClaim = onClaimMilestone,
+                    claimMilestoneInFlight = claimMilestoneInFlight
                 )
             }
 
@@ -244,7 +261,7 @@ private fun ProfileContent(
 
             if (referralAvailable) {
                 Spacer(modifier = Modifier.height(spacing.lg))
-                ProfileReferralPanel(onClaim = onClaimReferral)
+                ProfileReferralPanel(onClaim = onClaimReferral, claimReferralInFlight = claimReferralInFlight)
             }
 
             if (shopItems.isNotEmpty()) {
@@ -252,7 +269,9 @@ private fun ProfileContent(
                 ProfileShopPanel(
                     items = shopItems,
                     onPurchase = onPurchaseItem,
-                    onEquip = onEquipItem
+                    onEquip = onEquipItem,
+                    purchaseInFlight = purchaseInFlight,
+                    equipInFlight = equipInFlight
                 )
             }
 

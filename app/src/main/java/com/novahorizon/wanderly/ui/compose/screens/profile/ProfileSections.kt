@@ -474,7 +474,8 @@ internal fun ProfileNotificationPanel(
 @Composable
 internal fun ProfileMilestonesPanel(
     milestones: List<StreakMilestoneStatus>,
-    onClaim: (Int) -> Unit
+    onClaim: (Int) -> Unit,
+    claimMilestoneInFlight: Boolean = false
 ) {
     if (milestones.isEmpty()) return
     val spacing = WanderlyTheme.spacing
@@ -500,7 +501,7 @@ internal fun ProfileMilestonesPanel(
         }
         milestones.forEach { milestone ->
             Spacer(modifier = Modifier.height(spacing.md))
-            ProfileMilestoneRow(milestone = milestone, onClaim = onClaim)
+            ProfileMilestoneRow(milestone = milestone, onClaim = onClaim, claimMilestoneInFlight = claimMilestoneInFlight)
         }
     }
 }
@@ -508,7 +509,8 @@ internal fun ProfileMilestonesPanel(
 @Composable
 private fun ProfileMilestoneRow(
     milestone: StreakMilestoneStatus,
-    onClaim: (Int) -> Unit
+    onClaim: (Int) -> Unit,
+    claimMilestoneInFlight: Boolean = false
 ) {
     val spacing = WanderlyTheme.spacing
 
@@ -539,6 +541,7 @@ private fun ProfileMilestoneRow(
             milestone.claimable -> {
                 Button(
                     onClick = { onClaim(milestone.threshold) },
+                    enabled = !claimMilestoneInFlight,
                     contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -577,7 +580,7 @@ private fun MilestoneStatusChip(text: String) {
 }
 
 @Composable
-internal fun ProfileReferralPanel(onClaim: (String) -> Unit) {
+internal fun ProfileReferralPanel(onClaim: (String) -> Unit, claimReferralInFlight: Boolean = false) {
     val spacing = WanderlyTheme.spacing
     var code by remember { mutableStateOf("") }
 
@@ -618,7 +621,7 @@ internal fun ProfileReferralPanel(onClaim: (String) -> Unit) {
         Spacer(modifier = Modifier.height(spacing.md))
         Button(
             onClick = { onClaim(code) },
-            enabled = code.isNotBlank(),
+            enabled = code.isNotBlank() && !claimReferralInFlight,
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = spacing.minTouchTarget),
@@ -636,7 +639,9 @@ internal fun ProfileReferralPanel(onClaim: (String) -> Unit) {
 internal fun ProfileShopPanel(
     items: List<ShopItemStatus>,
     onPurchase: (String) -> Unit,
-    onEquip: (String) -> Unit
+    onEquip: (String) -> Unit,
+    purchaseInFlight: Boolean = false,
+    equipInFlight: Boolean = false
 ) {
     if (items.isEmpty()) return
     val spacing = WanderlyTheme.spacing
@@ -668,7 +673,7 @@ internal fun ProfileShopPanel(
         )
         items.forEach { item ->
             Spacer(modifier = Modifier.height(spacing.md))
-            ProfileShopRow(item = item, onPurchase = onPurchase, onEquip = onEquip)
+            ProfileShopRow(item = item, onPurchase = onPurchase, onEquip = onEquip, purchaseInFlight = purchaseInFlight, equipInFlight = equipInFlight)
         }
     }
 }
@@ -677,7 +682,9 @@ internal fun ProfileShopPanel(
 private fun ProfileShopRow(
     item: ShopItemStatus,
     onPurchase: (String) -> Unit,
-    onEquip: (String) -> Unit
+    onEquip: (String) -> Unit,
+    purchaseInFlight: Boolean = false,
+    equipInFlight: Boolean = false
 ) {
     val spacing = WanderlyTheme.spacing
 
@@ -719,6 +726,7 @@ private fun ProfileShopRow(
             item.owned -> {
                 Button(
                     onClick = { onEquip(item.id) },
+                    enabled = !equipInFlight,
                     contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -731,7 +739,7 @@ private fun ProfileShopRow(
             else -> {
                 Button(
                     onClick = { onPurchase(item.id) },
-                    enabled = item.affordable,
+                    enabled = item.affordable && !purchaseInFlight,
                     contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.xs),
                     shape = MaterialTheme.shapes.medium
                 ) {

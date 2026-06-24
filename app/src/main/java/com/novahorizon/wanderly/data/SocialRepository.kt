@@ -8,6 +8,7 @@ import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -75,6 +76,7 @@ class SocialRepository {
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error getting leaderboard", e)
             emptyList()
         }
@@ -104,6 +106,7 @@ class SocialRepository {
             )
             AddFriendResult.FriendRequestSent
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             if (e.message?.contains("duplicate key") == true || e.message?.contains("unique constraint") == true) {
                 AddFriendResult.AlreadyRequestedOrFriends
             } else {
@@ -134,6 +137,7 @@ class SocialRepository {
             }
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error removing friend", e)
             false
         }
@@ -149,6 +153,7 @@ class SocialRepository {
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error getting incoming friend requests", e)
             emptyList()
         }
@@ -177,6 +182,7 @@ class SocialRepository {
                 .rpc("get_friend_locations")
                 .decodeList<FriendLocation>()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error getting friend locations", e)
             emptyList()
         }
@@ -193,6 +199,7 @@ class SocialRepository {
                 .decodeList<Profile>()
                 .map { it.withDerivedHiveRank() }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error getting friends", e)
             emptyList()
         }
@@ -219,6 +226,7 @@ class SocialRepository {
                 mapFriendRequestActionError(response.error_code)
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error updating friend request", e)
             FriendRequestActionResult.Failure
         }
@@ -252,6 +260,7 @@ class SocialRepository {
                 .filter { userId -> userId != currentUserId }
                 .distinct()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logError("Error getting accepted friend ids", e)
             emptyList()
         }
