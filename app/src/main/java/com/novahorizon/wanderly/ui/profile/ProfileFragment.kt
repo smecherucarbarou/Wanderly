@@ -208,7 +208,7 @@ class ProfileFragment : Fragment() {
         viewModel.profile.observe(viewLifecycleOwner) { profile ->
             if (profile != null) {
                 currentProfile = profile
-                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG, profile.admin_role)
+                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG)
                 updateAvatarDisplaySource(profile)
                 val honey = profile.honey ?: 0
                 val flights = honey / 50
@@ -217,7 +217,7 @@ class ProfileFragment : Fragment() {
                 }
             } else {
                 currentProfile = null
-                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG, null)
+                showDevPanel = shouldShowDevPanel(BuildConfig.DEBUG)
                 updateAvatarDisplaySource(null)
             }
         }
@@ -447,7 +447,8 @@ class ProfileFragment : Fragment() {
             return StreakTierHelper.resolve(streakCount).color
         }
 
-        internal fun shouldShowDevPanel(isDebugBuild: Boolean, @Suppress("UNUSED_PARAMETER") isAdmin: Boolean?): Boolean {
+        // TODO: admin state should come from a dedicated is_admin() RPC, not a client field.
+        internal fun shouldShowDevPanel(isDebugBuild: Boolean): Boolean {
             return isDebugBuild
         }
 

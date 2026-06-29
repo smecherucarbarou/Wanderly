@@ -104,11 +104,12 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".services.HiveRealtimeService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+        <!--
+            HiveRealtimeService removed: profile realtime is disabled (ENABLE_PROFILE_REALTIME = false), so
+            the foreground service only posted a permanent idle notification. To re-enable, restore this
+            <service android:name=".services.HiveRealtimeService" android:enabled="true"
+            android:exported="false" android:foregroundServiceType="dataSync" /> entry and flip the flag.
+        -->
 
         <receiver
             android:name=".widgets.WanderlyStreakWidgetProvider"

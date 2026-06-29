@@ -244,7 +244,7 @@ android {
         applicationId = "com.novahorizon.wanderly"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
         versionName = "1.0"
 
         testInstrumentationRunner = "com.novahorizon.wanderly.HiltTestRunner"
@@ -266,6 +266,8 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             buildConfigField("String", "SUPABASE_URL", buildConfigString(supabaseUrl))
             buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(supabaseAnonKey))
             buildConfigField("String", "GEMINI_PROXY_URL", buildConfigString(geminiProxyUrl))
@@ -303,6 +305,9 @@ android {
         compose = true
     }
     lint {
+        checkDependencies = true
+        checkReleaseBuilds = true
+        baseline = file("lint-baseline.xml")
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
@@ -468,7 +473,6 @@ dependencies {
     // Crash reporting. Runtime collection remains disabled unless google-services.json is present.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
-    implementation(libs.firebase.analytics)
 
     // Baseline Profile installation for release builds and sideloaded internal candidates.
     implementation(libs.androidx.profileinstaller)

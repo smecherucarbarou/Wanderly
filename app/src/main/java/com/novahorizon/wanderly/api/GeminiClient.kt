@@ -19,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -62,11 +64,13 @@ object GeminiClient {
     }
 
     suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String {
-        val imageBytes = ByteArrayOutputStream().use { outputStream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-            outputStream.toByteArray()
+        val encodedImage = withContext(Dispatchers.IO) {
+            val imageBytes = ByteArrayOutputStream().use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                outputStream.toByteArray()
+            }
+            Base64.encodeToString(imageBytes, Base64.NO_WRAP)
         }
-        val encodedImage = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
         val body = JSONObject().apply {
             put("contents", JSONArray().put(JSONObject().apply {
                 put("parts", JSONArray().apply {
@@ -188,14 +192,14 @@ object GeminiClient {
                             AppLogger.e(TAG, "Gemini $logLabel request failed with code=${resp.code}")
                             logDebug { "Gemini $logLabel error bodyLength=${responseBody.length}" }
 
-                            val safeMessage = parseProxyErrorMessage(responseBody)
+                            val safeMessage = parseProxyErrorMessage(responseBody)?.take(ERROR_BODY_LOG_LIMIT)
                                 ?: "Proxy call failed: ${resp.code}"
 
                             throw GeminiHttpException(resp.code, safeMessage)
                         }
                         parseStructuredError(responseBody)?.let { error ->
                             AppLogger.w(TAG, "Gemini $logLabel failed: type=${error.type} status=${error.status}")
-                            throw GeminiHttpException(error.status ?: resp.code, error.message)
+                            throw GeminiHttpException(error.status ?: resp.code, error.message.take(ERROR_BODY_LOG_LIMIT))
                         }
                         logDebug { "Gemini $logLabel request succeeded with bodyLength=${responseBody.length}" }
                         if (extractGeminiText) {
@@ -290,23 +294,33 @@ object GeminiClient {
         block: suspend () -> T
     ): T {
         var delayMs = initialDelayMs
-        repeat(maxAttempts - 1) {
+        var lastError: Exception? = null
+        repeat(maxAttempts) { attempt ->
             try {
                 return block()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                if (!e.isRetryableGeminiFailure()) {
+                lastError = e
+                // Final attempt or a non-retryable failure: surface it (unified error semantics — the last
+                // try now runs inside this catch instead of as a separate uncaught call).
+                if (attempt == maxAttempts - 1 || !e.isRetryableGeminiFailure()) {
                     throw e
                 }
                 delay(delayMs + jitterMs(delayMs))
                 delayMs *= 2
             }
         }
-        return block()
+        throw lastError ?: IllegalStateException("withRetry exhausted without an attempt")
     }
 
     private fun Exception.isRetryableGeminiFailure(): Boolean {
-        return this is GeminiHttpException && code in RETRYABLE_HTTP_CODES
+        return when (this) {
+            is GeminiHttpException -> code in RETRYABLE_HTTP_CODES
+            // Transient transport failures (CancellationException is already handled before this call).
+            is SocketTimeoutException -> true
+            is IOException -> true
+            else -> false
+        }
     }
 
     sealed class GeminiClientException(

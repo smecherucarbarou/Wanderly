@@ -25,6 +25,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -93,7 +95,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class AdminStatsUpdateResponse(
+    internal data class AdminStatsUpdateResponse(
         val success: Boolean,
         val honey: Int,
         val streak_count: Int,
@@ -106,7 +108,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class StreakMutationRpcResponse(
+    internal data class StreakMutationRpcResponse(
         val updated: Boolean? = null,
         val restored: Boolean? = null,
         val reason: String? = null,
@@ -348,23 +350,29 @@ class ProfileRepository(
                         new_hive_rank = payload.hive_rank
                     )
                 )
-                .decodeRpc<AdminStatsUpdateResponse>()
+                .decodeList<AdminStatsUpdateResponse>().firstOrNull()
+                ?: return@withContext false
 
             if (!response.success) {
                 logWarn("Admin stats update did not persist for profile.")
                 return@withContext false
             }
 
-            if (_currentProfile.value?.id == profileId) {
-                val refreshed = _currentProfile.value?.copy(
-                    honey = response.honey,
-                    streak_count = response.streak_count,
-                    hive_rank = response.hive_rank
-                )
-                _currentProfile.value = refreshed
+            val refreshed = _currentProfile.updateAndGet { current ->
+                if (current?.id == profileId) {
+                    current.copy(
+                        honey = response.honey,
+                        streak_count = response.streak_count,
+                        hive_rank = response.hive_rank
+                    )
+                } else {
+                    current
+                }
+            }
+            if (refreshed?.id == profileId) {
                 preferencesStore.cacheProfileStreakState(
-                    lastMissionDate = refreshed?.last_mission_date,
-                    streakCount = refreshed?.streak_count
+                    lastMissionDate = refreshed.last_mission_date,
+                    streakCount = refreshed.streak_count
                 )
             }
             true
@@ -444,8 +452,8 @@ class ProfileRepository(
                 SupabaseClient.client.postgrest
                     .rpc("update_profile_location", LocationUpdateParams(lat, lng))
 
-                _currentProfile.value = _currentProfile.value?.copy(last_lat = lat, last_lng = lng)
-                SensitiveProfileMutationResult.Success(_currentProfile.value)
+                val updated = _currentProfile.updateAndGet { it?.copy(last_lat = lat, last_lng = lng) }
+                SensitiveProfileMutationResult.Success(updated)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 mapSensitiveProfileMutationFailure(e)
@@ -460,7 +468,8 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("accept_streak_loss")
-                .decodeRpc<StreakMutationRpcResponse>()
+                .decodeList<StreakMutationRpcResponse>().firstOrNull()
+                ?: return@withContext SensitiveProfileMutationResult.ParseFailure
             if (response.updated == true) {
                 val profile = applyProgressSnapshot(
                     honey = response.honey,
@@ -485,7 +494,8 @@ class ProfileRepository(
         try {
             val response = SupabaseClient.client.postgrest
                 .rpc("restore_streak", RestoreStreakParams(cost))
-                .decodeRpc<StreakMutationRpcResponse>()
+                .decodeList<StreakMutationRpcResponse>().firstOrNull()
+                ?: return@withContext SensitiveProfileMutationResult.ParseFailure
             if (response.restored == true) {
                 val profile = applyProgressSnapshot(
                     honey = response.honey,
@@ -513,10 +523,7 @@ class ProfileRepository(
                 .decodeRpc<StreakFreezeRpcResponse>()
             if (response.success) {
                 val freezesLeft = response.freezes_left ?: 0
-                val updated = _currentProfile.value?.copy(streak_freezes = freezesLeft)
-                if (updated != null) {
-                    _currentProfile.value = updated
-                }
+                val updated = _currentProfile.updateAndGet { it?.copy(streak_freezes = freezesLeft) }
                 SensitiveProfileMutationResult.Success(updated)
             } else {
                 SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
@@ -681,7 +688,7 @@ class ProfileRepository(
             val result = mapPurchaseResponse(response)
             if (result is ShopPurchaseResult.Success) {
                 // RPC echoes the post-debit balance; refresh honey in the shared profile state.
-                _currentProfile.value?.let { _currentProfile.value = it.copy(honey = result.newHoney) }
+                _currentProfile.update { it?.copy(honey = result.newHoney) }
             }
             result
         } catch (e: Exception) {
@@ -713,20 +720,23 @@ class ProfileRepository(
     }
 
     private fun applyEquippedCosmetic(type: String?, itemId: String) {
-        val current = _currentProfile.value ?: return
-        _currentProfile.value = when (type) {
-            CosmeticType.AVATAR_FRAME -> current.copy(equipped_frame = itemId)
-            CosmeticType.BUZZY_SKIN -> current.copy(equipped_skin = itemId)
-            CosmeticType.WIDGET_THEME -> current.copy(equipped_widget_theme = itemId)
-            else -> current
+        _currentProfile.update { current ->
+            when (type) {
+                CosmeticType.AVATAR_FRAME -> current?.copy(equipped_frame = itemId)
+                CosmeticType.BUZZY_SKIN -> current?.copy(equipped_skin = itemId)
+                CosmeticType.WIDGET_THEME -> current?.copy(equipped_widget_theme = itemId)
+                else -> current
+            }
         }
     }
 
     suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult {
         val result = avatarRepository.uploadAvatar(uri, profileId)
-        if (result is AvatarUploadResult.Success && _currentProfile.value?.id == profileId) {
+        if (result is AvatarUploadResult.Success) {
             // Avatar upload now returns the public URL so profile state refreshes with the cache-busted image.
-            _currentProfile.value = _currentProfile.value?.copy(avatar_url = result.avatarUrl)
+            _currentProfile.update { current ->
+                if (current?.id == profileId) current.copy(avatar_url = result.avatarUrl) else current
+            }
         }
         return result
     }
@@ -799,15 +809,19 @@ class ProfileRepository(
         streakCount: Int?,
         lastMissionDate: String?
     ): Profile? {
-        val base = _currentProfile.value ?: getCurrentProfile()
-        val updated = base?.copy(
-            honey = honey ?: base.honey,
-            streak_count = streakCount ?: base.streak_count,
-            last_mission_date = lastMissionDate ?: base.last_mission_date,
-            hive_rank = HiveRank.fromHoney(honey ?: base.honey)
-        )
+        // Ensure a base profile is loaded; the suspend fetch can't run inside the atomic update block.
+        if (_currentProfile.value == null) {
+            getCurrentProfile()
+        }
+        val updated = _currentProfile.updateAndGet { current ->
+            current?.copy(
+                honey = honey ?: current.honey,
+                streak_count = streakCount ?: current.streak_count,
+                last_mission_date = lastMissionDate ?: current.last_mission_date,
+                hive_rank = HiveRank.fromHoney(honey ?: current.honey)
+            )
+        }
         if (updated != null) {
-            _currentProfile.value = updated
             preferencesStore.cacheProfileStreakState(
                 lastMissionDate = updated.last_mission_date,
                 streakCount = updated.streak_count

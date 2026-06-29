@@ -107,12 +107,28 @@ class SocialRepository {
             AddFriendResult.FriendRequestSent
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            if (e.message?.contains("duplicate key") == true || e.message?.contains("unique constraint") == true) {
+            // Postgres unique-violation SQLSTATE (stable across locales, unlike the English message text).
+            if (e.message?.contains("23505") == true) {
                 AddFriendResult.AlreadyRequestedOrFriends
             } else {
                 logError("Error adding friend", e)
                 AddFriendResult.Failure
             }
+        }
+    }
+
+    /** Resolves a friend code to its profile via find_profile_by_friend_code, or null if not found. */
+    suspend fun findProfileByFriendCode(friendCode: String): Profile? = withContext(Dispatchers.IO) {
+        try {
+            val normalizedCode = normalizeFriendCode(friendCode) ?: return@withContext null
+            SupabaseClient.client.postgrest
+                .rpc("find_profile_by_friend_code", FriendCodeLookupParams(normalizedCode))
+                .decodeList<Profile>()
+                .firstOrNull()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            logError("Error looking up friend code", e)
+            null
         }
     }
 

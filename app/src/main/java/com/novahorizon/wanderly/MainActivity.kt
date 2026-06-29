@@ -28,6 +28,7 @@ import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.notifications.NotificationPermissionManager
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
+import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.main.MainViewModel
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
@@ -156,9 +157,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startHiveService(hasSession: Boolean) {
-        if (AuthRouting.shouldStartSessionServices(hasSession)) {
-            val intent = Intent(this, HiveRealtimeService::class.java)
+        // HiveRealtimeService is disabled (HiveRealtimeService.ENABLE_PROFILE_REALTIME = false): starting it
+        // would only post a permanent idle foreground notification while doing no work. Skip the start. To
+        // re-enable profile realtime: flip the flag and restore the <service> entry in AndroidManifest.xml —
+        // this gate then allows the start again.
+        if (!HiveRealtimeService.ENABLE_PROFILE_REALTIME) return
+        if (!AuthRouting.shouldStartSessionServices(hasSession)) return
+        val intent = Intent(this, HiveRealtimeService::class.java)
+        try {
             startForegroundService(intent)
+        } catch (e: IllegalStateException) {
+            // Android 12+ can reject a foreground-service start when the app isn't in an allowed state
+            // (ForegroundServiceStartNotAllowedException, a subclass of IllegalStateException). Best-effort:
+            // log and continue rather than crash.
+            AppLogger.w("MainActivity", "Could not start HiveRealtimeService: ${e.message}")
         }
     }
 

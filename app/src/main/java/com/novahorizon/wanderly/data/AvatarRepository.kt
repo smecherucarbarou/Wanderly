@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.api.SupabaseClient
@@ -15,7 +16,7 @@ import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.Clock
-import com.novahorizon.wanderly.util.SystemClock
+import com.novahorizon.wanderly.util.RealClock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CancellationException
@@ -30,7 +31,7 @@ import java.util.concurrent.TimeUnit
 
 class AvatarRepository(
     private val context: Context,
-    private val clock: Clock = SystemClock
+    private val clock: Clock = RealClock
 ) {
     internal data class AvatarStorageTarget(
         val filePath: String,
@@ -45,59 +46,14 @@ class AvatarRepository(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun uploadAvatar(
-        imageBytes: ByteArray,
-        mimeType: String
-    ): AvatarUploadResult = withContext(Dispatchers.IO) {
-        validateAvatarPayload(imageBytes, mimeType)?.let { return@withContext it }
-        val processedBytes = try { recompressAsJpeg(imageBytes) } catch (_: Exception) {
-            return@withContext AvatarUploadResult.Error("Could not process avatar image")
-        }
-        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-            ?: return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
-        val uid = session.user?.id
-            ?: return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
-        val accessToken = SupabaseClient.client.auth.currentAccessTokenOrNull()
-            ?: return@withContext AvatarUploadResult.Error("User must be signed in to upload avatar")
-        val bucket = Constants.STORAGE_BUCKET_AVATARS
-        val target = buildAvatarStorageTarget(
-            baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/'),
-            bucket = bucket,
-            profileId = uid,
-            versionToken = clock.nowMillis().toString(),
-            mimeType = mimeType
-        )
-
-        try {
-            val request = Request.Builder()
-                .url(target.uploadUrl)
-                .addHeader("Authorization", "Bearer $accessToken")
-                .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                .addHeader("x-upsert", "true")
-                .post(processedBytes.toRequestBody(AVATAR_MIME_TYPE.toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseBody = response.body.string()
-                if (!response.isSuccessful) {
-                    val message = buildAvatarUploadFailureMessage(response.code, responseBody)
-                    logError("Upload failed bucket=$bucket error=$message")
-                    return@withContext AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
-                }
-            }
-
-            logDebug("Upload success bucket=$bucket")
-            AvatarUploadResult.Success(target.publicUrl)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            logError("Upload failed bucket=$bucket error=${e.message}", e)
-            AvatarUploadResult.Error("Could not upload avatar. Please try another image.")
-        }
-    }
-
     suspend fun uploadAvatar(uri: Uri, profileId: String): AvatarUploadResult = withContext(Dispatchers.IO) {
         var stage = "read_bytes"
         try {
+            // Bound the raw input before readBytes() pulls it fully into memory (OOM guard).
+            val rawSize = queryAvatarSize(uri)
+            if (rawSize != null && rawSize > MAX_RAW_AVATAR_BYTES) {
+                return@withContext AvatarUploadResult.FileTooLarge
+            }
             val avatarBytes = readAvatarBytes(uri)
             val mimeType = resolveAvatarMimeType(uri)
             validateAvatarPayload(avatarBytes, mimeType)?.let { return@withContext it }
@@ -185,6 +141,17 @@ class AvatarRepository(
             )
             AvatarUploadResult.Error(stageFailureMessage(stage))
         }
+    }
+
+    /** Best-effort size of the picked content via OpenableColumns.SIZE; null if the provider omits it. */
+    private fun queryAvatarSize(uri: Uri): Long? {
+        return context.contentResolver
+            .query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index < 0 || cursor.isNull(index)) null else cursor.getLong(index)
+            }
     }
 
     private fun readAvatarBytes(uri: Uri): ByteArray {
@@ -286,6 +253,9 @@ class AvatarRepository(
         private const val PUBLIC_AVATAR_URL_MARKER = "/storage/v1/object/public/avatars/"
         private const val AUTHENTICATED_AVATAR_URL_MARKER = "/storage/v1/object/authenticated/avatars/"
         internal const val MAX_AVATAR_UPLOAD_BYTES = 5L * 1024L * 1024L
+        // Upper bound on the RAW picked image before it is read into memory and recompressed. Guards against
+        // OOM from a huge source file; the recompressed result is separately capped by MAX_AVATAR_UPLOAD_BYTES.
+        internal const val MAX_RAW_AVATAR_BYTES = 25L * 1024L * 1024L
         private const val MAX_AVATAR_DIMENSION = 512
         private const val JPEG_QUALITY = 80
         private val ALLOWED_MIME = setOf("image/jpeg", "image/png", "image/webp")

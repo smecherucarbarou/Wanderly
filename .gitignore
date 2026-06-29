@@ -20,6 +20,7 @@ google-services.json
 *.log
 *.tmp
 *.md
+!AUDIT_PROGRESS.md
 /logs/
 
 # Local package outputs

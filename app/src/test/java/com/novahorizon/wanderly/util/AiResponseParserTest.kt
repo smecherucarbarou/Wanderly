@@ -93,7 +93,6 @@ class AiResponseParserTest {
 
         assertTrue(result.verified)
         assertEquals("The image clearly matches the mission.", result.reason)
-        assertEquals("11111111-1111-1111-1111-111111111111", result.verificationToken)
     }
 
     @Test

@@ -1,5 +1,17 @@
 package com.novahorizon.wanderly.observability
 
+/**
+ * Redaction regexes shared by [LogRedactor] and [CrashReporter] so both agree on what counts as
+ * sensitive. Add new shared patterns here (not in either consumer) to keep them in sync.
+ */
+object RedactionPatterns {
+    /** A "lat,lng"-style coordinate pair with >=4 decimal places. */
+    val coordinatePair = Regex("-?\\d{1,3}\\.\\d{4,}\\s*,\\s*-?\\d{1,3}\\.\\d{4,}")
+
+    /** A latitude/longitude key immediately followed by its value, e.g. `lat=` / `longitude:`. */
+    val coordinateKey = Regex("(?i)(^|[^a-z0-9])(lat|latitude|lng|lon|longitude)\\s*[:=]")
+}
+
 object LogRedactor {
     private const val MAX_LOG_VALUE_LENGTH = 200
     private val localUriPattern = Regex("""\b(?:file|content)://\S+""", RegexOption.IGNORE_CASE)
@@ -17,6 +29,7 @@ object LogRedactor {
             ?.let { jwtPattern.replace(it, "[redacted-jwt]") }
             ?.let { uuidPattern.replace(it, "[redacted-id]") }
             ?.let { emailPattern.replace(it, "[redacted-email]") }
+            ?.let { RedactionPatterns.coordinatePair.replace(it, "[redacted-coords]") }
             ?: "null"
 
         return redacted.take(MAX_LOG_VALUE_LENGTH).let { bounded ->

@@ -43,8 +43,8 @@ object CrashReporter {
         Regex("(?i)(^|[^a-z0-9])(token|secret|password|authorization|bearer|api[_ -]?key|anon[_ -]?key|jwt)([^a-z0-9]|$)"),
         Regex("(?i)\\b[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}\\b"),
         Regex("(?i)(^|[^a-z0-9])(username|friend[_ -]?code|query|raw[_ -]?query|place[_ -]?name|raw[_ -]?place|avatar[_ -]?path)([^a-z0-9]|$)"),
-        Regex("(?i)(^|[^a-z0-9])(lat|latitude|lng|lon|longitude)\\s*[:=]"),
-        Regex("-?\\d{1,3}\\.\\d{4,}\\s*,\\s*-?\\d{1,3}\\.\\d{4,}"),
+        RedactionPatterns.coordinateKey,
+        RedactionPatterns.coordinatePair,
         Regex("(?i)(^|[^a-z0-9])(avatar|profile)[^\\s]*[\\\\/][^\\s]+")
     )
     private var backend: CrashReportingBackend? = null

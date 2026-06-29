@@ -16,7 +16,7 @@ import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.PreferencesStore
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.Clock
-import com.novahorizon.wanderly.util.SystemClock
+import com.novahorizon.wanderly.util.RealClock
 
 object WanderlyNotificationManager {
     enum class NotificationType {
@@ -42,7 +42,7 @@ object WanderlyNotificationManager {
     private const val AGGREGATED_RIVAL_COOLDOWN_MS = 25 * 60 * 1000L
     private const val OVERTAKEN_COOLDOWN_MS = 45 * 60 * 1000L
     private const val FIGHT_FOR_FIRST_COOLDOWN_MS = 20 * 60 * 1000L
-    internal var clock: Clock = SystemClock
+    internal var clock: Clock = RealClock
     @Volatile
     private var permissionWarningLogged = false
     @Volatile

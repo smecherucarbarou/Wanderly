@@ -4,6 +4,6 @@ interface Clock {
     fun nowMillis(): Long
 }
 
-object SystemClock : Clock {
+object RealClock : Clock {
     override fun nowMillis(): Long = System.currentTimeMillis()
 }

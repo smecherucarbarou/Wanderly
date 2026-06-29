@@ -106,7 +106,7 @@ class MissionPlaceSelector @Inject constructor(
 
     private suspend fun tryGeminiQueries(city: String): List<String> {
         return try {
-            logDebug("Gemini query generation started model=gemini-3-flash-preview")
+            logDebug("Gemini query generation started model=gemini-3.5-flash")
             when (val result = geminiQueryProvider.generateQueries(city)) {
                 is GeminiQueryResult.Success -> {
                     logDebug("Gemini queries generated count=${result.queries.size}")

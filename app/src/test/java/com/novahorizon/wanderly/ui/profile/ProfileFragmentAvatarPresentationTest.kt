@@ -89,11 +89,8 @@ class ProfileFragmentAvatarPresentationTest {
 
     @Test
     fun `shows dev panel only for debug builds`() {
-        assertTrue(ProfileFragment.shouldShowDevPanel(isDebugBuild = true, isAdmin = false))
-        assertTrue(ProfileFragment.shouldShowDevPanel(isDebugBuild = true, isAdmin = true))
-        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = true))
-        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = false))
-        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false, isAdmin = null))
+        assertTrue(ProfileFragment.shouldShowDevPanel(isDebugBuild = true))
+        assertFalse(ProfileFragment.shouldShowDevPanel(isDebugBuild = false))
     }
 
     @Test

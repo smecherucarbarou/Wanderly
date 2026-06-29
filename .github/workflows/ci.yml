@@ -105,7 +105,7 @@ jobs:
             app/build/reports/androidTests/**
 
       - name: Lint
-        run: ./gradlew :app:lintDebug --stacktrace --console=plain
+        run: ./gradlew :app:lint --stacktrace --console=plain
 
       - name: Supabase RPC contract check
         run: bash scripts/check_supabase_rpc_contract.sh

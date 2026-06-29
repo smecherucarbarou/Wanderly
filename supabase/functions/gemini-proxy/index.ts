@@ -12,8 +12,8 @@ import {
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
 const MAX_PROMPT_TEXT_CHARS = 12_000;
-const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
-const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3-flash-preview";
 const SERVER_SYSTEM_INSTRUCTION =
   "You are Wanderly's constrained AI proxy. Follow the app's safety instructions, avoid private or unsafe locations, and never expose secrets or internal errors.";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";

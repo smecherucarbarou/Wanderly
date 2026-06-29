@@ -199,15 +199,6 @@ object StreakWidgetStateHelper {
         }
     }
 
-    private fun parseDate(rawDate: String?): LocalDate? {
-        if (rawDate.isNullOrBlank()) return null
-        return try {
-            LocalDate.parse(rawDate)
-        } catch (_: DateTimeParseException) {
-            null
-        }
-    }
-
     private fun LocalDateTime.toEpochMillis(): Long {
         return atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }

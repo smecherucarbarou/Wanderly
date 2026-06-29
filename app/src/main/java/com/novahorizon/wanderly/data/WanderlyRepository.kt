@@ -103,6 +103,9 @@ open class WanderlyRepository(context: Context) {
     open suspend fun addFriendByCodeResult(friendCode: String): AddFriendResult =
         socialRepository.addFriendByCodeResult(friendCode)
 
+    open suspend fun findProfileByFriendCode(friendCode: String): Profile? =
+        socialRepository.findProfileByFriendCode(friendCode)
+
     open suspend fun getIncomingFriendRequests(): List<Profile> =
         socialRepository.getIncomingFriendRequests()
 

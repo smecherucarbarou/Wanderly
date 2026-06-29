@@ -1,6 +1,7 @@
 package com.novahorizon.wanderly.api
 
 import com.novahorizon.wanderly.BuildConfig
+import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit
 
 object PlacesProxyClient {
     private const val API_URL = "/functions/v1/google-places-proxy"
+    private const val ERROR_BODY_LOG_LIMIT = 512
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val req = chain.request()
@@ -48,7 +50,7 @@ object PlacesProxyClient {
         }
 
         try {
-            var response = client.newCall(buildRequest(accessToken)).execute()
+            var response = client.newCall(buildRequest(accessToken)).await()
 
             if (response.code == 401) {
                 response.close()
@@ -57,7 +59,7 @@ object PlacesProxyClient {
                     val newToken = auth.currentAccessTokenOrNull()
                     if (newToken != null && newToken != accessToken) {
                         accessToken = newToken
-                        response = client.newCall(buildRequest(accessToken)).execute()
+                        response = client.newCall(buildRequest(accessToken)).await()
                     } else {
                         return@withContext NetworkResult.HttpError(401, "Refresh failed")
                     }
@@ -70,7 +72,7 @@ object PlacesProxyClient {
             response.use { resp ->
                 val responseBody = resp.body.string()
                 if (!resp.isSuccessful) {
-                    val safeMessage = parseProxyErrorMessage(responseBody)
+                    val safeMessage = parseProxyErrorMessage(responseBody)?.take(ERROR_BODY_LOG_LIMIT)
                         ?: "Places proxy failed: ${resp.code}"
                     return@withContext NetworkResult.HttpError(resp.code, safeMessage)
                 }

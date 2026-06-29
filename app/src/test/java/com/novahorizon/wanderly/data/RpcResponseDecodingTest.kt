@@ -1,9 +1,11 @@
 package com.novahorizon.wanderly.data
 
 import com.novahorizon.wanderly.api.SupabaseRpcJson
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -175,5 +177,59 @@ class RpcResponseDecodingTest {
         val partial = reached.copy(totalContribution = 12)
         assertFalse(partial.goalReached)
         assertEquals(0.6f, partial.progressFraction, 0.0001f)
+    }
+
+    // --- QW-1 / H-1 regression -------------------------------------------------------------------
+    // TABLE-returning RPCs (accept_streak_loss, restore_streak, admin_update_profile_stats) serialize
+    // as a JSON *array* of rows, not a bare object. decodeRpc() delegates to
+    // SupabaseRpcJson.decodeFromString<T>(), which rejects an array — using it on these RPCs turns a
+    // committed server mutation into a client-side failure. The fix decodes with
+    // decodeList<T>().firstOrNull(). These tests pin both halves of that contract.
+
+    @Test
+    fun `decodeRpc-style object decode throws on a TABLE array for StreakMutationRpcResponse`() {
+        val arrayPayload =
+            """[{"updated":true,"honey":120,"streak_count":5,"last_mission_date":"2026-06-29"}]"""
+        try {
+            SupabaseRpcJson.decodeFromString<ProfileRepository.StreakMutationRpcResponse>(arrayPayload)
+            fail("Expected an object decode of a JSON array to throw SerializationException")
+        } catch (_: SerializationException) {
+            // expected — decodeRpc must not be used on TABLE-returning RPCs
+        }
+    }
+
+    @Test
+    fun `decodeList firstOrNull returns the first StreakMutationRpcResponse row`() {
+        val arrayPayload =
+            """[{"updated":true,"honey":120,"streak_count":5,"last_mission_date":"2026-06-29"}]"""
+        val row = SupabaseRpcJson
+            .decodeFromString<List<ProfileRepository.StreakMutationRpcResponse>>(arrayPayload)
+            .firstOrNull()
+        assertNotNull(row)
+        assertEquals(true, row!!.updated)
+        assertEquals(120, row.honey)
+        assertEquals(5, row.streak_count)
+    }
+
+    @Test
+    fun `decodeRpc-style object decode throws on a TABLE array for AdminStatsUpdateResponse`() {
+        val arrayPayload = """[{"success":true,"honey":120,"streak_count":5,"hive_rank":3}]"""
+        try {
+            SupabaseRpcJson.decodeFromString<ProfileRepository.AdminStatsUpdateResponse>(arrayPayload)
+            fail("Expected an object decode of a JSON array to throw SerializationException")
+        } catch (_: SerializationException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun `decodeList firstOrNull returns the first AdminStatsUpdateResponse row`() {
+        val arrayPayload = """[{"success":true,"honey":120,"streak_count":5,"hive_rank":3}]"""
+        val row = SupabaseRpcJson
+            .decodeFromString<List<ProfileRepository.AdminStatsUpdateResponse>>(arrayPayload)
+            .firstOrNull()
+        assertNotNull(row)
+        assertEquals(true, row!!.success)
+        assertEquals(3, row.hive_rank)
     }
 }

@@ -37,6 +37,8 @@
     <string name="social_friend_request_action_failed">Could not update friend request. Please try again.</string>
     <string name="social_friend_code_invalid">Friend code must be 6 letters or digits</string>
     <string name="social_friend_code_not_found">Friend code not found</string>
+    <string name="social_add_friend_confirm_title">Add friend?</string>
+    <string name="social_add_friend_confirm_message">Send a friend request to %1$s?</string>
     <string name="social_friend_self">You cannot add yourself</string>
     <string name="social_friend_auth_required">Please sign in to add friends</string>
     <string name="social_add_friend_failed">Could not add friend. Please try again.</string>

@@ -56,6 +56,7 @@ class NotificationStateStore(context: Context) {
     }
 
     suspend fun markRivalMissionIfNew(day: String, rivalId: String): Boolean {
+        pruneRivalKeysExcept(day)
         val key = "social.rival.$day.$rivalId"
         if (preferencesStore.getNotificationCheckBoolean(key)) {
             return false
@@ -63,6 +64,17 @@ class NotificationStateStore(context: Context) {
 
         preferencesStore.putNotificationCheckBoolean(key, true)
         return true
+    }
+
+    /** Drops accumulated `social.rival.<day>.*` keys from previous days; keeps only [today]'s. */
+    private suspend fun pruneRivalKeysExcept(today: String) {
+        val prefix = "social.rival."
+        val todayPrefix = "$prefix$today."
+        val stale = preferencesStore.getNotificationCheckKeys()
+            .filter { it.startsWith(prefix) && !it.startsWith(todayPrefix) }
+        if (stale.isNotEmpty()) {
+            preferencesStore.removeNotificationCheckKeys(stale)
+        }
     }
 
     suspend fun hasAggregateChanged(day: String, signature: String): Boolean {

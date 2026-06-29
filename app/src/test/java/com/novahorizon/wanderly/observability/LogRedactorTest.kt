@@ -45,6 +45,15 @@ class LogRedactorTest {
     }
 
     @Test
+    fun redactHidesCoordinatePairs() {
+        val input = "Mission at 37.7749,-122.4194 nearby"
+
+        val redacted = LogRedactor.redact(input)
+
+        assertEquals("Mission at [redacted-coords] nearby", redacted)
+    }
+
+    @Test
     fun redactBoundsLongValues() {
         val redacted = LogRedactor.redact("x".repeat(400))
 

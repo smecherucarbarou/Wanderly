@@ -61,6 +61,14 @@ class HiveRealtimeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!ENABLE_PROFILE_REALTIME) {
+            // Profile realtime is disabled: do NOT promote to a foreground service — that would only post a
+            // permanent idle notification while doing no work. Stop immediately. To re-enable realtime, flip
+            // ENABLE_PROFILE_REALTIME and restore the <service> entry in AndroidManifest.xml plus the start
+            // gate in MainActivity.startHiveService.
+            stopSelf()
+            return
+        }
         val entryPoint = EntryPointAccessors.fromApplication(
             applicationContext, WanderlyEntryPoint::class.java
         )
@@ -318,8 +326,10 @@ class HiveRealtimeService : Service() {
         }
     }
 
-    private companion object {
-        private const val ENABLE_PROFILE_REALTIME = false
+    companion object {
+        // Gate for profile realtime. While false, the service never starts (manifest entry removed +
+        // MainActivity gate) and stops itself if instantiated. Exposed so callers can gate on it.
+        internal const val ENABLE_PROFILE_REALTIME = false
         const val SUBSCRIPTION_JOIN_TIMEOUT_MS = 7_000L
     }
 }

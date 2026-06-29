@@ -7,13 +7,15 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.novahorizon.wanderly.Constants
 import com.novahorizon.wanderly.util.Clock
-import com.novahorizon.wanderly.util.SystemClock
+import com.novahorizon.wanderly.util.RealClock
 
 class PreferencesStore(
     context: Context,
-    private val clock: Clock = SystemClock
+    private val clock: Clock = RealClock
 ) {
     private val dataStoreManager = DataStoreManager(context.applicationContext)
+
+    @Volatile
     private var missionSnapshot: MissionSnapshot? = null
 
     suspend fun isRememberMeEnabled(): Boolean =

@@ -131,7 +131,7 @@ object PlacesGeocoder {
                 }
 
                 val score = scoreNameMatch(placeName, verifiedName, verifiedAddress) +
-                    if (expectedTypes.isNotEmpty() && placeTypes.any(expectedTypes::contains)) 0.2 else 0.0 +
+                    (if (expectedTypes.isNotEmpty() && placeTypes.any(expectedTypes::contains)) 0.2 else 0.0) +
                     (place.optDouble("rating", 0.0) / 50.0) +
                     (place.optInt("userRatingCount", 0).coerceAtMost(500) / 5000.0)
 

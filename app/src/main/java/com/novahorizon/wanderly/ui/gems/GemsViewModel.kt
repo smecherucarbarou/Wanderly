@@ -18,6 +18,7 @@ import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,6 +27,8 @@ class GemsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val seenGemsHistory = mutableSetOf<String>()
+
+    private val discoverInFlight = AtomicBoolean(false)
 
     private val _gemsState = MutableLiveData<GemsState>(GemsState.Idle)
     val gemsState: LiveData<GemsState> = _gemsState
@@ -73,24 +76,29 @@ class GemsViewModel @Inject constructor(
             _discoverEvent.postValue(DiscoverEvent.TooFar)
             return
         }
+        if (!discoverInFlight.compareAndSet(false, true)) return
         viewModelScope.launch {
-            when (val result = repository.discoverGem(gem, lat, lng)) {
-                is GemDiscoveryResult.Success -> {
-                    markDiscovered(gem.name)
-                    val total = repository.countGemDiscoveries()
-                    // reward_honey is a delta; re-fetch authoritative balance for the UI.
-                    repository.getCurrentProfile()
-                    _discoverEvent.postValue(
-                        DiscoverEvent.Discovered(result.rewardHoney, firstGem = total == 1)
-                    )
+            try {
+                when (val result = repository.discoverGem(gem, lat, lng)) {
+                    is GemDiscoveryResult.Success -> {
+                        markDiscovered(gem.name)
+                        val total = repository.countGemDiscoveries()
+                        // reward_honey is a delta; re-fetch authoritative balance for the UI.
+                        repository.getCurrentProfile()
+                        _discoverEvent.postValue(
+                            DiscoverEvent.Discovered(result.rewardHoney, firstGem = total == 1)
+                        )
+                    }
+                    GemDiscoveryResult.AlreadyDiscovered -> {
+                        markDiscovered(gem.name)
+                        _discoverEvent.postValue(DiscoverEvent.AlreadyDiscovered)
+                    }
+                    GemDiscoveryResult.TooFar -> _discoverEvent.postValue(DiscoverEvent.TooFar)
+                    GemDiscoveryResult.Unauthenticated,
+                    GemDiscoveryResult.Error -> _discoverEvent.postValue(DiscoverEvent.Failed)
                 }
-                GemDiscoveryResult.AlreadyDiscovered -> {
-                    markDiscovered(gem.name)
-                    _discoverEvent.postValue(DiscoverEvent.AlreadyDiscovered)
-                }
-                GemDiscoveryResult.TooFar -> _discoverEvent.postValue(DiscoverEvent.TooFar)
-                GemDiscoveryResult.Unauthenticated,
-                GemDiscoveryResult.Error -> _discoverEvent.postValue(DiscoverEvent.Failed)
+            } finally {
+                discoverInFlight.set(false)
             }
         }
     }
@@ -135,6 +143,7 @@ class GemsViewModel @Inject constructor(
 
                 val gems = repository.curateHiddenGems(city, candidates, seenGemsHistory)
                 gems.forEach { gem -> seenGemsHistory.add(gem.name) }
+                trimSeenGemsHistory()
 
                 if (gems.isEmpty()) {
                     _gemsState.postValue(
@@ -181,5 +190,17 @@ class GemsViewModel @Inject constructor(
         val message = UiText.resource(R.string.gems_loading_failed)
         _gemsState.postValue(GemsState.Error(message))
         _message.postValue(message)
+    }
+
+    private fun trimSeenGemsHistory() {
+        while (seenGemsHistory.size > MAX_SEEN_GEMS) {
+            val eldest = seenGemsHistory.iterator().next()
+            seenGemsHistory.remove(eldest)
+        }
+    }
+
+    private companion object {
+        // Cap the in-memory seen-gems set so it can't grow unbounded across many cities/sessions.
+        private const val MAX_SEEN_GEMS = 500
     }
 }

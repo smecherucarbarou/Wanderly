@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -64,16 +65,30 @@ class SocialFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val pendingInviteCode = repository.peekPendingInviteCode()
-            if (pendingInviteCode.isNullOrBlank()) {
-                viewModel.loadSocialHome()
-            } else {
-                val code = repository.consumePendingInviteCode()
-                if (code != null) {
-                    viewModel.addFriend(code)
-                }
+            // QW-8: always load the social home, regardless of any pending deeplink invite.
+            viewModel.loadSocialHome()
+
+            // QW-11: a deeplinked friend code is confirmed by the user, never auto-submitted.
+            val code = repository.consumePendingInviteCode()
+            if (!code.isNullOrBlank()) {
+                confirmDeeplinkFriendRequest(code)
             }
         }
+    }
+
+    private suspend fun confirmDeeplinkFriendRequest(friendCode: String) {
+        val profile = repository.findProfileByFriendCode(friendCode)
+        if (profile == null) {
+            showSnackbar(getString(R.string.social_friend_code_not_found), isError = true)
+            return
+        }
+        val username = profile.username ?: friendCode
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.social_add_friend_confirm_title)
+            .setMessage(getString(R.string.social_add_friend_confirm_message, username))
+            .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.addFriend(friendCode) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun copyFriendCode(friendCode: String) {

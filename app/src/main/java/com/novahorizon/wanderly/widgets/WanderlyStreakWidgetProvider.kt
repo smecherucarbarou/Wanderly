@@ -22,7 +22,7 @@ import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
 import com.novahorizon.wanderly.util.Clock
-import com.novahorizon.wanderly.util.SystemClock
+import com.novahorizon.wanderly.util.RealClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,7 +78,7 @@ class WanderlyStreakWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_REFRESH_WIDGET = "com.novahorizon.wanderly.widgets.ACTION_REFRESH_WIDGET"
-        internal var clock: Clock = SystemClock
+        internal var clock: Clock = RealClock
 
         private suspend fun refreshAndRenderWidgets(
             context: Context,

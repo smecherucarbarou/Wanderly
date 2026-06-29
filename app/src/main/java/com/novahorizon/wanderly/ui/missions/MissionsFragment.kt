@@ -134,6 +134,7 @@ class MissionsFragment : Fragment() {
         viewModel.streakMessage.observe(viewLifecycleOwner) { message ->
             message?.let {
                 showSnackbar(it, isError = false)
+                viewModel.clearStreakMessage()
                 (activity as? MainActivity)?.requestNotificationPermissionIfNeeded()
             }
         }

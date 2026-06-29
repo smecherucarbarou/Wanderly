@@ -34,6 +34,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltViewModel
@@ -56,7 +57,13 @@ class MissionsViewModel @Inject constructor(
     private val _streakMessage = MutableLiveData<String?>()
     val streakMessage: LiveData<String?> = _streakMessage
 
+    /** Clears the one-shot streak message so it isn't re-shown on re-subscription (e.g. rotation). */
+    fun clearStreakMessage() {
+        _streakMessage.value = null
+    }
+
     private var missionGenerationInFlight = false
+    private val completeMissionInFlight = AtomicBoolean(false)
     private var profileCollectorJob: Job? = null
     private var currentMission: String?
         get() = savedStateHandle[KEY_CURRENT_MISSION]
@@ -351,6 +358,7 @@ class MissionsViewModel @Inject constructor(
             )
             return
         }
+        if (!completeMissionInFlight.compareAndSet(false, true)) return
         _missionState.postValue(MissionState.Completing)
 
         viewModelScope.launch {
@@ -399,6 +407,8 @@ class MissionsViewModel @Inject constructor(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 postGenericMissionError("Mission completion failed", e)
+            } finally {
+                completeMissionInFlight.set(false)
             }
         }
     }

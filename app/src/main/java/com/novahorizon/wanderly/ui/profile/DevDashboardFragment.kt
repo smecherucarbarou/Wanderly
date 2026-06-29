@@ -126,11 +126,6 @@ class DevDashboardFragment : Fragment() {
                         DevDashboardRow(
                             getString(R.string.dev_dashboard_user_label),
                             redactIdentifier(profile?.id)
-                        ),
-                        DevDashboardRow(
-                            getString(R.string.dev_dashboard_admin_label),
-                            if (profile?.admin_role == true) getString(R.string.dev_dashboard_admin_yes)
-                            else getString(R.string.dev_dashboard_admin_no)
                         )
                     )
                 ),

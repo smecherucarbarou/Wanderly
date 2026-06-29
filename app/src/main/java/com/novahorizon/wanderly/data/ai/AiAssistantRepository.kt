@@ -108,6 +108,7 @@ open class AiAssistantRepository @Inject constructor(
 ) {
     constructor() : this(NoopAiAssistantGateway)
 
+    @Volatile
     var latestQuota: AiQuotaResult? = null
         private set
 
