@@ -21,7 +21,6 @@ import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
@@ -757,19 +756,6 @@ class ProfileRepository(
                 .decodeSingleOrNull<Profile>()
         }
 
-    private suspend fun <T> withPostgrestSchemaCacheRetry(block: suspend () -> T): T {
-        return try {
-            block()
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            if (!isPostgrestSchemaCacheError(e)) {
-                throw e
-            }
-            delay(POSTGREST_SCHEMA_CACHE_RETRY_DELAY_MS)
-            block()
-        }
-    }
-
     private suspend fun signOutForFatalProfileError() {
         try {
             SupabaseClient.client.auth.signOut()
@@ -897,13 +883,6 @@ class ProfileRepository(
             }
         }
 
-        internal fun isPostgrestSchemaCacheError(error: Throwable): Boolean {
-            return generateSequence(error) { it.cause }.any { throwable ->
-                val message = throwable.message?.lowercase().orEmpty()
-                message.contains("pgrst002")
-            }
-        }
-
         internal fun toAdminProfileStatsUpdate(honey: Int, streakCount: Int): AdminProfileStatsUpdate {
             val safeHoney = honey.coerceIn(0, MAX_ADMIN_HONEY)
             val safeStreakCount = streakCount.coerceIn(0, MAX_ADMIN_STREAK_COUNT)
@@ -931,7 +910,6 @@ class ProfileRepository(
         internal fun isAvatarFileUsable(exists: Boolean, length: Long): Boolean =
             AvatarRepository.isAvatarFileUsable(exists, length)
 
-        private const val POSTGREST_SCHEMA_CACHE_RETRY_DELAY_MS = 1_500L
         private const val MAX_ADMIN_HONEY = 1_000_000
         private const val MAX_ADMIN_STREAK_COUNT = 3_650
     }

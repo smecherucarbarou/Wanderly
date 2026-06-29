@@ -108,7 +108,7 @@ class ProfileRepositoryPayloadTest {
     @Test
     fun `detects postgrest schema cache errors`() {
         assertTrue(
-            ProfileRepository.isPostgrestSchemaCacheError(
+            isPostgrestSchemaCacheError(
                 IllegalStateException("PGRST002: could not find function in schema cache")
             )
         )
