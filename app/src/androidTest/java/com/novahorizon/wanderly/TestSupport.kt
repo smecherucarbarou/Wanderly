@@ -116,7 +116,12 @@ class FakeMissionGenerationService(
 
     override suspend fun generateWithSearch(prompt: String): String = missionJson
 
-    override suspend fun analyzeImage(bitmap: Bitmap, prompt: String): String = "YES: Verified."
+    override suspend fun verifyMissionPhoto(
+        bitmap: Bitmap,
+        targetName: String,
+        targetCity: String,
+        isFallbackMission: Boolean
+    ): String = "YES: Verified."
 
     override suspend fun resolveCoordinates(
         placeName: String,
