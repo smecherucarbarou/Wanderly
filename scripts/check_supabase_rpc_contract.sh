@@ -66,7 +66,9 @@ defined=()
 
 while IFS= read -r rpc_name; do
     [ -z "$rpc_name" ] && continue
-    if grep -rqi "CREATE.*FUNCTION.*public\.$rpc_name" "$REPO_ROOT/supabase/" 2>/dev/null; then
+    # Match the function name after CREATE ... FUNCTION regardless of schema prefix or quoting style:
+    # `FUNCTION public.name(`, `FUNCTION name(`, or the pg_dump form `FUNCTION "public"."name"(`.
+    if grep -rqiE "CREATE.*FUNCTION.*\\b$rpc_name\\b" "$REPO_ROOT/supabase/" 2>/dev/null; then
         defined+=("$rpc_name")
     else
         missing+=("$rpc_name")
