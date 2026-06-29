@@ -290,4 +290,36 @@ class RpcResponseDecodingTest {
         assertNull(profile.last_lat)
         assertNull(profile.last_lng)
     }
+
+    // --- big_improvements D: mission-completion error mapping ----------------------------------
+
+    @Test
+    fun `mapMissionLogError already_completed echoes the snapshot balance`() {
+        val snapshot = Profile(id = "u1", honey = 120, streak_count = 3, last_mission_date = "2026-04-21")
+        assertEquals(
+            MissionCompletionResult.AlreadyCompleted(honey = 120, streakCount = 3, lastMissionDate = "2026-04-21"),
+            ProfileRepository.mapMissionLogError("already_completed", snapshot)
+        )
+    }
+
+    @Test
+    fun `mapMissionLogError already_completed with null snapshot falls back to zero`() {
+        assertEquals(
+            MissionCompletionResult.AlreadyCompleted(honey = 0, streakCount = 0, lastMissionDate = null),
+            ProfileRepository.mapMissionLogError("already_completed", null)
+        )
+    }
+
+    @Test
+    fun `mapMissionLogError maps known error codes to typed results`() {
+        assertEquals(MissionCompletionResult.Forbidden, ProfileRepository.mapMissionLogError("not_your_mission", null))
+        assertEquals(MissionCompletionResult.MissionNotFound, ProfileRepository.mapMissionLogError("mission_not_found", null))
+        assertEquals(MissionCompletionResult.Unauthenticated, ProfileRepository.mapMissionLogError("not_authenticated", null))
+    }
+
+    @Test
+    fun `mapMissionLogError maps unknown and null codes to ServerFailure`() {
+        assertEquals(MissionCompletionResult.ServerFailure, ProfileRepository.mapMissionLogError("weird_code", null))
+        assertEquals(MissionCompletionResult.ServerFailure, ProfileRepository.mapMissionLogError(null, null))
+    }
 }

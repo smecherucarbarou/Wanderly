@@ -420,29 +420,13 @@ class ProfileRepository(
                     streakBonusHoney = response.streak_bonus ?: 0
                 )
             } else {
-                mapMissionLogError(response.error)
+                mapMissionLogError(response.error, _currentProfile.value)
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             mapMissionCompletionFailure(e)
         }
     }
-
-    private fun mapMissionLogError(error: String?): MissionCompletionResult =
-        when (error) {
-            "already_completed" -> {
-                val snapshot = _currentProfile.value
-                MissionCompletionResult.AlreadyCompleted(
-                    honey = snapshot?.honey ?: 0,
-                    streakCount = snapshot?.streak_count ?: 0,
-                    lastMissionDate = snapshot?.last_mission_date
-                )
-            }
-            "not_your_mission" -> MissionCompletionResult.Forbidden
-            "mission_not_found" -> MissionCompletionResult.MissionNotFound
-            "not_authenticated" -> MissionCompletionResult.Unauthenticated
-            else -> MissionCompletionResult.ServerFailure
-        }
 
     suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
         withContext(Dispatchers.IO) {
@@ -891,6 +875,21 @@ class ProfileRepository(
                 "not_owned" -> ShopEquipResult.NotOwned
                 "not_authenticated" -> ShopEquipResult.Unauthenticated
                 else -> ShopEquipResult.Failure
+            }
+
+        /** Pure mapping of a log_mission_completion error code. [snapshot] supplies the current
+         *  balance for the `already_completed` echo. Extracted from the instance method for testing. */
+        internal fun mapMissionLogError(error: String?, snapshot: Profile?): MissionCompletionResult =
+            when (error) {
+                "already_completed" -> MissionCompletionResult.AlreadyCompleted(
+                    honey = snapshot?.honey ?: 0,
+                    streakCount = snapshot?.streak_count ?: 0,
+                    lastMissionDate = snapshot?.last_mission_date
+                )
+                "not_your_mission" -> MissionCompletionResult.Forbidden
+                "mission_not_found" -> MissionCompletionResult.MissionNotFound
+                "not_authenticated" -> MissionCompletionResult.Unauthenticated
+                else -> MissionCompletionResult.ServerFailure
             }
 
         internal fun mapUsernameRpcErrorCode(errorCode: String?): ProfileError {
