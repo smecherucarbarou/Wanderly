@@ -14,7 +14,6 @@ class ProfileRepositoryPayloadTest {
             username = "Explorer",
             honey = 120,
             hive_rank = 2,
-            admin_role = true,
             badges = listOf("Scout Bee"),
             cities_visited = listOf("Bucharest"),
             avatar_url = "https://example.com/avatar.jpg",

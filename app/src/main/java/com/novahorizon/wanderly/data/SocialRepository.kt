@@ -73,8 +73,8 @@ class SocialRepository {
 
             SupabaseClient.client.postgrest
                 .rpc("get_social_leaderboard", buildLeaderboardParams(limit))
-                .decodeList<Profile>()
-                .map { it.withDerivedHiveRank() }
+                .decodeList<PublicProfile>()
+                .map { it.toProfile().withDerivedHiveRank() }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Error getting leaderboard", e)
@@ -94,7 +94,7 @@ class SocialRepository {
 
             val targetUsers = SupabaseClient.client.postgrest
                 .rpc("find_profile_by_friend_code", FriendCodeLookupParams(normalizedCode))
-                .decodeList<Profile>()
+                .decodeList<PublicProfile>()
 
             if (targetUsers.isEmpty()) return@withContext AddFriendResult.FriendCodeNotFound
 
@@ -123,8 +123,8 @@ class SocialRepository {
             val normalizedCode = normalizeFriendCode(friendCode) ?: return@withContext null
             SupabaseClient.client.postgrest
                 .rpc("find_profile_by_friend_code", FriendCodeLookupParams(normalizedCode))
-                .decodeList<Profile>()
-                .firstOrNull()
+                .decodeList<PublicProfile>()
+                .firstOrNull()?.toProfile()
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Error looking up friend code", e)
@@ -166,8 +166,8 @@ class SocialRepository {
 
             SupabaseClient.client.postgrest
                 .rpc("get_pending_friend_request_profiles")
-                .decodeList<Profile>()
-                .map { it.withDerivedHiveRank() }
+                .decodeList<PublicProfile>()
+                .map { it.toProfile().withDerivedHiveRank() }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Error getting incoming friend requests", e)
@@ -212,8 +212,8 @@ class SocialRepository {
 
             SupabaseClient.client.postgrest
                 .rpc("get_accepted_friend_profiles")
-                .decodeList<Profile>()
-                .map { it.withDerivedHiveRank() }
+                .decodeList<PublicProfile>()
+                .map { it.toProfile().withDerivedHiveRank() }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logError("Error getting friends", e)
