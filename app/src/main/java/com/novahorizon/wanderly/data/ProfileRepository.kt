@@ -22,11 +22,7 @@ import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -186,8 +182,8 @@ class ProfileRepository(
         val error_message: String? = null
     )
 
-    private val _currentProfile = MutableStateFlow<Profile?>(null)
-    val currentProfile: StateFlow<Profile?> = _currentProfile.asStateFlow()
+    private val profileState = ProfileStateHolder()
+    val currentProfile: StateFlow<Profile?> = profileState.asStateFlow()
 
     private val avatarRepository = AvatarRepository(context)
 
@@ -211,7 +207,7 @@ class ProfileRepository(
                 )
                 logError("Authenticated profile row missing; signing out.", error)
                 signOutForFatalProfileError()
-                _currentProfile.value = null
+                profileState.value = null
                 return@withContext null
             }
 
@@ -220,7 +216,7 @@ class ProfileRepository(
             val cachedMissionDate = preferencesStore.getStoredLastMissionDate()
             var profile = normalizeProfile(loadedProfile).copy(last_mission_date = cachedMissionDate)
 
-            _currentProfile.value = profile
+            profileState.value = profile
             preferencesStore.cacheProfileStreakState(
                 lastMissionDate = profile.last_mission_date,
                 streakCount = profile.streak_count
@@ -256,7 +252,7 @@ class ProfileRepository(
             persistProfile(normalizedProfile, userId)
             val refreshedProfile = selectProfileWithSchemaRetry(userId) ?: normalizedProfile
             val normalizedRefreshedProfile = normalizeProfile(refreshedProfile)
-            _currentProfile.value = normalizedRefreshedProfile
+            profileState.value = normalizedRefreshedProfile
             preferencesStore.cacheProfileStreakState(
                 lastMissionDate = normalizedRefreshedProfile.last_mission_date,
                 streakCount = normalizedRefreshedProfile.streak_count
@@ -308,12 +304,12 @@ class ProfileRepository(
             val refreshed = selectProfileWithSchemaRetry(userId)
             if (refreshed == null) {
                 signOutForFatalProfileError()
-                _currentProfile.value = null
+                profileState.value = null
                 return@withContext ProfileUpdateResult.Error(ProfileError.MissingProfile)
             }
 
             val normalized = normalizeProfile(refreshed)
-            _currentProfile.value = normalized
+            profileState.value = normalized
             preferencesStore.cacheProfileStreakState(
                 lastMissionDate = normalized.last_mission_date,
                 streakCount = normalized.streak_count
@@ -358,7 +354,7 @@ class ProfileRepository(
                 return@withContext false
             }
 
-            val refreshed = _currentProfile.updateAndGet { current ->
+            val refreshed = profileState.updateAndGet { current ->
                 if (current?.id == profileId) {
                     current.copy(
                         honey = response.honey,
@@ -420,7 +416,7 @@ class ProfileRepository(
                     streakBonusHoney = response.streak_bonus ?: 0
                 )
             } else {
-                mapMissionLogError(response.error, _currentProfile.value)
+                mapMissionLogError(response.error, profileState.value)
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -438,7 +434,7 @@ class ProfileRepository(
                 SupabaseClient.client.postgrest
                     .rpc("update_profile_location", LocationUpdateParams(lat, lng))
 
-                val updated = _currentProfile.updateAndGet { it?.copy(last_lat = lat, last_lng = lng) }
+                val updated = profileState.updateAndGet { it?.copy(last_lat = lat, last_lng = lng) }
                 SensitiveProfileMutationResult.Success(updated)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -509,7 +505,7 @@ class ProfileRepository(
                 .decodeRpc<StreakFreezeRpcResponse>()
             if (response.success) {
                 val freezesLeft = response.freezes_left ?: 0
-                val updated = _currentProfile.updateAndGet { it?.copy(streak_freezes = freezesLeft) }
+                val updated = profileState.updateAndGet { it?.copy(streak_freezes = freezesLeft) }
                 SensitiveProfileMutationResult.Success(updated)
             } else {
                 SensitiveProfileMutationResult.Rejected(response.error ?: "unknown")
@@ -538,7 +534,7 @@ class ProfileRepository(
                     .decodeList<StreakMilestoneClaimRow>()
             }.map { it.threshold }.toSet()
 
-            val streak = _currentProfile.value?.streak_count ?: 0
+            val streak = profileState.value?.streak_count ?: 0
             catalog.map { milestone ->
                 StreakMilestoneStatus(
                     threshold = milestone.threshold,
@@ -635,7 +631,7 @@ class ProfileRepository(
                     .decodeList<UserInventoryItemRow>()
             }.map { it.item_id }.toSet()
 
-            val profile = _currentProfile.value
+            val profile = profileState.value
             val honey = profile?.honey ?: 0
             val equippedIds = setOfNotNull(
                 profile?.equipped_frame,
@@ -674,7 +670,7 @@ class ProfileRepository(
             val result = mapPurchaseResponse(response)
             if (result is ShopPurchaseResult.Success) {
                 // RPC echoes the post-debit balance; refresh honey in the shared profile state.
-                _currentProfile.update { it?.copy(honey = result.newHoney) }
+                profileState.update { it?.copy(honey = result.newHoney) }
             }
             result
         } catch (e: Exception) {
@@ -706,7 +702,7 @@ class ProfileRepository(
     }
 
     private fun applyEquippedCosmetic(type: String?, itemId: String) {
-        _currentProfile.update { current ->
+        profileState.update { current ->
             when (type) {
                 CosmeticType.AVATAR_FRAME -> current?.copy(equipped_frame = itemId)
                 CosmeticType.BUZZY_SKIN -> current?.copy(equipped_skin = itemId)
@@ -720,7 +716,7 @@ class ProfileRepository(
         val result = avatarRepository.uploadAvatar(uri, profileId)
         if (result is AvatarUploadResult.Success) {
             // Avatar upload now returns the public URL so profile state refreshes with the cache-busted image.
-            _currentProfile.update { current ->
+            profileState.update { current ->
                 if (current?.id == profileId) current.copy(avatar_url = result.avatarUrl) else current
             }
         }
@@ -796,10 +792,10 @@ class ProfileRepository(
         lastMissionDate: String?
     ): Profile? {
         // Ensure a base profile is loaded; the suspend fetch can't run inside the atomic update block.
-        if (_currentProfile.value == null) {
+        if (profileState.value == null) {
             getCurrentProfile()
         }
-        val updated = _currentProfile.updateAndGet { current ->
+        val updated = profileState.updateAndGet { current ->
             current?.copy(
                 honey = honey ?: current.honey,
                 streak_count = streakCount ?: current.streak_count,

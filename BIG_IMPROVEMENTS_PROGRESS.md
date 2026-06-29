@@ -7,7 +7,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 
 | Item | Title | Effort | Status |
 |------|-------|--------|--------|
-| A | Split ProfileRepository god class | M | Not started |
+| A | Split ProfileRepository god class | M | **In progress** (ProfileStateHolder extracted; carving remains) |
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
 | C | Unify authenticated-proxy HTTP client | S | Not started |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
@@ -31,6 +31,21 @@ Incremental; each commit is a complete checkpoint.
 **Remaining:**
 - [ ] Hive fire-and-forget behavioral tests — BLOCKED: also needs `ProfileRepository` injectable into `WanderlyRepository` (so a fake returns `Completed` without network) to assert a throwing/inactive contribution doesn't alter `logMissionCompletion`/`discoverGem`. Best landed alongside item **A** (which makes ProfileRepository injectable).
 - [ ] Tighten the Kover gate — measure current coverage first (raising `minBound` blindly would fail CI). Add class filters (generated Hilt/serialization, Compose previews, widgets) + a branch rule, then raise the line bound; run `lintRelease` in CI.
+
+---
+
+## A · Split ProfileRepository god class — IN PROGRESS
+
+**Done:**
+- [x] Step 2 — extracted `ProfileStateHolder` (`data/ProfileStateHolder.kt`): owns the `MutableStateFlow<Profile?>`; exposes `value` get/set, `asStateFlow()`, `update`, `updateAndGet` (surface mirrors what ProfileRepository used). ProfileRepository's `_currentProfile` is now a `ProfileStateHolder` (renamed `profileState`); all ~16 read/write sites route through it. Centralizes the H-3 atomic-update guarantee.
+
+**Remaining (heavy carving — own turn each; lean on D's tests as the net):**
+- [ ] Step 3 — make `ProfileStateHolder` a shared injected singleton (Hilt) so the carved repos share one instance. Then extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / milestones), `ShopRepository` (catalog / purchase / equip), `ReferralRepository` (referrals), each depending on the holder; move their nested DTOs + companion mappers with them.
+- [ ] Step 4 — `ProfileRepository` keeps only load / update / username / location / mission-completion / avatar-delegation.
+- [ ] Step 5 — wire through Hilt (`RepositoryModule`); keep the `WanderlyRepository` public surface stable to bound the diff.
+- [ ] Unlocks the deferred D hive fire-and-forget test (ProfileRepository becomes injectable into WanderlyRepository).
+
+**Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
 
 ---
 
