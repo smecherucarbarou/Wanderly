@@ -164,6 +164,9 @@ class ProfileRepository(
 
     val currentProfile: StateFlow<Profile?> = profileState.asStateFlow()
 
+    // Shared progress-snapshot writer; exposed so the carved StreakRepository reuses the same instance.
+    internal val progressWriter = ProfileProgressWriter(profileState, preferencesStore) { getCurrentProfile() }
+
     private val avatarRepository = AvatarRepository(context)
 
     suspend fun getCurrentProfile(): Profile? = withContext(Dispatchers.IO) {
@@ -380,7 +383,7 @@ class ProfileRepository(
             if (response.success) {
                 // The new RPC does not echo a mission date; completing now means today (UTC).
                 val today = DateUtils.formatUtcDate(Date())
-                val updated = applyProgressSnapshot(
+                val updated = progressWriter.apply(
                     honey = response.honey,
                     streakCount = response.streak_count,
                     lastMissionDate = today
@@ -432,7 +435,7 @@ class ProfileRepository(
                 .decodeList<StreakMutationRpcResponse>().firstOrNull()
                 ?: return@withContext SensitiveProfileMutationResult.ParseFailure
             if (response.updated == true) {
-                val profile = applyProgressSnapshot(
+                val profile = progressWriter.apply(
                     honey = response.honey,
                     streakCount = response.streak_count,
                     lastMissionDate = response.last_mission_date
@@ -458,7 +461,7 @@ class ProfileRepository(
                 .decodeList<StreakMutationRpcResponse>().firstOrNull()
                 ?: return@withContext SensitiveProfileMutationResult.ParseFailure
             if (response.restored == true) {
-                val profile = applyProgressSnapshot(
+                val profile = progressWriter.apply(
                     honey = response.honey,
                     streakCount = response.streak_count,
                     lastMissionDate = response.last_mission_date
@@ -651,32 +654,6 @@ class ProfileRepository(
             )
             logError("Fatal profile sign-out failed: ${e.message}", e)
         }
-    }
-
-    private suspend fun applyProgressSnapshot(
-        honey: Int?,
-        streakCount: Int?,
-        lastMissionDate: String?
-    ): Profile? {
-        // Ensure a base profile is loaded; the suspend fetch can't run inside the atomic update block.
-        if (profileState.value == null) {
-            getCurrentProfile()
-        }
-        val updated = profileState.updateAndGet { current ->
-            current?.copy(
-                honey = honey ?: current.honey,
-                streak_count = streakCount ?: current.streak_count,
-                last_mission_date = lastMissionDate ?: current.last_mission_date,
-                hive_rank = HiveRank.fromHoney(honey ?: current.honey)
-            )
-        }
-        if (updated != null) {
-            preferencesStore.cacheProfileStreakState(
-                lastMissionDate = updated.last_mission_date,
-                streakCount = updated.streak_count
-            )
-        }
-        return updated
     }
 
     private fun mapMissionCompletionFailure(error: Exception): MissionCompletionResult =
