@@ -50,6 +50,7 @@ audits/
 
 # Local Claude / AI tooling and notes
 .claude/
+.serena/
 CLAUDE.md
 
 # Local scripts / one-off tooling
