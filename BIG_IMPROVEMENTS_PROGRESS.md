@@ -10,14 +10,31 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 | A | Split ProfileRepository god class | M | Not started |
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
 | C | Unify authenticated-proxy HTTP client | S | Not started |
-| D | Test-coverage program | M | Not started |
+| D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
 | E | Realtime/FGS + hive-fetch strategy | S | Partly done (FGS removed in H-5/H-6; hive-fetch dedup + app-scope remain) |
 | F | Lean PublicProfile DTO + drop admin_role | S | **Done** (decode-boundary; UI-type propagation = optional follow-up) |
 | G | Baseline profile: wire or delete | S | Not started |
 
 ---
 
-## F · Lean PublicProfile DTO + remove admin_role — IN PROGRESS
+## D · Test-coverage program — IN PROGRESS
+
+Incremental; each commit is a complete checkpoint.
+
+**Done:**
+- [x] Mission-completion decode contract in `RpcResponseDecodingTest`: `MissionLogRpcResponse` full payload, missing-optional→null, error payload, unknown-key tolerance. (Made `MissionLogRpcResponse` `internal`.)
+- [x] F invariant test: `PublicProfile` decode drops `last_lat/last_lng/admin_role` even when present in the payload; `toProfile()` yields nulls.
+- [x] (already in improvements.md) QW-15 StreakMutation/AdminStats array-vs-object decode; QW-6 PROFILE_VISIBLE_COLUMNS; QW-37 GeoMath edges; QW-38 DateUtils UTC.
+
+**Remaining:**
+- [ ] Error-mapping tests for `mapMissionLogError` — currently an *instance* method reading `_currentProfile`; extract a pure helper (snapshot passed in) so each error code is unit-testable. Small production refactor.
+- [ ] Inject `HiveChallengeRepository` into `WanderlyRepository` (constructor param w/ default, replacing `HiveChallengeRepository()` at `WanderlyRepository.kt:~20`) to make hive paths integration-testable.
+- [ ] Hive fire-and-forget behavioral tests: a throwing/inactive/`already_rewarded` contribution must not throw, delay, or alter the `logMissionCompletion`/`discoverGem` result.
+- [ ] Tighten the Kover gate: class filters (generated Hilt/serialization, Compose previews, widgets), a branch-coverage rule, raise line `minBound` ~40-50%; run `lintRelease` in CI.
+
+---
+
+## F · Lean PublicProfile DTO + remove admin_role — DONE (commit 548c1ac)
 
 **Goal (audit M-1, H-7):** other users' rows can only ever populate a lean `PublicProfile` (no `last_lat/last_lng/admin_role`), so the 4 social RPCs can't deserialize another user's sensitive columns; remove the structurally-always-false `admin_role` from the self `Profile` model.
 

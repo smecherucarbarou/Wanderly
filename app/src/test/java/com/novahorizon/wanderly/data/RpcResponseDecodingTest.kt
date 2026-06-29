@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -231,5 +232,62 @@ class RpcResponseDecodingTest {
         assertNotNull(row)
         assertEquals(true, row!!.success)
         assertEquals(3, row.hive_rank)
+    }
+
+    // --- big_improvements D: mission-completion decode contract --------------------------------
+
+    @Test
+    fun `log_mission_completion full payload decodes all keys`() {
+        val payload = """{"success":true,"reward_honey":10,"streak_bonus":5,"streak_count":3,"honey":120}"""
+        val r = SupabaseRpcJson.decodeFromString<ProfileRepository.MissionLogRpcResponse>(payload)
+        assertTrue(r.success)
+        assertEquals(10, r.reward_honey)
+        assertEquals(5, r.streak_bonus)
+        assertEquals(3, r.streak_count)
+        assertEquals(120, r.honey)
+    }
+
+    @Test
+    fun `log_mission_completion payload missing optional keys decodes to nulls`() {
+        val r = SupabaseRpcJson.decodeFromString<ProfileRepository.MissionLogRpcResponse>("""{"success":true}""")
+        assertTrue(r.success)
+        assertNull(r.reward_honey)
+        assertNull(r.streak_bonus)
+        assertNull(r.honey)
+    }
+
+    @Test
+    fun `log_mission_completion error payload decodes`() {
+        val r = SupabaseRpcJson.decodeFromString<ProfileRepository.MissionLogRpcResponse>(
+            """{"success":false,"error":"already_completed"}"""
+        )
+        assertFalse(r.success)
+        assertEquals("already_completed", r.error)
+    }
+
+    @Test
+    fun `log_mission_completion tolerates an unknown server key`() {
+        val r = SupabaseRpcJson.decodeFromString<ProfileRepository.MissionLogRpcResponse>(
+            """{"success":true,"honey":5,"future_field":"x"}"""
+        )
+        assertTrue(r.success)
+        assertEquals(5, r.honey)
+    }
+
+    // --- big_improvements F invariant: PublicProfile cannot carry sensitive columns -----------
+
+    @Test
+    fun `PublicProfile drops sensitive server columns even when present in the payload`() {
+        // A social-RPC row that (defensively) includes sensitive keys must not surface them client-side.
+        val payload =
+            """{"id":"u1","username":"Bee","honey":50,"last_lat":44.4,"last_lng":26.1,"admin_role":true}"""
+        val pub = SupabaseRpcJson.decodeFromString<PublicProfile>(payload)
+        assertEquals("u1", pub.id)
+        assertEquals("Bee", pub.username)
+        assertEquals(50, pub.honey)
+        // toProfile() leaves the sensitive/self-only fields null; admin_role no longer exists on Profile.
+        val profile = pub.toProfile()
+        assertNull(profile.last_lat)
+        assertNull(profile.last_lng)
     }
 }

@@ -65,7 +65,7 @@ class ProfileRepository(
     )
 
     @Serializable
-    private data class MissionLogRpcResponse(
+    internal data class MissionLogRpcResponse(
         val success: Boolean,
         val error: String? = null,
         val reward_honey: Int? = null,
