@@ -37,10 +37,13 @@ Incremental; each commit is a complete checkpoint.
 ## A · Split ProfileRepository god class — IN PROGRESS
 
 **Done:**
-- [x] Step 2 — extracted `ProfileStateHolder` (`data/ProfileStateHolder.kt`): owns the `MutableStateFlow<Profile?>`; exposes `value` get/set, `asStateFlow()`, `update`, `updateAndGet` (surface mirrors what ProfileRepository used). ProfileRepository's `_currentProfile` is now a `ProfileStateHolder` (renamed `profileState`); all ~16 read/write sites route through it. Centralizes the H-3 atomic-update guarantee.
+- [x] Step 2 — extracted `ProfileStateHolder` (`data/ProfileStateHolder.kt`): owns the `MutableStateFlow<Profile?>`; exposes `value` get/set, `asStateFlow()`, `update`, `updateAndGet`. All ~16 ProfileRepository read/write sites route through it. Centralizes the H-3 atomic-update guarantee.
+- [x] Step 3a — `ProfileStateHolder` is now shared/injectable: `ProfileRepository(context, prefs, profileState = ProfileStateHolder())` constructor param; `WanderlyRepository` owns the single instance and passes it in. Carved repos can now share one holder.
 
 **Remaining (heavy carving — own turn each; lean on D's tests as the net):**
-- [ ] Step 3 — make `ProfileStateHolder` a shared injected singleton (Hilt) so the carved repos share one instance. Then extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / milestones), `ShopRepository` (catalog / purchase / equip), `ReferralRepository` (referrals), each depending on the holder; move their nested DTOs + companion mappers with them.
+- [ ] Step 3b PREREQUISITE — extract the shared private helpers the clusters depend on, so a carve doesn't duplicate them: `withPostgrestSchemaCacheRetry` (used by getShopItems / getStreakMilestones / referral list), `logError`/`logWarn`, and `applyProgressSnapshot` (streak mutations). Put on a shared base class or a `data` internal util both repos use. **This is why the carve wasn't rushed — without it each carved repo would duplicate these.**
+- [ ] Step 3c — extract `ShopRepository` (getShopItems / purchaseShopItem / equipCosmetic / applyEquippedCosmetic + DTOs ShopItem / UserInventoryItemRow / ShopItemParams / PurchaseShopItemRpcResponse / EquipCosmeticRpcResponse + mappers mapPurchaseResponse / mapEquipResponse + CosmeticType), depending on the shared holder. **Test impact:** `RpcResponseDecodingTest` references `ProfileRepository.mapPurchaseResponse` / `mapEquipResponse` / `PurchaseShopItemRpcResponse` / `EquipCosmeticRpcResponse` — repoint to `ShopRepository`.
+- [ ] Step 3d — extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / getStreakMilestones / claimStreakMilestone) and `ReferralRepository` (claimReferral). Move their DTOs/mappers + repoint the matching `RpcResponseDecodingTest` references.
 - [ ] Step 4 — `ProfileRepository` keeps only load / update / username / location / mission-completion / avatar-delegation.
 - [ ] Step 5 — wire through Hilt (`RepositoryModule`); keep the `WanderlyRepository` public surface stable to bound the diff.
 - [ ] Unlocks the deferred D hive fire-and-forget test (ProfileRepository becomes injectable into WanderlyRepository).

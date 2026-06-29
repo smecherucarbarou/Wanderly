@@ -15,7 +15,8 @@ open class WanderlyRepository(
     val context: Context = context.applicationContext
 
     private val preferencesStore = PreferencesStore(this.context)
-    private val profileRepository = ProfileRepository(this.context, preferencesStore)
+    private val profileState = ProfileStateHolder()
+    private val profileRepository = ProfileRepository(this.context, preferencesStore, profileState)
     private val socialRepository = SocialRepository()
     private val missionRepository = MissionRepository()
     private val discoveryRepository = DiscoveryRepository()

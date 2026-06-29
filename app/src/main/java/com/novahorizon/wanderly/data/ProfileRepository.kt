@@ -45,7 +45,8 @@ sealed class ProfileUpdateResult {
 
 class ProfileRepository(
     private val context: Context,
-    private val preferencesStore: PreferencesStore
+    private val preferencesStore: PreferencesStore,
+    private val profileState: ProfileStateHolder = ProfileStateHolder()
 ) {
     internal data class ClientProfileUpdate(
         val username: String?,
@@ -182,7 +183,6 @@ class ProfileRepository(
         val error_message: String? = null
     )
 
-    private val profileState = ProfileStateHolder()
     val currentProfile: StateFlow<Profile?> = profileState.asStateFlow()
 
     private val avatarRepository = AvatarRepository(context)
