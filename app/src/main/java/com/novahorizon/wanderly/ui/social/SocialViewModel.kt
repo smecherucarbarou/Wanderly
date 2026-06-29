@@ -14,6 +14,7 @@ import com.novahorizon.wanderly.ui.common.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -46,7 +47,7 @@ class SocialViewModel @Inject constructor(
     val hiveChallenge: LiveData<ActiveHiveChallenge?> = _hiveChallenge
 
     private val _state = MutableStateFlow<SocialUiState>(SocialUiState.Loading)
-    val state: StateFlow<SocialUiState> = _state
+    val state: StateFlow<SocialUiState> = _state.asStateFlow()
 
     sealed class SocialUiState {
         object Loading : SocialUiState()
@@ -67,7 +68,7 @@ class SocialViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             repository.currentProfile.collectLatest { profile ->
-                _currentProfile.postValue(profile)
+                _currentProfile.value = profile
             }
         }
     }
@@ -78,7 +79,7 @@ class SocialViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val list = repository.getLeaderboard()
-                _leaderboard.postValue(list)
+                _leaderboard.value = list
                 _state.value = if (list.isEmpty()) {
                     SocialUiState.Empty
                 } else {
@@ -90,7 +91,7 @@ class SocialViewModel @Inject constructor(
             } catch (_: Exception) {
                 _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
             } finally {
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }
@@ -104,7 +105,7 @@ class SocialViewModel @Inject constructor(
             } catch (_: Exception) {
                 _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
             } finally {
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }
@@ -124,27 +125,25 @@ class SocialViewModel @Inject constructor(
             try {
                 val result = repository.addFriendByCodeResult(normalizedFriendCode)
                 val feedback = addFriendDisplayMessage(result)
-                _addFriendResult.postValue(feedback)
+                _addFriendResult.value = feedback
                 when (result) {
                     AddFriendResult.FriendRequestSent,
                     AddFriendResult.AlreadyRequestedOrFriends -> {
                         restoreSocialState()
-                        _isLoading.postValue(false)
+                        _isLoading.value = false
                     }
                     else -> {
                         _state.value = SocialUiState.Error(feedback.message)
-                        _isLoading.postValue(false)
+                        _isLoading.value = false
                     }
                 }
             } catch (_: Exception) {
-                _addFriendResult.postValue(
-                    SocialMessage(
-                        message = UiText.resource(R.string.social_add_friend_failed),
-                        isError = true
-                    )
+                _addFriendResult.value = SocialMessage(
+                    message = UiText.resource(R.string.social_add_friend_failed),
+                    isError = true
                 )
                 _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }
@@ -170,32 +169,26 @@ class SocialViewModel @Inject constructor(
             try {
                 val success = repository.removeFriend(friendId)
                 if (success) {
-                    _addFriendResult.postValue(
-                        SocialMessage(
-                            message = UiText.DynamicString("Friend removed successfully"),
-                            isError = false
-                        )
+                    _addFriendResult.value = SocialMessage(
+                        message = UiText.DynamicString("Friend removed successfully"),
+                        isError = false
                     )
                     loadFriends()
                 } else {
-                    _addFriendResult.postValue(
-                        SocialMessage(
-                            message = UiText.DynamicString("Failed to remove friend"),
-                            isError = true
-                        )
-                    )
-                    _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
-                    _isLoading.postValue(false)
-                }
-            } catch (_: Exception) {
-                _addFriendResult.postValue(
-                    SocialMessage(
+                    _addFriendResult.value = SocialMessage(
                         message = UiText.DynamicString("Failed to remove friend"),
                         isError = true
                     )
+                    _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
+                    _isLoading.value = false
+                }
+            } catch (_: Exception) {
+                _addFriendResult.value = SocialMessage(
+                    message = UiText.DynamicString("Failed to remove friend"),
+                    isError = true
                 )
                 _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }
@@ -248,7 +241,7 @@ class SocialViewModel @Inject constructor(
             try {
                 val result = action(requesterId)
                 val feedback = friendRequestActionDisplayMessage(result)
-                _addFriendResult.postValue(feedback)
+                _addFriendResult.value = feedback
                 when (result) {
                     FriendRequestActionResult.Accepted,
                     FriendRequestActionResult.Rejected -> refreshFriendsState()
@@ -259,10 +252,10 @@ class SocialViewModel @Inject constructor(
                     message = UiText.resource(R.string.social_friend_request_action_failed),
                     isError = true
                 )
-                _addFriendResult.postValue(feedback)
+                _addFriendResult.value = feedback
                 _state.value = SocialUiState.Error(feedback.message)
             } finally {
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }
@@ -270,8 +263,8 @@ class SocialViewModel @Inject constructor(
     private suspend fun refreshFriendsState() {
         val acceptedFriends = repository.getFriends()
         val incomingRequests = repository.getIncomingFriendRequests()
-        _friends.postValue(acceptedFriends)
-        _incomingFriendRequests.postValue(incomingRequests)
+        _friends.value = acceptedFriends
+        _incomingFriendRequests.value = incomingRequests
         _state.value = if (acceptedFriends.isEmpty() && incomingRequests.isEmpty()) {
             SocialUiState.Empty
         } else {
@@ -325,14 +318,14 @@ class SocialViewModel @Inject constructor(
         _state.value = SocialUiState.Loading
         viewModelScope.launch {
             // Hive challenge is best-effort: its failure must not error the whole Social screen.
-            _hiveChallenge.postValue(runCatching { repository.getActiveHiveChallenge() }.getOrNull())
+            _hiveChallenge.value = runCatching { repository.getActiveHiveChallenge() }.getOrNull()
             try {
                 val leaderboard = repository.getLeaderboard()
                 val acceptedFriends = repository.getFriends()
                 val incomingRequests = repository.getIncomingFriendRequests()
-                _leaderboard.postValue(leaderboard)
-                _friends.postValue(acceptedFriends)
-                _incomingFriendRequests.postValue(incomingRequests)
+                _leaderboard.value = leaderboard
+                _friends.value = acceptedFriends
+                _incomingFriendRequests.value = incomingRequests
                 _state.value = if (
                     leaderboard.isEmpty() &&
                     acceptedFriends.isEmpty() &&
@@ -349,7 +342,7 @@ class SocialViewModel @Inject constructor(
             } catch (_: Exception) {
                 _state.value = SocialUiState.Error(UiText.resource(R.string.error_network))
             } finally {
-                _isLoading.postValue(false)
+                _isLoading.value = false
             }
         }
     }

@@ -257,3 +257,61 @@ Last session: 2026-06-29
 **Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — `StreakWidgetAlarmSchedulerTest`/`StreakWidgetRefreshPolicyTest` + full suite passed.
 **Timestamp:** 2026-06-29 (working tree; not yet committed)
 ---
+
+## Follow-up batch — remaining improvements.md small wins (2026-06-29)
+
+### QW-12 · Widget streak in UTC + future-date handling
+**Status:** Done
+**Files changed:** app/src/main/java/com/novahorizon/wanderly/widgets/StreakWidgetStateHelper.kt (now/today defaults → UTC, toEpochMillis → UTC), app/src/main/java/com/novahorizon/wanderly/streak/DailyStreakStatusEvaluator.kt, app/src/test/java/com/novahorizon/wanderly/widgets/StreakWidgetStateHelperTest.kt
+**What changed:** The widget computed "today" from `LocalDateTime.now()` (device-local) while mission dates are UTC, so the widget streak disagreed with the app across the day boundary. Switched the helper's `now`/`today` defaults to `ZoneOffset.UTC`; also switched the private `toEpochMillis()` (used for the stale-snapshot check) from `ZoneId.systemDefault()` to `ZoneOffset.UTC` so the stale calc stays correct with a UTC `now`. In `DailyStreakStatusEvaluator`, a future `last_mission_date` (negative day diff from clock skew / timezones) now maps to `ACTIVE_TODAY` instead of falling through to `HARD_LOST`. Updated the two stale-indicator tests to compute `savedAtMillis` in UTC to match.
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — `StreakWidgetStateHelperTest` + `DailyStreakStatusEvaluatorTest` + full suite (354 tests) passed.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-16 · Reject NaN mission coordinates
+**Status:** Done
+**Files changed:** app/src/main/java/com/novahorizon/wanderly/data/mission/GooglePlacesMissionPlaceSearchService.kt
+**What changed:** `parsePlaces` read `location.optDouble("latitude"/"longitude")`, which returns `NaN` when the field is absent, so a candidate with no location could be selected with garbage coords. Now parses with a `Double.NaN` default and drops the candidate (`return@mapNotNull null`) when either is NaN — mirroring the existing guard in `GooglePlacesDataSource.parsePlaces`.
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — full suite passed.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-31 · Use post-snapshot balance for Completed honey
+**Status:** Done
+**Files changed:** app/src/main/java/com/novahorizon/wanderly/data/ProfileRepository.kt (logMissionCompletion)
+**What changed:** `MissionCompletionResult.Completed` used `response.honey ?: 0`, collapsing a missing RPC field to 0. Now captures the `applyProgressSnapshot(...)` return (the authoritative merged profile, which falls back to the prior balance) and uses `updated?.honey ?: response.honey ?: 0` (same for streak count).
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — full suite passed.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-7 · One LiveData mechanism in SocialViewModel
+**Status:** Done
+**Files changed:** app/src/main/java/com/novahorizon/wanderly/ui/social/SocialViewModel.kt
+**What changed:** Converted all 24 `.postValue(...)` calls to `.value = ...`. All run inside `viewModelScope.launch`/`collectLatest` (Main.immediate) — none inside a `withContext(IO)` block — so main-thread `setValue` is safe and consistent with the existing `.value =` writes (removes the post/set ordering hazard, audit M-3).
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — `SocialViewModelTest` + full suite passed; grep confirms no `postValue` remains.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-20 · Expose state as asStateFlow()
+**Status:** Done
+**Files changed:** app/src/main/java/com/novahorizon/wanderly/ui/social/SocialViewModel.kt:49 (+import)
+**What changed:** `val state: StateFlow<…> = _state` → `_state.asStateFlow()` so the public flow is read-only (matches `ProfileViewModel`).
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-25 · Bump Compose BOM, let it govern
+**Status:** Done
+**Files changed:** gradle/libs.versions.toml (composeBom 2025.05.00 → 2026.06.00; dropped version.ref on compose-material3 / compose-activity / compose-lifecycle-runtime)
+**What changed:** Moved the Compose BOM to the latest stable (2026.06.00; Kotlin 2.3.x compatible — compiler is bundled with Kotlin) and removed the independently-pinned material3 / activity-compose / lifecycle-runtime-compose versions so the BOM governs them. The unused `material3`/`activityCompose`/`lifecycleRuntimeCompose` version entries were left in `[versions]` (harmless). No source changes were needed — Compose compiled clean against the new BOM.
+**Verified by:** `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin` BUILD SUCCESSFUL (Compose screens + UI tests compile); `./gradlew :app:lint` — no new issues.
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---
+
+### QW-6 / QW-37 / QW-38 · Cheap high-signal tests
+**Status:** Done
+**Files changed:** app/src/test/java/com/novahorizon/wanderly/data/ProfileVisibleColumnsTest.kt (new), app/src/test/java/com/novahorizon/wanderly/util/GeoMathTest.kt, app/src/test/java/com/novahorizon/wanderly/util/DateUtilsTest.kt
+**What changed:** QW-6 — new `ProfileVisibleColumnsTest` asserts `PROFILE_VISIBLE_COLUMNS` excludes `last_lat/last_lng/admin_role/last_mission_date/last_buzz_date/updated_at` (and includes the safe columns). QW-37 — added GeoMath edges: antipodal (~20015 km), antimeridian crossing, equator crossing, same-pole coincidence, sub-100 m separation. QW-38 — added DateUtils cases: instant just before/after UTC midnight, and a negative-offset (America/New_York EDT) evening mapping to the next UTC day.
+**Verified by:** `./gradlew :app:testDebugUnitTest` BUILD SUCCESSFUL — all new tests pass (354 total).
+**Timestamp:** 2026-06-29 (working tree; not yet committed)
+---

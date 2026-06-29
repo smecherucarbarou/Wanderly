@@ -23,11 +23,12 @@ object DailyStreakStatusEvaluator {
         val lastMission = runCatching { lastMissionDate?.let(LocalDate::parse) }.getOrNull()
             ?: return DailyStreakStatus.HARD_LOST
 
-        return when (ChronoUnit.DAYS.between(lastMission, today)) {
+        return when (val daysSince = ChronoUnit.DAYS.between(lastMission, today)) {
             0L -> DailyStreakStatus.ACTIVE_TODAY
             1L -> DailyStreakStatus.AT_RISK
             2L -> DailyStreakStatus.FREEZE_ELIGIBLE
-            else -> DailyStreakStatus.HARD_LOST
+            // A future last-mission date (clock skew / cross-timezone) is not a lost streak.
+            else -> if (daysSince < 0L) DailyStreakStatus.ACTIVE_TODAY else DailyStreakStatus.HARD_LOST
         }
     }
 }

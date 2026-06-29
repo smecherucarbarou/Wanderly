@@ -70,11 +70,14 @@ class GooglePlacesMissionPlaceSearchService : MissionPlaceSearchService {
             val location = place.optJSONObject("location") ?: return@mapNotNull null
             val name = place.optJSONObject("displayName")?.optString("text").orEmpty()
             if (name.isBlank()) return@mapNotNull null
+            val latitude = location.optDouble("latitude", Double.NaN)
+            val longitude = location.optDouble("longitude", Double.NaN)
+            if (latitude.isNaN() || longitude.isNaN()) return@mapNotNull null
             PlacesMissionSearchResult(
                 placesName = name,
                 placesId = place.optString("id").takeIf { it.isNotBlank() },
-                latitude = location.optDouble("latitude"),
-                longitude = location.optDouble("longitude"),
+                latitude = latitude,
+                longitude = longitude,
                 locality = extractLocality(place),
                 formattedAddress = place.optString("formattedAddress").takeIf { it.isNotBlank() },
                 rating = place.optDoubleOrNull("rating"),

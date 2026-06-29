@@ -9,6 +9,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
@@ -43,7 +44,7 @@ object StreakWidgetStateHelper {
     fun resolveVisualState(
         streakCount: Int,
         lastMissionDate: String?,
-        now: LocalDateTime = LocalDateTime.now()
+        now: LocalDateTime = LocalDateTime.now(ZoneOffset.UTC)
     ): StreakWidgetVisualState = resolveVisualState(
         streakCount = streakCount,
         lastMissionDate = lastMissionDate,
@@ -54,7 +55,7 @@ object StreakWidgetStateHelper {
     fun resolveVisualState(
         snapshot: WidgetStreakSnapshot?,
         currentFetchSucceeded: Boolean,
-        now: LocalDateTime = LocalDateTime.now()
+        now: LocalDateTime = LocalDateTime.now(ZoneOffset.UTC)
     ): StreakWidgetVisualState {
         val showStaleIndicator = snapshot != null &&
             !currentFetchSucceeded &&
@@ -73,7 +74,7 @@ object StreakWidgetStateHelper {
             .toInt()
     }
 
-    fun isInDanger(lastMissionDate: String?, today: LocalDate = LocalDate.now()): Boolean {
+    fun isInDanger(lastMissionDate: String?, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): Boolean {
         return DailyStreakStatusEvaluator.evaluate(
             streakCount = 1,
             lastMissionDate = lastMissionDate,
@@ -200,6 +201,6 @@ object StreakWidgetStateHelper {
     }
 
     private fun LocalDateTime.toEpochMillis(): Long {
-        return atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
     }
 }

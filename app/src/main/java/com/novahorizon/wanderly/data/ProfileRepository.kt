@@ -405,14 +405,16 @@ class ProfileRepository(
             if (response.success) {
                 // The new RPC does not echo a mission date; completing now means today (UTC).
                 val today = DateUtils.formatUtcDate(Date())
-                applyProgressSnapshot(
+                val updated = applyProgressSnapshot(
                     honey = response.honey,
                     streakCount = response.streak_count,
                     lastMissionDate = today
                 )
                 MissionCompletionResult.Completed(
-                    honey = response.honey ?: 0,
-                    streakCount = response.streak_count ?: 0,
+                    // Prefer the post-snapshot balance (falls back to the prior profile value when the RPC
+                    // omits a field) rather than collapsing a missing value to 0.
+                    honey = updated?.honey ?: response.honey ?: 0,
+                    streakCount = updated?.streak_count ?: response.streak_count ?: 0,
                     lastMissionDate = today,
                     rewardHoney = response.reward_honey ?: 0,
                     streakBonusHoney = response.streak_bonus ?: 0

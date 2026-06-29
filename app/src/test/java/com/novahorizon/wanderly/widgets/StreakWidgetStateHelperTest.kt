@@ -104,7 +104,7 @@ class StreakWidgetStateHelperTest {
         val snapshot = WidgetStreakSnapshot(
             streakCount = 12,
             lastMissionDate = now.toLocalDate().minusDays(1).toString(),
-            savedAtMillis = now.minusMinutes(6).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            savedAtMillis = now.minusMinutes(6).atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
             lastSyncSucceeded = true
         )
 
@@ -123,7 +123,7 @@ class StreakWidgetStateHelperTest {
         val snapshot = WidgetStreakSnapshot(
             streakCount = 12,
             lastMissionDate = now.toLocalDate().minusDays(1).toString(),
-            savedAtMillis = now.minusMinutes(4).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            savedAtMillis = now.minusMinutes(4).atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
             lastSyncSucceeded = true
         )
 
