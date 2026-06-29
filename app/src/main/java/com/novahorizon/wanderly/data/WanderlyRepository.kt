@@ -7,7 +7,11 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-open class WanderlyRepository(context: Context) {
+open class WanderlyRepository(
+    context: Context,
+    // Injectable (default = real) so hive fire-and-forget behaviour becomes unit-testable.
+    private val hiveChallengeRepository: HiveChallengeRepository = HiveChallengeRepository()
+) {
     val context: Context = context.applicationContext
 
     private val preferencesStore = PreferencesStore(this.context)
@@ -17,7 +21,6 @@ open class WanderlyRepository(context: Context) {
     private val discoveryRepository = DiscoveryRepository()
     private val gemCurationRepository = GemCurationRepository(this.context)
     private val gemDiscoveryRepository = GemDiscoveryRepository()
-    private val hiveChallengeRepository = HiveChallengeRepository()
 
     open val currentProfile: StateFlow<Profile?> = profileRepository.currentProfile
 

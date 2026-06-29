@@ -22,15 +22,15 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 Incremental; each commit is a complete checkpoint.
 
 **Done:**
-- [x] Mission-completion decode contract in `RpcResponseDecodingTest`: `MissionLogRpcResponse` full payload, missing-optional→null, error payload, unknown-key tolerance. (Made `MissionLogRpcResponse` `internal`.)
-- [x] F invariant test: `PublicProfile` decode drops `last_lat/last_lng/admin_role` even when present in the payload; `toProfile()` yields nulls.
-- [x] (already in improvements.md) QW-15 StreakMutation/AdminStats array-vs-object decode; QW-6 PROFILE_VISIBLE_COLUMNS; QW-37 GeoMath edges; QW-38 DateUtils UTC.
+- [x] Mission-completion decode contract (`MissionLogRpcResponse`: full payload, missing-optional→null, error payload, unknown-key tolerance; DTO made `internal`).
+- [x] F invariant test: `PublicProfile` decode drops `last_lat/last_lng/admin_role`; `toProfile()` yields nulls.
+- [x] Extracted `mapMissionLogError(error, snapshot)` to the companion (pure) + error-code tests (already_completed echo + null fallback, known codes, unknown/null → ServerFailure).
+- [x] Injected `HiveChallengeRepository` into `WanderlyRepository` (constructor param w/ default) — enabling refactor for the hive behavioral tests.
+- [x] (already in improvements.md) QW-15 StreakMutation/AdminStats array decode; QW-6 PROFILE_VISIBLE_COLUMNS; QW-37 GeoMath; QW-38 DateUtils.
 
 **Remaining:**
-- [ ] Error-mapping tests for `mapMissionLogError` — currently an *instance* method reading `_currentProfile`; extract a pure helper (snapshot passed in) so each error code is unit-testable. Small production refactor.
-- [ ] Inject `HiveChallengeRepository` into `WanderlyRepository` (constructor param w/ default, replacing `HiveChallengeRepository()` at `WanderlyRepository.kt:~20`) to make hive paths integration-testable.
-- [ ] Hive fire-and-forget behavioral tests: a throwing/inactive/`already_rewarded` contribution must not throw, delay, or alter the `logMissionCompletion`/`discoverGem` result.
-- [ ] Tighten the Kover gate: class filters (generated Hilt/serialization, Compose previews, widgets), a branch-coverage rule, raise line `minBound` ~40-50%; run `lintRelease` in CI.
+- [ ] Hive fire-and-forget behavioral tests — BLOCKED: also needs `ProfileRepository` injectable into `WanderlyRepository` (so a fake returns `Completed` without network) to assert a throwing/inactive contribution doesn't alter `logMissionCompletion`/`discoverGem`. Best landed alongside item **A** (which makes ProfileRepository injectable).
+- [ ] Tighten the Kover gate — measure current coverage first (raising `minBound` blindly would fail CI). Add class filters (generated Hilt/serialization, Compose previews, widgets) + a branch rule, then raise the line bound; run `lintRelease` in CI.
 
 ---
 
