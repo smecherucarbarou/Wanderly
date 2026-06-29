@@ -7,7 +7,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 
 | Item | Title | Effort | Status |
 |------|-------|--------|--------|
-| A | Split ProfileRepository god class | M | **In progress** (ProfileStateHolder extracted; carving remains) |
+| A | Split ProfileRepository god class | M | **In progress** (holder + ShopRepository carved; Streak/Referral remain) |
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
 | C | Unify authenticated-proxy HTTP client | S | Not started |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
@@ -39,11 +39,11 @@ Incremental; each commit is a complete checkpoint.
 **Done:**
 - [x] Step 2 — extracted `ProfileStateHolder` (`data/ProfileStateHolder.kt`): owns the `MutableStateFlow<Profile?>`; exposes `value` get/set, `asStateFlow()`, `update`, `updateAndGet`. All ~16 ProfileRepository read/write sites route through it. Centralizes the H-3 atomic-update guarantee.
 - [x] Step 3a — `ProfileStateHolder` is now shared/injectable: `ProfileRepository(context, prefs, profileState = ProfileStateHolder())` constructor param; `WanderlyRepository` owns the single instance and passes it in. Carved repos can now share one holder.
+- [x] Step 3b — extracted `withPostgrestSchemaCacheRetry` + `isPostgrestSchemaCacheError` to `data/PostgrestSchemaCacheRetry.kt` (top-level internal); the 8 call sites + 2 instance refs resolve unchanged (same package); test repointed.
+- [x] Step 3c — extracted `ShopRepository(profileState)` (`data/ShopRepository.kt`): getShopItems / purchaseShopItem / equipCosmetic / applyEquippedCosmetic + RPC DTOs (ShopItemParams / PurchaseShopItemRpcResponse / EquipCosmeticRpcResponse) + mappers, sharing the holder. `WanderlyRepository` delegates shop methods to it; `RpcResponseDecodingTest` shop refs repointed to `ShopRepository`. ProfileRepository no longer holds shop code. (Public types stayed in `Shop.kt`.)
 
 **Remaining (heavy carving — own turn each; lean on D's tests as the net):**
-- [ ] Step 3b PREREQUISITE — extract the shared private helpers the clusters depend on, so a carve doesn't duplicate them: `withPostgrestSchemaCacheRetry` (used by getShopItems / getStreakMilestones / referral list), `logError`/`logWarn`, and `applyProgressSnapshot` (streak mutations). Put on a shared base class or a `data` internal util both repos use. **This is why the carve wasn't rushed — without it each carved repo would duplicate these.**
-- [ ] Step 3c — extract `ShopRepository` (getShopItems / purchaseShopItem / equipCosmetic / applyEquippedCosmetic + DTOs ShopItem / UserInventoryItemRow / ShopItemParams / PurchaseShopItemRpcResponse / EquipCosmeticRpcResponse + mappers mapPurchaseResponse / mapEquipResponse + CosmeticType), depending on the shared holder. **Test impact:** `RpcResponseDecodingTest` references `ProfileRepository.mapPurchaseResponse` / `mapEquipResponse` / `PurchaseShopItemRpcResponse` / `EquipCosmeticRpcResponse` — repoint to `ShopRepository`.
-- [ ] Step 3d — extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / getStreakMilestones / claimStreakMilestone) and `ReferralRepository` (claimReferral). Move their DTOs/mappers + repoint the matching `RpcResponseDecodingTest` references.
+- [ ] Step 3d — extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / getStreakMilestones / claimStreakMilestone — these use the shared `applyProgressSnapshot`, so extract that to the holder or a shared helper first) and `ReferralRepository` (claimReferral). Move their DTOs/mappers + repoint the matching `RpcResponseDecodingTest` references. Pattern is now established by ShopRepository.
 - [ ] Step 4 — `ProfileRepository` keeps only load / update / username / location / mission-completion / avatar-delegation.
 - [ ] Step 5 — wire through Hilt (`RepositoryModule`); keep the `WanderlyRepository` public surface stable to bound the diff.
 - [ ] Unlocks the deferred D hive fire-and-forget test (ProfileRepository becomes injectable into WanderlyRepository).

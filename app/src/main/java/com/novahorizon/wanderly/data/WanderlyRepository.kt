@@ -17,6 +17,7 @@ open class WanderlyRepository(
     private val preferencesStore = PreferencesStore(this.context)
     private val profileState = ProfileStateHolder()
     private val profileRepository = ProfileRepository(this.context, preferencesStore, profileState)
+    private val shopRepository = ShopRepository(profileState)
     private val socialRepository = SocialRepository()
     private val missionRepository = MissionRepository()
     private val discoveryRepository = DiscoveryRepository()
@@ -92,13 +93,13 @@ open class WanderlyRepository(
     open suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult =
         profileRepository.claimReferral(friendCode)
 
-    open suspend fun getShopItems(): List<ShopItemStatus> = profileRepository.getShopItems()
+    open suspend fun getShopItems(): List<ShopItemStatus> = shopRepository.getShopItems()
 
     open suspend fun purchaseShopItem(itemId: String): ShopPurchaseResult =
-        profileRepository.purchaseShopItem(itemId)
+        shopRepository.purchaseShopItem(itemId)
 
     open suspend fun equipCosmetic(itemId: String): ShopEquipResult =
-        profileRepository.equipCosmetic(itemId)
+        shopRepository.equipCosmetic(itemId)
 
     open suspend fun getLeaderboard(): List<Profile> = socialRepository.getLeaderboard()
 
