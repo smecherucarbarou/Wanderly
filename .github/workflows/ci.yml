@@ -78,7 +78,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Instrumentation tests
-        uses: reactivecircus/android-emulator-runner@62dbb605bba737720e10b196cb4220d374026a6d # v2
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         env:
           WANDERLY_ANDROID_TEST_EMAIL: ${{ secrets.WANDERLY_ANDROID_TEST_EMAIL }}
           WANDERLY_ANDROID_TEST_PASSWORD: ${{ secrets.WANDERLY_ANDROID_TEST_PASSWORD }}
@@ -87,7 +87,7 @@ jobs:
           GEMINI_PROXY_URL: ${{ secrets.GEMINI_PROXY_URL }}
           GOOGLE_PLACES_PROXY_URL: ${{ secrets.GOOGLE_PLACES_PROXY_URL }}
         with:
-          api-level: 35
+          api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_6
