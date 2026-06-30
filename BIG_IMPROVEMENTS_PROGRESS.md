@@ -13,7 +13,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
 | E | Realtime/FGS + hive-fetch strategy | S | **Done** (FGS removed H-5/H-6; hive-fetch deduped to 1 read/action + TTL cache) |
 | F | Lean PublicProfile DTO + drop admin_role | S | **Done** (decode-boundary; UI-type propagation = optional follow-up) |
-| G | Baseline profile: wire or delete | S | Not started |
+| G | Baseline profile: wire or delete | S | **Done** (deleted — was dead weight) |
 
 ---
 
@@ -52,6 +52,22 @@ Incremental; each commit is a complete checkpoint.
 - [ ] D hive fire-and-forget test — still needs `ProfileRepository` itself injectable into `WanderlyRepository` (the carved repos are injectable, but mission-completion's hive trigger lives in WanderlyRepository wrapping `profileRepository.logMissionCompletion`). A small follow-up: inject ProfileRepository (constructor param w/ default) to fake it.
 
 **Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
+
+---
+
+## G · Baseline profile — DONE (deleted)
+
+Decision (user): **delete**. The CI emulator is fixed now, but the baseline profile was dead weight
+(empty profile installed → zero startup benefit), and wiring would add a ~10-min generation job +
+maintenance. Removed:
+- [x] `:baselineprofile` module (build.gradle.kts + BaselineProfileGenerator.kt).
+- [x] `include(":baselineprofile")` in settings.gradle.kts.
+- [x] `implementation(libs.androidx.profileinstaller)` in app/build.gradle.kts.
+- [x] The "Baseline profile generator compile check" CI step.
+- Unused version-catalog entries (androidxBaselineProfile / benchmark / profileinstaller / uiautomator
+  + the androidx-baselineprofile plugin) are harmless and left in place; prune if desired.
+- To revisit: re-add the module + plugin + a `generateReleaseBaselineProfile` CI job when optimizing
+  Play Store startup (the emulator supports it now).
 
 ---
 

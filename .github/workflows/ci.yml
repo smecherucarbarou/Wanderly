@@ -123,9 +123,6 @@ jobs:
       - name: Release regression check
         run: ./gradlew :app:releaseRegressionCheck --stacktrace --console=plain
 
-      - name: Baseline profile generator compile check
-        run: ./gradlew :baselineprofile:assemble --stacktrace --console=plain
-
       - name: Coverage report
         run: ./gradlew :app:koverVerifyDebug :app:koverXmlReportDebug :app:koverHtmlReportDebug :app:koverLogDebug --stacktrace --console=plain
 

@@ -474,8 +474,6 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
 
-    // Baseline Profile installation for release builds and sideloaded internal candidates.
-    implementation(libs.androidx.profileinstaller)
 
     // Testing
     testImplementation(libs.junit)
