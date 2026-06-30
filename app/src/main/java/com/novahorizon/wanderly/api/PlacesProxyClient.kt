@@ -1,7 +1,6 @@
 package com.novahorizon.wanderly.api
 
 import com.novahorizon.wanderly.BuildConfig
-import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +30,7 @@ object PlacesProxyClient {
 
     suspend fun searchText(body: JSONObject, fieldMask: String): NetworkResult<JSONObject> = withContext(Dispatchers.IO) {
         val auth = SupabaseClient.client.auth
-        var accessToken = auth.currentAccessTokenOrNull()
+        val accessToken = auth.currentAccessTokenOrNull()
             ?: return@withContext NetworkResult.HttpError(401, "Authentication required for Places proxy")
         
         val finalUrl = resolveProxyUrl()
@@ -50,24 +49,7 @@ object PlacesProxyClient {
         }
 
         try {
-            var response = client.newCall(buildRequest(accessToken)).await()
-
-            if (response.code == 401) {
-                response.close()
-                try {
-                    auth.refreshCurrentSession()
-                    val newToken = auth.currentAccessTokenOrNull()
-                    if (newToken != null && newToken != accessToken) {
-                        accessToken = newToken
-                        response = client.newCall(buildRequest(accessToken)).await()
-                    } else {
-                        return@withContext NetworkResult.HttpError(401, "Refresh failed")
-                    }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    return@withContext NetworkResult.HttpError(401, "Refresh failed")
-                }
-            }
+            val response = client.awaitWithTokenRefresh(auth, accessToken, buildRequest)
 
             response.use { resp ->
                 val responseBody = resp.body.string()

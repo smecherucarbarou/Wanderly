@@ -9,7 +9,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 |------|-------|--------|--------|
 | A | Split ProfileRepository god class | M | **Largely done** (holder + Shop/Streak/Referral carved; ProfileRepository 950→537 lines) |
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
-| C | Unify authenticated-proxy HTTP client | S | Not started |
+| C | Unify authenticated-proxy HTTP client | S | **Done** (shared awaitWithTokenRefresh; GeminiClient/PlacesProxyClient/Gateway routed) |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
 | E | Realtime/FGS + hive-fetch strategy | S | **Done** (FGS removed H-5/H-6; hive-fetch deduped to 1 read/action + TTL cache) |
 | F | Lean PublicProfile DTO + drop admin_role | S | **Done** (decode-boundary; UI-type propagation = optional follow-up) |
@@ -52,6 +52,14 @@ Incremental; each commit is a complete checkpoint.
 - [ ] D hive fire-and-forget test — still needs `ProfileRepository` itself injectable into `WanderlyRepository` (the carved repos are injectable, but mission-completion's hive trigger lives in WanderlyRepository wrapping `profileRepository.logMissionCompletion`). A small follow-up: inject ProfileRepository (constructor param w/ default) to fake it.
 
 **Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
+
+---
+
+## C · Unify authenticated-proxy HTTP client — DONE
+
+- [x] Extracted `api/AuthedProxyRequest.kt` → `OkHttpClient.awaitWithTokenRefresh(auth, initialToken, buildRequest): Response`: the token → cancellation-aware `await()` → single-401-refresh-and-retry flow, in one place. Each caller keeps its own `OkHttpClient` (timeouts/HTTPS interceptor), its access-token-null handling, response mapping, and retry policy.
+- [x] Routed all three: `GeminiClient.executeRequest` (still wrapped in `withRetry`), `PlacesProxyClient.searchText` (→ `NetworkResult`), `DefaultAiAssistantGateway.postGuideRequest` (→ `AiAssistantHttpResponse`). Removed the now-dead per-file `await()` imports. This was the root of the QW-21/QW-22 per-file drift (blocking execute vs await, differing retry).
+- Behavior note: on a failed 401-refresh, the helper returns the original 401 Response and each caller maps it as before (401 → exception / HttpError) — only the bespoke "Refresh failed" log/message nuance is dropped; no test asserted it. `withRetry` untouched (HttpRetryTest green).
 
 ---
 

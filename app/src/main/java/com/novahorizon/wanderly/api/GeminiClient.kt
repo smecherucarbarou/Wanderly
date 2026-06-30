@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.util.Base64
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.observability.LogRedactor
-import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -141,7 +140,7 @@ object GeminiClient {
         extractGeminiText: Boolean = true
     ): String {
         val auth = SupabaseClient.client.auth
-        var accessToken = auth.currentAccessTokenOrNull()
+        val accessToken = auth.currentAccessTokenOrNull()
             ?: throw Exception("Authentication required for Gemini proxy")
 
         val finalUrl = resolveProxyUrl()
@@ -159,32 +158,7 @@ object GeminiClient {
         return withContext(Dispatchers.IO) {
             withRetry {
                 try {
-                    var request = buildRequest(accessToken)
-                    var response = client.newCall(request).await()
-
-                    // If 401, try to refresh the session once
-                    if (response.code == 401) {
-                        response.close()
-                        AppLogger.w(TAG, "Gemini $logLabel got 401, attempting token refresh...")
-                        try {
-                            auth.refreshCurrentSession()
-                            val newToken = auth.currentAccessTokenOrNull()
-                            if (newToken != null && newToken != accessToken) {
-                                accessToken = newToken
-                                request = buildRequest(accessToken)
-                                response = client.newCall(request).await()
-                            } else {
-                                throw Exception("Failed to refresh token or token unchanged")
-                            }
-                        } catch (refreshError: Exception) {
-                            if (refreshError is CancellationException) throw refreshError
-                            if (BuildConfig.DEBUG) {
-                                AppLogger.e(TAG, "Session refresh failed: ${LogRedactor.redact(refreshError.message)}")
-                            }
-                            else AppLogger.e(TAG, "Session refresh failed [code=${refreshError.javaClass.simpleName}]")
-                            throw GeminiHttpException(401, "Proxy call failed: 401 (Refresh failed)")
-                        }
-                    }
+                    val response = client.awaitWithTokenRefresh(auth, accessToken, buildRequest)
 
                     response.use { resp ->
                         val responseBody = resp.body.string()

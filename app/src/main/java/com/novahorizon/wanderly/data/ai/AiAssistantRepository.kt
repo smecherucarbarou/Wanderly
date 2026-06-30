@@ -2,10 +2,10 @@ package com.novahorizon.wanderly.data.ai
 
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.api.SupabaseClient
+import com.novahorizon.wanderly.api.awaitWithTokenRefresh
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.observability.LogRedactor
-import com.novahorizon.wanderly.util.await
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +48,7 @@ class DefaultAiAssistantGateway @Inject constructor() : AiAssistantGateway {
 
     override suspend fun postGuideRequest(body: String): AiAssistantHttpResponse = withContext(Dispatchers.IO) {
         val auth = SupabaseClient.client.auth
-        var accessToken = auth.currentAccessTokenOrNull()
+        val accessToken = auth.currentAccessTokenOrNull()
             ?: throw AiAssistantException.Unauthenticated()
 
         val requestBody = body.toRequestBody("application/json".toMediaType())
@@ -61,20 +61,7 @@ class DefaultAiAssistantGateway @Inject constructor() : AiAssistantGateway {
                 .build()
         }
 
-        var response = client.newCall(buildRequest(accessToken)).await()
-        if (response.code == 401) {
-            response.close()
-            runCatching { auth.refreshCurrentSession() }
-                .onFailure { error ->
-                    if (error is CancellationException) throw error
-                    logWarning("Guide token refresh failed", error)
-                }
-            val refreshedToken = auth.currentAccessTokenOrNull()
-            if (!refreshedToken.isNullOrBlank() && refreshedToken != accessToken) {
-                accessToken = refreshedToken
-                response = client.newCall(buildRequest(accessToken)).await()
-            }
-        }
+        val response = client.awaitWithTokenRefresh(auth, accessToken, buildRequest)
 
         response.use { resp ->
             AiAssistantHttpResponse(
