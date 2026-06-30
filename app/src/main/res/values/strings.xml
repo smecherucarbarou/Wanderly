@@ -134,7 +134,6 @@
     </plurals>
     <string name="streak_crisis_accept_defeat">ACCEPT DEFEAT</string>
     <string name="dev_dashboard_title">Control Room</string>
-    <string name="dev_dashboard_open_failed">Could not open Dev Panel. Please try again.</string>
     <string name="dev_dashboard_subtitle">Release diagnostics and safe debug-only utilities.</string>
     <string name="dev_dashboard_diagnostics_title">Diagnostics</string>
     <string name="dev_dashboard_section_build_app">Build/app info</string>
