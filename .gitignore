@@ -22,6 +22,7 @@ google-services.json
 *.md
 !AUDIT_PROGRESS.md
 !BIG_IMPROVEMENTS_PROGRESS.md
+!B_MIGRATION_PLAN.md
 /logs/
 
 # Local package outputs

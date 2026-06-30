@@ -8,7 +8,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 | Item | Title | Effort | Status |
 |------|-------|--------|--------|
 | A | Split ProfileRepository god class | M | **Largely done** (holder + Shop/Streak/Referral carved; ProfileRepository 950→537 lines) |
-| B | Consolidate dual UI (Fragments→Compose) | L | Not started |
+| B | Consolidate dual UI (Fragments→Compose) | L | **In progress** (inventory done; dead duplicate stack deleted; migration plan written — see [B_MIGRATION_PLAN.md](B_MIGRATION_PLAN.md)) |
 | C | Unify authenticated-proxy HTTP client | S | **Done** (shared awaitWithTokenRefresh; GeminiClient/PlacesProxyClient/Gateway routed) |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
 | E | Realtime/FGS + hive-fetch strategy | S | **Done** (FGS removed H-5/H-6; hive-fetch deduped to 1 read/action + TTL cache) |
@@ -52,6 +52,36 @@ Incremental; each commit is a complete checkpoint.
 - [ ] D hive fire-and-forget test — still needs `ProfileRepository` itself injectable into `WanderlyRepository` (the carved repos are injectable, but mission-completion's hive trigger lives in WanderlyRepository wrapping `profileRepository.logMissionCompletion`). A small follow-up: inject ProfileRepository (constructor param w/ default) to fake it.
 
 **Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
+
+---
+
+## B · Consolidate dual UI (Fragments→Compose) — IN PROGRESS
+
+Full plan + verified inventory: **[B_MIGRATION_PLAN.md](B_MIGRATION_PLAN.md)**.
+
+**Key finding:** the app is *already Compose-first*. Every screen is a composable; each `*Fragment`
+is a thin `ComposeView` shell. So B is NOT a screen rewrite — it is (1) deleting the dead duplicate
+Compose stack, then (2) replacing the Fragment + XML-nav-graph + `BottomNavigationView` + View-based
+Activity **host skeleton** with a single Navigation-Compose `NavHost`.
+
+**Done:**
+- [x] Inventory (read-only fan-out workflow): 10 Fragments mapped to their composables; 2 XML nav
+      graphs; Fragment-first host / Compose-first screens; no Compose `NavHost` anywhere.
+- [x] **Job 1 — deleted dead duplicate Compose stack** (grep-verified zero live refs):
+      `SplashScreen.kt`, `WanderlyBottomBar.kt`, `WanderlyRoutes.kt` + orphaned
+      `R.string.splash_tagline`.
+
+**Remaining (Job 2 — the real migration, multi-PR):**
+- [ ] PR-1 add Navigation-Compose + fresh typed routes (no wiring).
+- [ ] PR-2 auth graph cutover (smallest, isolated `AuthActivity`).
+- [ ] PR-3…7 per-feature glue extraction (Fragment → pure shell): gems → profile/devDashboard →
+      social → missions → map/guide (riskiest last).
+- [ ] PR-8 main graph single cutover: `MainActivity` → Compose `NavHost` + `NavigationBar`; replicate
+      onboarding start-dest gating + deeplink invite routing; delete all Fragments + nav XML + menu.
+- [ ] PR-9 cleanup (collapse Activities? prune fragment/nav deps from version catalog).
+
+**Constraint:** can't mix a Fragment `NavHostFragment` and a Compose `NavHost` on the same back stack
+→ cut each graph over in one PR; de-risk by making Fragments pure shells first.
 
 ---
 

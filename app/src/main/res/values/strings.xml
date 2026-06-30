@@ -318,9 +318,6 @@
     <string name="badge_queen_bee_requirement">Earn 1,000 honey</string>
     <string name="onboarding_skip">Skip</string>
 
-    <!-- Splash -->
-    <string name="splash_tagline">Explore. Discover. Collect.</string>
-
     <!-- Home screen -->
     <string name="home_title">Your hive today</string>
     <string name="home_subtitle">Check your progress and choose the next route.</string>
