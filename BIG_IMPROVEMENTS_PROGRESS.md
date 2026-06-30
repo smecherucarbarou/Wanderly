@@ -7,7 +7,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 
 | Item | Title | Effort | Status |
 |------|-------|--------|--------|
-| A | Split ProfileRepository god class | M | **In progress** (holder + ShopRepository carved; Streak/Referral remain) |
+| A | Split ProfileRepository god class | M | **Largely done** (holder + Shop/Streak/Referral carved; ProfileRepository 950→537 lines) |
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
 | C | Unify authenticated-proxy HTTP client | S | Not started |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
@@ -44,10 +44,12 @@ Incremental; each commit is a complete checkpoint.
 
 **Remaining (heavy carving — own turn each; lean on D's tests as the net):**
 - [x] Step 3d-prep — extracted `applyProgressSnapshot` to `ProfileProgressWriter` (`data/ProfileProgressWriter.kt`), shared via `ProfileRepository.progressWriter` (internal); reused by mission completion + the future StreakRepository.
-- [ ] Step 3d — extract `StreakRepository` (acceptStreakLoss / restoreStreak / useStreakFreeze / getStreakMilestones / claimStreakMilestone) + `ReferralRepository` (claimReferral / hasClaimedReferral). Remaining shared deps to handle: `mapSensitiveProfileMutationFailure` (extract to a shared helper like the retry util) and `getCurrentProfile` (Referral re-fetch — pass a loader / expose it). Move their DTOs (StreakMutationRpcResponse / RestoreStreakParams / StreakFreezeRpcResponse / StreakMilestone* / ClaimMilestoneParams / ReferralRow / ReferralClaimParams / ReferralClaimRpcResponse) + repoint the matching `RpcResponseDecodingTest` refs (StreakFreezeRpcResponse / StreakMilestoneClaimRpcResponse / ReferralClaimRpcResponse / StreakMutationRpcResponse). Pattern established by ShopRepository.
-- [ ] Step 4 — `ProfileRepository` keeps only load / update / username / location / mission-completion / avatar-delegation.
-- [ ] Step 5 — wire through Hilt (`RepositoryModule`); keep the `WanderlyRepository` public surface stable to bound the diff.
-- [ ] Unlocks the deferred D hive fire-and-forget test (ProfileRepository becomes injectable into WanderlyRepository).
+- [x] Step 3d-helper — extracted `mapSensitiveProfileMutationFailure` to `data/SensitiveProfileMutationFailureMapper.kt` (top-level internal).
+- [x] Step 3d — carved `StreakRepository(profileState, progressWriter, getCurrentProfile)` (accept/restore/freeze/milestones/claim) and `ReferralRepository(getCurrentProfile)` (claim/hasClaimed). DTOs moved; `WanderlyRepository` delegates to the new repos; `RpcResponseDecodingTest` refs repointed (Streak*/Referral*). **ProfileRepository: 950 → 537 lines.** Public surface unchanged — wiring stayed in WanderlyRepository (no Hilt change needed, step 5 satisfied for these).
+
+**Remaining (optional):**
+- [ ] Step 4 (optional further slimming) — ProfileRepository (~537 lines) still holds load/update/username/admin-stats/location/mission-completion/avatar-delegation. Under-300 would mean carving admin-stats or mission-completion (core profile concerns) — diminishing returns; the cohesion goal (separate Shop/Streak/Referral repos, single ProfileStateHolder) is met.
+- [ ] D hive fire-and-forget test — still needs `ProfileRepository` itself injectable into `WanderlyRepository` (the carved repos are injectable, but mission-completion's hive trigger lives in WanderlyRepository wrapping `profileRepository.logMissionCompletion`). A small follow-up: inject ProfileRepository (constructor param w/ default) to fake it.
 
 **Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
 

@@ -18,6 +18,9 @@ open class WanderlyRepository(
     private val profileState = ProfileStateHolder()
     private val profileRepository = ProfileRepository(this.context, preferencesStore, profileState)
     private val shopRepository = ShopRepository(profileState)
+    private val streakRepository =
+        StreakRepository(profileState, profileRepository.progressWriter) { profileRepository.getCurrentProfile() }
+    private val referralRepository = ReferralRepository { profileRepository.getCurrentProfile() }
     private val socialRepository = SocialRepository()
     private val missionRepository = MissionRepository()
     private val discoveryRepository = DiscoveryRepository()
@@ -76,22 +79,22 @@ open class WanderlyRepository(
     open suspend fun updateProfileLocation(lat: Double, lng: Double): SensitiveProfileMutationResult =
         profileRepository.updateProfileLocation(lat, lng)
 
-    open suspend fun acceptStreakLoss(): SensitiveProfileMutationResult = profileRepository.acceptStreakLoss()
+    open suspend fun acceptStreakLoss(): SensitiveProfileMutationResult = streakRepository.acceptStreakLoss()
 
     open suspend fun restoreStreak(cost: Int): SensitiveProfileMutationResult =
-        profileRepository.restoreStreak(cost)
+        streakRepository.restoreStreak(cost)
 
-    open suspend fun useStreakFreeze(): SensitiveProfileMutationResult = profileRepository.useStreakFreeze()
+    open suspend fun useStreakFreeze(): SensitiveProfileMutationResult = streakRepository.useStreakFreeze()
 
-    open suspend fun getStreakMilestones(): List<StreakMilestoneStatus> = profileRepository.getStreakMilestones()
+    open suspend fun getStreakMilestones(): List<StreakMilestoneStatus> = streakRepository.getStreakMilestones()
 
     open suspend fun claimStreakMilestone(threshold: Int): SensitiveProfileMutationResult =
-        profileRepository.claimStreakMilestone(threshold)
+        streakRepository.claimStreakMilestone(threshold)
 
-    open suspend fun hasClaimedReferral(): Boolean = profileRepository.hasClaimedReferral()
+    open suspend fun hasClaimedReferral(): Boolean = referralRepository.hasClaimedReferral()
 
     open suspend fun claimReferral(friendCode: String): SensitiveProfileMutationResult =
-        profileRepository.claimReferral(friendCode)
+        referralRepository.claimReferral(friendCode)
 
     open suspend fun getShopItems(): List<ShopItemStatus> = shopRepository.getShopItems()
 

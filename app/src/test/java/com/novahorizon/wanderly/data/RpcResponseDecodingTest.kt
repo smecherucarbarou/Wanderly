@@ -66,7 +66,7 @@ class RpcResponseDecodingTest {
     @Test
     fun `use_streak_freeze success payload decodes`() {
         val payload = """{"success":true,"freezes_left":2}"""
-        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.StreakFreezeRpcResponse>(payload)
+        val response = SupabaseRpcJson.decodeFromString<StreakRepository.StreakFreezeRpcResponse>(payload)
         assertTrue(response.success)
         assertEquals(2, response.freezes_left)
     }
@@ -74,7 +74,7 @@ class RpcResponseDecodingTest {
     @Test
     fun `claim_streak_milestone success payload with badge decodes`() {
         val payload = """{"success":true,"reward_honey":50,"badge":"week_warrior"}"""
-        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.StreakMilestoneClaimRpcResponse>(payload)
+        val response = SupabaseRpcJson.decodeFromString<StreakRepository.StreakMilestoneClaimRpcResponse>(payload)
         assertTrue(response.success)
         assertEquals(50, response.reward_honey)
         assertEquals("week_warrior", response.badge)
@@ -83,7 +83,7 @@ class RpcResponseDecodingTest {
     @Test
     fun `claim_referral success payload decodes`() {
         val payload = """{"success":true,"reward_honey":100}"""
-        val response = SupabaseRpcJson.decodeFromString<ProfileRepository.ReferralClaimRpcResponse>(payload)
+        val response = SupabaseRpcJson.decodeFromString<ReferralRepository.ReferralClaimRpcResponse>(payload)
         assertTrue(response.success)
         assertEquals(100, response.reward_honey)
     }
@@ -192,7 +192,7 @@ class RpcResponseDecodingTest {
         val arrayPayload =
             """[{"updated":true,"honey":120,"streak_count":5,"last_mission_date":"2026-06-29"}]"""
         try {
-            SupabaseRpcJson.decodeFromString<ProfileRepository.StreakMutationRpcResponse>(arrayPayload)
+            SupabaseRpcJson.decodeFromString<StreakRepository.StreakMutationRpcResponse>(arrayPayload)
             fail("Expected an object decode of a JSON array to throw SerializationException")
         } catch (_: SerializationException) {
             // expected — decodeRpc must not be used on TABLE-returning RPCs
@@ -204,7 +204,7 @@ class RpcResponseDecodingTest {
         val arrayPayload =
             """[{"updated":true,"honey":120,"streak_count":5,"last_mission_date":"2026-06-29"}]"""
         val row = SupabaseRpcJson
-            .decodeFromString<List<ProfileRepository.StreakMutationRpcResponse>>(arrayPayload)
+            .decodeFromString<List<StreakRepository.StreakMutationRpcResponse>>(arrayPayload)
             .firstOrNull()
         assertNotNull(row)
         assertEquals(true, row!!.updated)
