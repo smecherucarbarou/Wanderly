@@ -2,20 +2,29 @@ package com.novahorizon.wanderly
 
 import com.novahorizon.wanderly.observability.AppLogger
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.widget.FrameLayout
-import android.widget.ProgressBar
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
-import androidx.fragment.app.FragmentContainerView
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.novahorizon.wanderly.api.SupabaseClient
 import com.novahorizon.wanderly.auth.AuthCallbackMatcher
 import com.novahorizon.wanderly.auth.AuthRouting
@@ -26,71 +35,52 @@ import com.novahorizon.wanderly.observability.CrashEvent
 import com.novahorizon.wanderly.observability.CrashKey
 import com.novahorizon.wanderly.observability.CrashReporter
 import com.novahorizon.wanderly.observability.LogRedactor
+import com.novahorizon.wanderly.ui.auth.AuthViewModel
+import com.novahorizon.wanderly.ui.auth.LoginRoute
+import com.novahorizon.wanderly.ui.auth.SignupRoute
+import com.novahorizon.wanderly.ui.compose.screens.auth.LoginScreen
+import com.novahorizon.wanderly.ui.compose.screens.auth.SignupScreen
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
+import io.github.jan.supabase.auth.providers.Google
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class AuthActivity : AppCompatActivity() {
 
-    private lateinit var authNavHost: FragmentContainerView
-    private lateinit var authLoading: ProgressBar
-
     @Inject
     lateinit var repository: WanderlyRepository
+
+    /** Activity-scoped so the Google-OAuth lifecycle (browser hop + [onResume] poll) shares it with the Login screen. */
+    private val loginViewModel: AuthViewModel by viewModels()
+
+    private var googleSignInInFlight = false
+
+    private val authCallbackUrl by lazy(LazyThreadSafetyMode.NONE) {
+        Constants.authCallbackUrl()
+    }
+
+    private val uiPhase = mutableStateOf(AuthUiPhase.Loading)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val root = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        authNavHost = FragmentContainerView(this).apply {
-            id = R.id.auth_nav_host
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            visibility = View.GONE
-        }
-        root.addView(authNavHost)
-
-        authLoading = ProgressBar(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = android.view.Gravity.CENTER
+        setContent {
+            WanderlyTheme {
+                when (uiPhase.value) {
+                    AuthUiPhase.Loading -> AuthLoading()
+                    AuthUiPhase.AuthUi -> AuthNavHost(
+                        loginViewModel = loginViewModel,
+                        onGoogleSignIn = { initiateGoogleSignIn() },
+                        onLoginSuccess = { rememberMe -> handleLoginSuccess(rememberMe) }
+                    )
+                }
             }
-            isIndeterminate = true
-        }
-        root.addView(authLoading)
-
-        setContentView(root)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.updatePadding(
-                left = systemBars.left,
-                top = systemBars.top,
-                right = systemBars.right,
-                bottom = systemBars.bottom
-            )
-            insets
-        }
-
-        if (savedInstanceState == null) {
-            val navHostFragment = NavHostFragment.create(R.navigation.auth_nav_graph)
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.auth_nav_host, navHostFragment)
-                .setPrimaryNavigationFragment(navHostFragment)
-                .commit()
         }
 
         lifecycleScope.launch {
@@ -122,13 +112,71 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!googleSignInInFlight) return
+
+        lifecycleScope.launch {
+            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull(timeoutMs = 750L)
+            if (!googleSignInInFlight) return@launch
+            googleSignInInFlight = false
+            if (session == null) {
+                loginViewModel.resetExternalSignIn()
+            } else {
+                handleLoginSuccess(rememberMe = true)
+            }
+        }
+    }
+
+    private fun initiateGoogleSignIn() {
+        if (googleSignInInFlight) return
+
+        googleSignInInFlight = true
+        loginViewModel.beginExternalSignIn()
+        lifecycleScope.launch {
+            try {
+                repository.setRememberMeEnabled(true)
+                val authUrl = SupabaseClient.client.auth.getOAuthUrl(
+                    provider = Google,
+                    redirectUrl = authCallbackUrl
+                )
+                launchOAuthUrl(authUrl)
+                logDebug("Google OAuth browser launch requested")
+            } catch (e: CancellationException) {
+                googleSignInInFlight = false
+                throw e
+            } catch (e: ActivityNotFoundException) {
+                googleSignInInFlight = false
+                logDebug("No browser available for Google OAuth")
+                loginViewModel.externalSignInFailed(e)
+            } catch (e: Exception) {
+                googleSignInInFlight = false
+                logDebug("Google OAuth launch failed: ${e.javaClass.simpleName}")
+                loginViewModel.externalSignInFailed(e)
+            }
+        }
+    }
+
+    private fun launchOAuthUrl(authUrl: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        startActivity(intent)
+    }
+
+    private fun handleLoginSuccess(rememberMe: Boolean) {
+        lifecycleScope.launch {
+            repository.setRememberMeEnabled(rememberMe)
+            SessionNavigator.openMain(this@AuthActivity)
+        }
+    }
+
     private fun navigateToMain() {
         SessionNavigator.openMain(this)
     }
 
     private fun showAuthUi() {
-        authLoading.visibility = View.GONE
-        authNavHost.visibility = View.VISIBLE
+        uiPhase.value = AuthUiPhase.AuthUi
     }
 
     private suspend fun resumeStandardAuthFlow() {
@@ -161,5 +209,63 @@ class AuthActivity : AppCompatActivity() {
 
     private fun isAuthCallback(uri: Uri?): Boolean {
         return AuthCallbackMatcher.matchesCallbackUri(uri)
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            AppLogger.d("AuthActivity", message)
+        }
+    }
+}
+
+private enum class AuthUiPhase { Loading, AuthUi }
+
+@Composable
+private fun AuthLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun AuthNavHost(
+    loginViewModel: AuthViewModel,
+    onGoogleSignIn: () -> Unit,
+    onLoginSuccess: (rememberMe: Boolean) -> Unit
+) {
+    val navController = rememberNavController()
+    NavHost(
+        navController = navController,
+        startDestination = LoginRoute,
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+    ) {
+        composable<LoginRoute> {
+            LoginScreen(
+                viewModel = loginViewModel,
+                onNavigateToSignup = { navController.navigate(SignupRoute) },
+                onGoogleSignIn = onGoogleSignIn,
+                onLoginSuccess = onLoginSuccess
+            )
+        }
+        composable<SignupRoute>(
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right) }
+        ) {
+            val signupViewModel: AuthViewModel = hiltViewModel()
+            SignupScreen(
+                viewModel = signupViewModel,
+                onNavigateToLogin = { navController.navigateUp() },
+                onSignupSuccess = { navController.navigateUp() }
+            )
+        }
     }
 }

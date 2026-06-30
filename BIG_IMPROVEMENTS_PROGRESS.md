@@ -72,8 +72,18 @@ Activity **host skeleton** with a single Navigation-Compose `NavHost`.
       `R.string.splash_tagline`.
 
 **Remaining (Job 2 — the real migration, multi-PR):**
-- [ ] PR-1 add Navigation-Compose + fresh typed routes (no wiring).
-- [ ] PR-2 auth graph cutover (smallest, isolated `AuthActivity`).
+- [x] PR-1 — no-op: Navigation-Compose, hilt-navigation-compose, activity-compose were *already*
+      dependencies (`app/build.gradle.kts:422-424`); the deleted `WanderlyRoute` was their would-be
+      consumer. Nothing to add; typed routes are introduced per-graph as each cutover lands.
+- [x] **PR-2 — auth graph cutover (DONE).** `AuthActivity` now `setContent { Compose NavHost }` over
+      type-safe `LoginRoute`/`SignupRoute` (`ui/auth/AuthRoutes.kt`), calling the existing
+      `LoginScreen`/`SignupScreen`. Google-OAuth orchestration (browser hop + `onResume` session poll
+      + remember-me) kept in the Activity verbatim, sharing an activity-scoped `loginViewModel`;
+      Signup uses its own `hiltViewModel()` (matches prior per-fragment VMs). Deeplink callback +
+      `resumeStandardAuthFlow` gating unchanged. Deleted `LoginFragment`, `SignupFragment`,
+      `auth_nav_graph.xml`, `auth_nav_host` id. **Coverage:** `SupabaseAuthOfflineTest`
+      (instrumentation) launches `AuthActivity`, drives the login form, asserts the friendly error —
+      validates the migrated UI on CI. **Manual smoke (not test-covered):** Google OAuth browser hop.
 - [ ] PR-3…7 per-feature glue extraction (Fragment → pure shell): gems → profile/devDashboard →
       social → missions → map/guide (riskiest last).
 - [ ] PR-8 main graph single cutover: `MainActivity` → Compose `NavHost` + `NavigationBar`; replicate
