@@ -11,10 +11,12 @@ import androidx.appcompat.app.AlertDialog
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import com.novahorizon.wanderly.data.WanderlyRepository
 import com.novahorizon.wanderly.invites.InviteShareFormatter
 import com.novahorizon.wanderly.ui.common.showSnackbar
@@ -28,6 +30,7 @@ import javax.inject.Inject
 class SocialFragment : Fragment() {
 
     private val viewModel: SocialViewModel by viewModels()
+    private val mainNav: MainNavViewModel by activityViewModels()
     @Inject
     lateinit var repository: WanderlyRepository
 
@@ -44,7 +47,7 @@ class SocialFragment : Fragment() {
                         onAddFriend = { code -> viewModel.addFriend(code) },
                         onAcceptFriendRequest = { requesterId -> viewModel.acceptFriendRequest(requesterId) },
                         onRejectFriendRequest = { requesterId -> viewModel.rejectFriendRequest(requesterId) },
-                        onBrowseMissions = { findNavController().navigate(R.id.missionsFragment) },
+                        onBrowseMissions = { mainNav.send(MainNavCommand.ToMissions) },
                         onCopyCode = { code -> copyFriendCode(code) },
                         onShareCode = { code -> shareFriendCode(code) }
                     )

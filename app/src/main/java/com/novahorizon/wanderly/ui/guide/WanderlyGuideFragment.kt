@@ -8,9 +8,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.auth.SessionNavigator
@@ -19,12 +19,15 @@ import com.novahorizon.wanderly.ui.common.LocationPermissionGate
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.compose.screens.guide.WanderlyGuideScreen
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class WanderlyGuideFragment : Fragment() {
 
     private val viewModel: WanderlyGuideViewModel by viewModels()
+    private val mainNav: MainNavViewModel by activityViewModels()
     private val locationPermissionController = LocationPermissionController(this)
 
     override fun onCreateView(
@@ -39,7 +42,7 @@ class WanderlyGuideFragment : Fragment() {
                     val state by viewModel.uiState.collectAsStateWithLifecycle()
                     WanderlyGuideScreen(
                         state = state,
-                        onBack = { findNavController().popBackStack() },
+                        onBack = { mainNav.send(MainNavCommand.Back) },
                         onLogin = { SessionNavigator.openAuth(requireActivity()) },
                         onSendMessage = ::sendMessageWithLocationIfNeeded,
                         onRetry = viewModel::refreshEntitlement,

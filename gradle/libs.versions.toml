@@ -39,6 +39,7 @@ composeBom = "2026.06.00"
 activityCompose = "1.10.1"
 navigationCompose = "2.9.8"
 hiltNavigationCompose = "1.2.0"
+fragmentCompose = "1.8.8"
 lifecycleRuntimeCompose = "2.10.0"
 
 [libraries]
@@ -98,6 +99,7 @@ compose-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime
 compose-activity = { group = "androidx.activity", name = "activity-compose" }
 compose-navigation = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 compose-hilt-navigation = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+androidx-fragment-compose = { group = "androidx.fragment", name = "fragment-compose", version.ref = "fragmentCompose" }
 compose-lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose" }
 
 [plugins]

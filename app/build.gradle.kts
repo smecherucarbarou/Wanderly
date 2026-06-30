@@ -422,6 +422,7 @@ dependencies {
     implementation(libs.compose.activity)
     implementation(libs.compose.navigation)
     implementation(libs.compose.hilt.navigation)
+    implementation(libs.androidx.fragment.compose)
     implementation(libs.compose.lifecycle.runtime)
     debugImplementation(libs.compose.ui.tooling)
     

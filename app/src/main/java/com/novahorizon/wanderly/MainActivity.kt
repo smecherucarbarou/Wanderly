@@ -4,25 +4,49 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.widget.LinearLayout
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
-import androidx.fragment.app.FragmentContainerView
+import androidx.fragment.compose.AndroidFragment
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.ui.setupWithNavController
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.navigation.NavigationBarView
-import com.google.android.material.snackbar.Snackbar
+import androidx.navigation.NavController
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.novahorizon.wanderly.auth.AuthRouting
 import com.novahorizon.wanderly.auth.AuthSessionCoordinator
 import com.novahorizon.wanderly.data.WanderlyRepository
@@ -30,10 +54,30 @@ import com.novahorizon.wanderly.notifications.NotificationPermissionManager
 import com.novahorizon.wanderly.notifications.WanderlyNotificationManager
 import com.novahorizon.wanderly.observability.AppLogger
 import com.novahorizon.wanderly.services.HiveRealtimeService
-import com.novahorizon.wanderly.ui.main.MainViewModel
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
+import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.guide.WanderlyGuideFragment
+import com.novahorizon.wanderly.ui.gems.GemsFragment
+import com.novahorizon.wanderly.ui.main.DevDashboardRoute
+import com.novahorizon.wanderly.ui.main.GemsRoute
+import com.novahorizon.wanderly.ui.main.GuideRoute
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
+import com.novahorizon.wanderly.ui.main.MainViewModel
+import com.novahorizon.wanderly.ui.main.MapRoute
+import com.novahorizon.wanderly.ui.main.MissionsRoute
+import com.novahorizon.wanderly.ui.main.OnboardingRoute
+import com.novahorizon.wanderly.ui.main.ProfileRoute
+import com.novahorizon.wanderly.ui.main.SocialRoute
+import com.novahorizon.wanderly.ui.map.MapFragment
+import com.novahorizon.wanderly.ui.missions.MissionsFragment
+import com.novahorizon.wanderly.ui.onboarding.OnboardingFragment
+import com.novahorizon.wanderly.ui.profile.DevDashboardFragment
+import com.novahorizon.wanderly.ui.profile.ProfileFragment
+import com.novahorizon.wanderly.ui.social.SocialFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -41,67 +85,40 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var navHostFragment: FragmentContainerView
-    private lateinit var bottomNavigation: BottomNavigationView
-    private lateinit var rootView: LinearLayout
-
     @Inject
     lateinit var repository: WanderlyRepository
-    private var shouldRoutePendingInvite = false
-    private var bottomNavigationReady = false
+
     private val viewModel: MainViewModel by viewModels()
+
+    /** Activity-scoped bridge: hosted Fragments emit nav commands the Compose NavHost executes. */
+    private val mainNavViewModel: MainNavViewModel by viewModels()
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    /** null until onboarding/pending-invite state is resolved, then drives the NavHost start destination. */
+    private val startState = mutableStateOf<MainStartState?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        rootView = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        navHostFragment = FragmentContainerView(this).apply {
-            id = R.id.nav_host_fragment
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        }
-        rootView.addView(navHostFragment)
-
-        bottomNavigation = BottomNavigationView(this).apply {
-            id = R.id.bottom_navigation
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            inflateMenu(R.menu.bottom_nav_menu)
-            labelVisibilityMode = NavigationBarView.LABEL_VISIBILITY_LABELED
-            isItemHorizontalTranslationEnabled = false
-            itemIconTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.nav_item_colors)
-            itemTextColor = ContextCompat.getColorStateList(this@MainActivity, R.color.nav_item_colors)
-            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.card_background))
-        }
-        rootView.addView(bottomNavigation)
-
-        setContentView(rootView)
-        applyWindowInsets()
-
         WanderlyNotificationManager.createNotificationChannel(this)
 
-        if (savedInstanceState == null) {
-            val navHost = NavHostFragment()
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.nav_host_fragment, navHost)
-                .setPrimaryNavigationFragment(navHost)
-                .commit()
+        setContent {
+            WanderlyTheme {
+                when (val start = startState.value) {
+                    null -> MainLoading()
+                    else -> MainHost(
+                        startState = start,
+                        mainViewModel = viewModel,
+                        navCommands = mainNavViewModel.commands,
+                        onStreakCrisis = ::showStreakCrisisDialog,
+                        onSessionResolved = ::startHiveService
+                    )
+                }
+            }
         }
 
         lifecycleScope.launch {
@@ -111,49 +128,10 @@ class MainActivity : AppCompatActivity() {
             val hasPendingInvite = withContext(Dispatchers.IO) {
                 !repository.peekPendingInviteCode().isNullOrBlank()
             }
-            setupNavGraph(onboardingSeen, hasPendingInvite)
+            startState.value = MainStartState(onboardingSeen, hasPendingInvite)
         }
 
-        setupObservers()
         viewModel.checkDailyStreak()
-    }
-
-    private fun setupNavGraph(onboardingSeen: Boolean, hasPendingInvite: Boolean) {
-        val navHostFrag = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
-        val navController = navHostFrag.navController
-        val navGraph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
-            setStartDestination(
-                MainNavigationDestinations.initialStartDestination(
-                    onboardingSeen = onboardingSeen,
-                    mapDestinationId = R.id.mapFragment,
-                    onboardingDestinationId = R.id.onboardingFragment
-                )
-            )
-        }
-        shouldRoutePendingInvite = hasPendingInvite
-        navController.setGraph(navGraph, null)
-        navController.addOnDestinationChangedListener { _, destination, _ ->
-            bottomNavigation.visibility =
-                if (
-                    MainNavigationDestinations.shouldShowBottomNavigation(
-                        currentDestinationId = destination.id,
-                        onboardingDestinationId = R.id.onboardingFragment
-                    )
-                ) {
-                    View.VISIBLE
-                } else {
-                    View.GONE
-                }
-            routePendingInviteIfNeeded(destination.id)
-        }
-
-        lifecycleScope.launch {
-            val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
-            bottomNavigation.setupWithNavController(navController)
-            bottomNavigationReady = true
-            routePendingInviteIfNeeded(navController.currentDestination?.id)
-            startHiveService(session != null)
-        }
     }
 
     private fun startHiveService(hasSession: Boolean) {
@@ -176,39 +154,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopHiveService() {
         stopService(Intent(this, HiveRealtimeService::class.java))
-    }
-
-    private fun applyWindowInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            navHostFragment.updatePadding(
-                left = systemBars.left,
-                top = systemBars.top,
-                right = systemBars.right,
-                bottom = 0
-            )
-            bottomNavigation.updatePadding(
-                left = systemBars.left,
-                right = systemBars.right,
-                bottom = systemBars.bottom
-            )
-            insets
-        }
-    }
-
-    private fun setupObservers() {
-        viewModel.streakMessage.observe(this) { message ->
-            message?.let {
-                Snackbar.make(rootView, it, Snackbar.LENGTH_LONG).show()
-                viewModel.clearStreakMessage()
-            }
-        }
-
-        viewModel.streakStatus.observe(this) { status ->
-            if (status is MainViewModel.StreakStatus.Crisis) {
-                showStreakCrisisDialog(status.lostStreak, status.cost)
-            }
-        }
     }
 
     private fun showStreakCrisisDialog(days: Int, cost: Int) {
@@ -284,22 +229,175 @@ class MainActivity : AppCompatActivity() {
         startActivity(NotificationPermissionManager.notificationSettingsIntent(this))
     }
 
-    private fun routePendingInviteIfNeeded(destinationId: Int?) {
-        if (!shouldRoutePendingInvite || !bottomNavigationReady) return
-        if (destinationId == null || destinationId == R.id.onboardingFragment) return
-
-        shouldRoutePendingInvite = false
-        if (destinationId == R.id.socialFragment) return
-
-        bottomNavigation.post {
-            bottomNavigation.selectedItemId = R.id.socialFragment
-        }
-    }
-
     override fun onDestroy() {
         if (isFinishing) {
             stopHiveService()
         }
         super.onDestroy()
+    }
+}
+
+private data class MainStartState(
+    val onboardingSeen: Boolean,
+    val hasPendingInvite: Boolean
+)
+
+private data class MainTab(
+    val route: Any,
+    val titleRes: Int,
+    val iconRes: Int
+)
+
+private val MAIN_TABS = listOf(
+    MainTab(MapRoute, R.string.title_map, android.R.drawable.ic_dialog_map),
+    MainTab(GemsRoute, R.string.title_gems, android.R.drawable.ic_menu_search),
+    MainTab(MissionsRoute, R.string.title_missions, android.R.drawable.ic_menu_agenda),
+    MainTab(SocialRoute, R.string.title_social, android.R.drawable.ic_menu_share),
+    MainTab(ProfileRoute, R.string.title_profile, android.R.drawable.ic_menu_myplaces)
+)
+
+@Composable
+private fun MainLoading() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun MainHost(
+    startState: MainStartState,
+    mainViewModel: MainViewModel,
+    navCommands: Flow<MainNavCommand>,
+    onStreakCrisis: (Int, Int) -> Unit,
+    onSessionResolved: (Boolean) -> Unit
+) {
+    val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    val isOnboardingRoute = currentDestination?.hasRoute(OnboardingRoute::class)
+        ?: MainNavigationDestinations.startsOnOnboarding(startState.onboardingSeen)
+    val showBottomBar = MainNavigationDestinations.shouldShowBottomNavigation(isOnboardingRoute)
+
+    // Resolve the auth session once, then start session-scoped services (hive realtime is gated/disabled).
+    LaunchedEffect(Unit) {
+        val session = AuthSessionCoordinator.awaitResolvedSessionOrNull()
+        onSessionResolved(session != null)
+    }
+
+    // Bridge: hosted Fragments emit nav commands because the Compose NavController now owns the back stack.
+    LaunchedEffect(navController) {
+        navCommands.collect { command ->
+            when (command) {
+                MainNavCommand.ToMissions -> navController.navigateToTab(MissionsRoute)
+                MainNavCommand.ToGuide -> navController.navigate(GuideRoute)
+                MainNavCommand.ToDevDashboard -> navController.navigate(DevDashboardRoute) {
+                    launchSingleTop = true
+                }
+                MainNavCommand.AfterOnboarding -> navController.navigate(MapRoute) {
+                    popUpTo(OnboardingRoute) { inclusive = true }
+                    launchSingleTop = true
+                }
+                MainNavCommand.Back -> navController.popBackStack()
+            }
+        }
+    }
+
+    // Pending deeplink invite: once off onboarding, jump to the Social tab exactly once.
+    var inviteRouted by rememberSaveable { mutableStateOf(!startState.hasPendingInvite) }
+    LaunchedEffect(currentDestination) {
+        if (inviteRouted) return@LaunchedEffect
+        val destination = currentDestination ?: return@LaunchedEffect
+        if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
+        inviteRouted = true
+        if (!destination.hasRoute(SocialRoute::class)) {
+            navController.navigateToTab(SocialRoute)
+        }
+    }
+
+    // Streak crisis dialog + streak snackbar (formerly MainViewModel observers on the Activity).
+    val streakStatus by mainViewModel.streakStatus.observeAsState()
+    LaunchedEffect(streakStatus) {
+        (streakStatus as? MainViewModel.StreakStatus.Crisis)?.let { onStreakCrisis(it.lostStreak, it.cost) }
+    }
+    val streakMessage by mainViewModel.streakMessage.observeAsState()
+    LaunchedEffect(streakMessage) {
+        val message = streakMessage
+        if (!message.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(message)
+            mainViewModel.clearStreakMessage()
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (showBottomBar) {
+                MainBottomBar(navController = navController, currentDestination = currentDestination)
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = if (startState.onboardingSeen) MapRoute else OnboardingRoute,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            composable<OnboardingRoute> { AndroidFragment<OnboardingFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<MapRoute> { AndroidFragment<MapFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<GemsRoute> { AndroidFragment<GemsFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<MissionsRoute> { AndroidFragment<MissionsFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<SocialRoute> { AndroidFragment<SocialFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<ProfileRoute> { AndroidFragment<ProfileFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<GuideRoute> { AndroidFragment<WanderlyGuideFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<DevDashboardRoute> { AndroidFragment<DevDashboardFragment>(modifier = Modifier.fillMaxSize()) }
+        }
+    }
+}
+
+@Composable
+private fun MainBottomBar(
+    navController: NavController,
+    currentDestination: NavDestination?
+) {
+    NavigationBar(
+        containerColor = colorResource(R.color.card_background)
+    ) {
+        MAIN_TABS.forEach { tab ->
+            val selected = currentDestination?.hierarchy?.any { it.hasRoute(tab.route::class) } == true
+            NavigationBarItem(
+                selected = selected,
+                onClick = { if (!selected) navController.navigateToTab(tab.route) },
+                icon = {
+                    Icon(
+                        painter = painterResource(tab.iconRes),
+                        contentDescription = stringResource(tab.titleRes)
+                    )
+                },
+                label = { Text(stringResource(tab.titleRes)) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = colorResource(R.color.primary),
+                    selectedTextColor = colorResource(R.color.primary),
+                    unselectedIconColor = colorResource(R.color.text_secondary),
+                    unselectedTextColor = colorResource(R.color.text_secondary),
+                    indicatorColor = colorResource(R.color.primary).copy(alpha = 0.1f)
+                )
+            )
+        }
+    }
+}
+
+/** Bottom-nav semantics: pop to the Map (home) root saving state, single-top, restore the tab's saved state. */
+private fun NavController.navigateToTab(route: Any) {
+    navigate(route) {
+        popUpTo(MapRoute) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }

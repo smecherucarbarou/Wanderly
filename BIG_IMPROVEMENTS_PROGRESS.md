@@ -84,14 +84,31 @@ Activity **host skeleton** with a single Navigation-Compose `NavHost`.
       `auth_nav_graph.xml`, `auth_nav_host` id. **Coverage:** `SupabaseAuthOfflineTest`
       (instrumentation) launches `AuthActivity`, drives the login form, asserts the friendly error —
       validates the migrated UI on CI. **Manual smoke (not test-covered):** Google OAuth browser hop.
-- [ ] PR-3…7 per-feature glue extraction (Fragment → pure shell): gems → profile/devDashboard →
-      social → missions → map/guide (riskiest last).
-- [ ] PR-8 main graph single cutover: `MainActivity` → Compose `NavHost` + `NavigationBar`; replicate
-      onboarding start-dest gating + deeplink invite routing; delete all Fragments + nav XML + menu.
-- [ ] PR-9 cleanup (collapse Activities? prune fragment/nav deps from version catalog).
+- [x] **PR-3 — main-graph structural cutover via interop (DONE).** Strategy switched (user choice) to
+      *interop-first* to avoid rewriting heavy fragment glue (location/camera/osmdroid) blind: added
+      `androidx.fragment:fragment-compose`; `MainActivity` is now `setContent { Scaffold(Compose NavHost
+      + Material3 NavigationBar) }`, each destination rendering its **existing Fragment** via
+      `AndroidFragment<T>()`. Fragments can't call `findNavController()` anymore (Compose owns the back
+      stack) so the 6 nav call-sites route through a new activity-scoped `MainNavViewModel` bridge
+      (`ToMissions`/`ToGuide`/`ToDevDashboard`/`AfterOnboarding`/`Back`). Type-safe routes in
+      `ui/main/MainRoutes.kt`. Preserved: onboarding conditional start + bottom-nav visibility (via
+      refactored `MainNavigationDestinations`, test updated), pending-invite→Social routing, notification
+      permission flow, streak-crisis dialog, streak snackbar (→ Compose `SnackbarHost`), hive service,
+      bottom-bar icons/colors (`nav_item_colors`, system drawables). Deleted `nav_graph.xml`,
+      `bottom_nav_menu.xml`, `ids.xml`. **Compile + unit + androidTest green; main-nav behavior is NOT
+      CI-covered → device smoke needed.** Known minor diff: child screens (guide/devDashboard) show no
+      bottom-tab highlighted (parent tab no longer stays selected).
+- [ ] PR-4…N — per-screen real migration: replace each `AndroidFragment<X>()` with the existing
+      `XScreen(...)` composable + lift that fragment's glue into Compose (permissions/ActivityResult/
+      effects), then delete the fragment. Now incremental & isolated *under* the Compose NavHost. Order:
+      gems → profile/devDashboard → social → missions → map/guide (osmdroid, riskiest last).
+- [ ] PR-final cleanup — once no fragments remain: drop `navigation-fragment-ktx`/`navigation-ui-ktx`
+      (+ `fragment-compose`), prune now-unused `anim/`, `nav_item_colors`; consider collapsing
+      `AuthActivity`/`MainActivity`.
 
-**Constraint:** can't mix a Fragment `NavHostFragment` and a Compose `NavHost` on the same back stack
-→ cut each graph over in one PR; de-risk by making Fragments pure shells first.
+**Note:** the AndroidFragment interop sidesteps the "can't mix Fragment NavHostFragment + Compose
+NavHost on one back stack" constraint — the Compose NavHost owns the back stack and each destination
+just *renders* a Fragment, so the structural cutover landed without rewriting any screen glue.
 
 ---
 

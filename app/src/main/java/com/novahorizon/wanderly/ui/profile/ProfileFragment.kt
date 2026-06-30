@@ -23,9 +23,9 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.MainActivity
@@ -42,6 +42,8 @@ import com.novahorizon.wanderly.ui.common.AvatarLoader
 import com.novahorizon.wanderly.ui.common.showSnackbar
 import com.novahorizon.wanderly.ui.compose.screens.profile.ProfileScreen
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import com.novahorizon.wanderly.widgets.StreakTierHelper
 import com.yalantis.ucrop.UCrop
 import dagger.hilt.android.AndroidEntryPoint
@@ -64,6 +66,7 @@ class ProfileFragment : Fragment() {
     private var notificationStatusText by mutableStateOf<String?>(null)
     private var notificationActionLabel by mutableStateOf<String?>(null)
     private val viewModel: ProfileViewModel by viewModels()
+    private val mainNav: MainNavViewModel by activityViewModels()
 
     private val cropImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
@@ -318,34 +321,7 @@ class ProfileFragment : Fragment() {
 
     private fun openDevDashboard() {
         if (!BuildConfig.DEBUG) return
-
-        val navController = runCatching { findNavController() }
-            .getOrElse { error ->
-                logDevPanelNavigationFailure(error)
-                showSnackbar(getString(R.string.dev_dashboard_open_failed), isError = true)
-                return
-            }
-
-        if (navController.currentDestination?.id == R.id.devDashboardFragment) return
-
-        runCatching {
-            if (navController.currentDestination?.id == R.id.profileFragment) {
-                navController.navigate(R.id.action_profile_to_devDashboard)
-            } else {
-                navController.navigate(R.id.devDashboardFragment)
-            }
-        }.recoverCatching {
-            navController.navigate(R.id.devDashboardFragment)
-        }.onFailure { error ->
-            logDevPanelNavigationFailure(error)
-            showSnackbar(getString(R.string.dev_dashboard_open_failed), isError = true)
-        }
-    }
-
-    private fun logDevPanelNavigationFailure(error: Throwable) {
-        if (BuildConfig.DEBUG) {
-            AppLogger.e("ProfileFragment", "Dev Panel navigation failed: ${LogRedactor.redact(error.message)}")
-        }
+        mainNav.send(MainNavCommand.ToDevDashboard)
     }
 
     private fun copyFriendCode(friendCode: String) {

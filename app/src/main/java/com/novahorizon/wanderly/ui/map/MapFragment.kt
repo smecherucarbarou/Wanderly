@@ -21,7 +21,9 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
+import androidx.fragment.app.activityViewModels
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.novahorizon.wanderly.R
@@ -42,6 +44,7 @@ import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 class MapFragment : Fragment() {
 
     private val mapViewModel: MapViewModel by viewModels()
+    private val mainNav: MainNavViewModel by activityViewModels()
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var mapView: MapView? = null
@@ -65,12 +68,8 @@ class MapFragment : Fragment() {
                         activeMission = activeMission,
                         isMapReady = isMapReady,
                         onMyLocation = { handleMyLocationAction() },
-                        onNavigateToMissions = {
-                            findNavController().navigate(R.id.action_map_to_missions)
-                        },
-                        onOpenGuide = {
-                            findNavController().navigate(R.id.action_map_to_wanderlyGuide)
-                        },
+                        onNavigateToMissions = { mainNav.send(MainNavCommand.ToMissions) },
+                        onOpenGuide = { mainNav.send(MainNavCommand.ToGuide) },
                         onMapViewCreated = { map -> onMapReady(map) },
                         onMapViewDisposed = { cleanupMap() }
                     )

@@ -1,21 +1,14 @@
 package com.novahorizon.wanderly.ui
 
+/**
+ * Pure navigation rules for the main graph, kept framework-free for unit testing.
+ * Consumed by the Compose NavHost in [com.novahorizon.wanderly.MainActivity].
+ */
 internal object MainNavigationDestinations {
 
-    fun initialStartDestination(
-        onboardingSeen: Boolean,
-        mapDestinationId: Int,
-        onboardingDestinationId: Int
-    ): Int {
-        return if (onboardingSeen) mapDestinationId else onboardingDestinationId
-    }
+    /** First destination depends on whether the user has completed onboarding. */
+    fun startsOnOnboarding(onboardingSeen: Boolean): Boolean = !onboardingSeen
 
-    fun destinationAfterOnboarding(mapDestinationId: Int): Int = mapDestinationId
-
-    fun shouldShowBottomNavigation(
-        currentDestinationId: Int,
-        onboardingDestinationId: Int
-    ): Boolean {
-        return currentDestinationId != onboardingDestinationId
-    }
+    /** Bottom navigation is hidden only while onboarding is on screen. */
+    fun shouldShowBottomNavigation(isOnboardingDestination: Boolean): Boolean = !isOnboardingDestination
 }

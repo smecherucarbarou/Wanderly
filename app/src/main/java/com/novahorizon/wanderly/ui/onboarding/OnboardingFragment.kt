@@ -7,13 +7,13 @@ import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
-import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.WanderlyRepository
-import com.novahorizon.wanderly.ui.MainNavigationDestinations
 import com.novahorizon.wanderly.ui.compose.screens.onboarding.OnboardingScreen
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -23,6 +23,8 @@ class OnboardingFragment : Fragment() {
 
     @Inject
     lateinit var repository: WanderlyRepository
+
+    private val mainNav: MainNavViewModel by activityViewModels()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -44,11 +46,7 @@ class OnboardingFragment : Fragment() {
     private fun completeOnboarding() {
         viewLifecycleOwner.lifecycleScope.launch {
             repository.setOnboardingSeen(true)
-            val navController = findNavController()
-            navController.graph.setStartDestination(
-                MainNavigationDestinations.destinationAfterOnboarding(R.id.mapFragment)
-            )
-            navController.navigate(R.id.action_onboarding_to_map)
+            mainNav.send(MainNavCommand.AfterOnboarding)
         }
     }
 }

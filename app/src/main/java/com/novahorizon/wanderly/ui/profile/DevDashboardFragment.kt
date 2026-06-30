@@ -12,8 +12,8 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.fragment.findNavController
 import com.novahorizon.wanderly.BuildConfig
 import com.novahorizon.wanderly.R
 import com.novahorizon.wanderly.data.Profile
@@ -29,6 +29,8 @@ import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardRow
 import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardSection
 import com.novahorizon.wanderly.ui.compose.screens.devdashboard.DevDashboardScreen
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
+import com.novahorizon.wanderly.ui.main.MainNavCommand
+import com.novahorizon.wanderly.ui.main.MainNavViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -38,6 +40,8 @@ class DevDashboardFragment : Fragment() {
 
     @Inject
     lateinit var repository: WanderlyRepository
+
+    private val mainNav: MainNavViewModel by activityViewModels()
 
     private var accessVerified by mutableStateOf(false)
     private var diagnostics by mutableStateOf(DevDashboardDiagnostics())
@@ -69,7 +73,7 @@ class DevDashboardFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         if (!BuildConfig.DEBUG) {
             showSnackbar(getString(R.string.admin_access_denied), isError = true)
-            findNavController().navigateUp()
+            mainNav.send(MainNavCommand.Back)
             return
         }
 
