@@ -11,7 +11,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 | B | Consolidate dual UI (Fragments→Compose) | L | Not started |
 | C | Unify authenticated-proxy HTTP client | S | Not started |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
-| E | Realtime/FGS + hive-fetch strategy | S | Partly done (FGS removed in H-5/H-6; hive-fetch dedup + app-scope remain) |
+| E | Realtime/FGS + hive-fetch strategy | S | **Done** (FGS removed H-5/H-6; hive-fetch deduped to 1 read/action + TTL cache) |
 | F | Lean PublicProfile DTO + drop admin_role | S | **Done** (decode-boundary; UI-type propagation = optional follow-up) |
 | G | Baseline profile: wire or delete | S | Not started |
 
@@ -52,6 +52,22 @@ Incremental; each commit is a complete checkpoint.
 - [ ] D hive fire-and-forget test — still needs `ProfileRepository` itself injectable into `WanderlyRepository` (the carved repos are injectable, but mission-completion's hive trigger lives in WanderlyRepository wrapping `profileRepository.logMissionCompletion`). A small follow-up: inject ProfileRepository (constructor param w/ default) to fake it.
 
 **Done when:** no single repo file > ~300 lines; all profile state mutation goes through `ProfileStateHolder`; tests green.
+
+---
+
+## E · Realtime/FGS + hive-fetch strategy — DONE
+
+- [x] FGS removed while realtime is disabled (done earlier as H-5/H-6).
+- [x] Hive-fetch dedup (audit M-7): replaced the per-action **pair** of `contributeIfMatches` calls
+      (each of which read the challenge **and** progress rows → ~4 reads/action) with a single
+      `HiveChallengeRepository.contribute(Map<goalType, amount>)` that resolves the active challenge
+      **once** via a lightweight `activeChallengeRowForContribution()` (challenge row only — **no
+      loadProgressRows**) with a 30s TTL cache. WanderlyRepository's mission-completion + gem-discovery
+      paths each now do **1** read (cache-amortized further across rapid actions). The UI path
+      (`getActiveChallenge`) still loads progress rows for an accurate total.
+- [x] Fire-and-forget scope: `HiveChallengeRepository(scope = ...)` is already a constructor param
+      (effectively app-lived as a WanderlyRepository @Singleton). A dedicated Hilt-injected app scope
+      is an optional further tweak; current form is bounded + cancellable via the supervisor scope.
 
 ---
 

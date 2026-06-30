@@ -67,10 +67,11 @@ open class WanderlyRepository(
         if (result is MissionCompletionResult.Completed) {
             // Fire-and-forget hive co-op contributions; only the goal_type matching the active
             // challenge actually counts, the rest are silent no-ops.
-            hiveChallengeRepository.contributeIfMatches(HiveGoalType.MISSIONS, 1)
-            hiveChallengeRepository.contributeIfMatches(
-                HiveGoalType.HONEY,
-                result.rewardHoney + result.streakBonusHoney
+            hiveChallengeRepository.contribute(
+                mapOf(
+                    HiveGoalType.MISSIONS to 1,
+                    HiveGoalType.HONEY to result.rewardHoney + result.streakBonusHoney
+                )
             )
         }
         return result
@@ -155,8 +156,12 @@ open class WanderlyRepository(
     open suspend fun discoverGem(gem: Gem, currentLat: Double, currentLng: Double): GemDiscoveryResult {
         val result = gemDiscoveryRepository.discoverGem(gem, currentLat, currentLng)
         if (result is GemDiscoveryResult.Success) {
-            hiveChallengeRepository.contributeIfMatches(HiveGoalType.GEMS, 1)
-            hiveChallengeRepository.contributeIfMatches(HiveGoalType.HONEY, result.rewardHoney)
+            hiveChallengeRepository.contribute(
+                mapOf(
+                    HiveGoalType.GEMS to 1,
+                    HiveGoalType.HONEY to result.rewardHoney
+                )
+            )
         }
         return result
     }

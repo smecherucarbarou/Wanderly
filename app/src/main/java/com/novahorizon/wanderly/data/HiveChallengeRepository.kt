@@ -40,6 +40,11 @@ open class HiveChallengeRepository(
         val error: String? = null
     )
 
+    private data class CachedContribRow(val row: HiveChallengeRow?, val fetchedAtMillis: Long)
+
+    @Volatile
+    private var cachedContribRow: CachedContribRow? = null
+
     /**
      * Reads the currently active challenge (`now()` within `[starts_at, ends_at]`, not yet rewarded)
      * and its collective contribution total. Returns null when none is active.
@@ -87,12 +92,18 @@ open class HiveChallengeRepository(
      * `goal_type` differs from [actionGoalType]. Detached on an internal scope so the caller's
      * result is never delayed; every failure is logged only.
      */
-    open fun contributeIfMatches(actionGoalType: String, amount: Int) {
-        if (amount <= 0) return
+    /**
+     * Fire-and-forget: resolve the active challenge ONCE and contribute the amount mapped to its
+     * goal_type, if any. Replaces the per-action pair of contributeIfMatches calls (each of which read
+     * the challenge + progress rows) — now one lightweight, TTL-cached read per action (audit M-7).
+     * Detached on [scope] so the caller's result is never delayed; failures are logged only.
+     */
+    open fun contribute(amounts: Map<String, Int>) {
         scope.launch {
             try {
-                val challenge = getActiveChallenge() ?: return@launch
-                if (challenge.goalType != actionGoalType) return@launch
+                val challenge = activeChallengeRowForContribution() ?: return@launch
+                val amount = amounts[challenge.goal_type] ?: return@launch
+                if (amount <= 0) return@launch
                 SupabaseClient.client.postgrest.rpc(
                     "contribute_to_challenge",
                     ContributeChallengeParams(challenge.id, amount)
@@ -102,6 +113,29 @@ open class HiveChallengeRepository(
                 logError("Hive contribution failed (silent)", e)
             }
         }
+    }
+
+    /**
+     * Lightweight active-challenge lookup for the contribution path: just the challenge row
+     * (id + goal_type), without the progress-row aggregation getActiveChallenge does for the UI.
+     * Cached for a short TTL so back-to-back contributions in one action don't re-read.
+     */
+    private suspend fun activeChallengeRowForContribution(): HiveChallengeRow? {
+        val now = System.currentTimeMillis()
+        cachedContribRow?.let { if (now - it.fetchedAtMillis < CONTRIB_CACHE_TTL_MS) return it.row }
+        val nowIso = Instant.now().toString()
+        val row = SupabaseClient.client.postgrest[Constants.TABLE_HIVE_CHALLENGES]
+            .select {
+                filter {
+                    eq("rewarded", false)
+                    lte("starts_at", nowIso)
+                    gte("ends_at", nowIso)
+                }
+            }
+            .decodeList<HiveChallengeRow>()
+            .minByOrNull { it.ends_at }
+        cachedContribRow = CachedContribRow(row, now)
+        return row
     }
 
     private fun logError(message: String, throwable: Throwable) {
@@ -114,6 +148,8 @@ open class HiveChallengeRepository(
     }
 
     companion object {
+        private const val CONTRIB_CACHE_TTL_MS = 30_000L
+
         internal fun totalContribution(rows: List<HiveChallengeProgressRow>): Int =
             rows.sumOf { it.contribution }
     }
