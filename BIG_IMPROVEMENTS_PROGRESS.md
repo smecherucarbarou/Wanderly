@@ -8,7 +8,7 @@ Suggested sequence (from the doc): **D** → **F** → **A** → **E** → **C**
 | Item | Title | Effort | Status |
 |------|-------|--------|--------|
 | A | Split ProfileRepository god class | M | **Largely done** (holder + Shop/Streak/Referral carved; ProfileRepository 950→537 lines) |
-| B | Consolidate dual UI (Fragments→Compose) | L | **In progress** (inventory done; dead duplicate stack deleted; migration plan written — see [B_MIGRATION_PLAN.md](B_MIGRATION_PLAN.md)) |
+| B | Consolidate dual UI (Fragments→Compose) | L | **In progress** (PR-2 auth graph + PR-3 main-graph interop cutover + PR-4 Gems real migration all done; remaining: profile/devDashboard, social, missions, map/guide, PR-final cleanup — see [B_MIGRATION_PLAN.md](B_MIGRATION_PLAN.md)) |
 | C | Unify authenticated-proxy HTTP client | S | **Done** (shared awaitWithTokenRefresh; GeminiClient/PlacesProxyClient/Gateway routed) |
 | D | Test-coverage program | M | **In progress** (decode + invariant tests landed; see below) |
 | E | Realtime/FGS + hive-fetch strategy | S | **Done** (FGS removed H-5/H-6; hive-fetch deduped to 1 read/action + TTL cache) |
@@ -98,10 +98,30 @@ Activity **host skeleton** with a single Navigation-Compose `NavHost`.
       `bottom_nav_menu.xml`, `ids.xml`. **Compile + unit + androidTest green; main-nav behavior is NOT
       CI-covered → device smoke needed.** Known minor diff: child screens (guide/devDashboard) show no
       bottom-tab highlighted (parent tab no longer stays selected).
-- [ ] PR-4…N — per-screen real migration: replace each `AndroidFragment<X>()` with the existing
-      `XScreen(...)` composable + lift that fragment's glue into Compose (permissions/ActivityResult/
-      effects), then delete the fragment. Now incremental & isolated *under* the Compose NavHost. Order:
-      gems → profile/devDashboard → social → missions → map/guide (osmdroid, riskiest last).
+- [x] **PR-4 — Gems real migration (DONE).** Replaced `AndroidFragment<GemsFragment>()` with a new
+      `GemsDestination` composable (`ui/gems/GemsDestination.kt`) hosting the existing `GemsScreen`
+      directly. Ported: location-permission grant/deny/rationale/settings flow (reusing the existing
+      Fragment-agnostic `LocationPermissionGate`), continuous location updates scoped to
+      `ON_RESUME`/`ON_PAUSE` via a lifecycle `DisposableEffect` (which also stops on `onDispose`,
+      closing a leak the Fragment didn't have to worry about), one-shot high-accuracy fetch +
+      reverse-geocoding, and all four discover/message snackbars. Extracted the previously-untested
+      city-name-resolution logic to `GemsCityResolver` (new unit tests, 6 cases). Added a small
+      colored-`Snackbar` mechanism to `MainActivity`'s shared `Scaffold`
+      (`ColoredSnackbarVisuals`/`showColoredSnackbar`) since Compose's default `SnackbarHostState`
+      had no error/success color distinction, unlike the Fragment's `Snackbar.setBackgroundTint`.
+      Deleted `GemsFragment.kt`. **Verified:** unit suite green (370/370) plus a real-device manual
+      smoke test (physical phone, not emulator) — permission already granted, real GPS + geocoding
+      produced a real gem list, Discover completed a real backend RPC and updated to "Discovered",
+      open-in-maps confirmed 3×, backgrounding to Maps and back + tab-switching caused no crash, zero
+      `FATAL EXCEPTION` in logcat across the session. **Not exercised:** the permission-denial
+      rationale/settings snackbar color path (permission was already granted from a prior session) —
+      low risk, the routing was hand-traced correct by two independent reviewers and
+      `LocationPermissionGate` itself is unchanged/already unit-tested. **Known follow-up (separate,
+      out of this PR's scope):** `GemsLocationCallbackGuard.kt` + its test are now orphaned dead code
+      (only ever called from the deleted Fragment) — flagged for a follow-up cleanup PR.
+- [ ] PR-5…N — same per-screen real migration for the rest: profile/devDashboard → social → missions
+      → map/guide (osmdroid, riskiest last — start destination, `AndroidView` interop + manual
+      lifecycle).
 - [ ] PR-final cleanup — once no fragments remain: drop `navigation-fragment-ktx`/`navigation-ui-ktx`
       (+ `fragment-compose`), prune now-unused `anim/`, `nav_item_colors`; consider collapsing
       `AuthActivity`/`MainActivity`.
