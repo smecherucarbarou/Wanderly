@@ -96,7 +96,7 @@ compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-mani
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 compose-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata" }
-compose-activity = { group = "androidx.activity", name = "activity-compose" }
+compose-activity = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 compose-navigation = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 compose-hilt-navigation = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-fragment-compose = { group = "androidx.fragment", name = "fragment-compose", version.ref = "fragmentCompose" }

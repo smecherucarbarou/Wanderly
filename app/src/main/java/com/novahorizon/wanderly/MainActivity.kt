@@ -60,7 +60,7 @@ import com.novahorizon.wanderly.services.HiveRealtimeService
 import com.novahorizon.wanderly.ui.MainNavigationDestinations
 import com.novahorizon.wanderly.ui.compose.theme.WanderlyTheme
 import com.novahorizon.wanderly.ui.guide.WanderlyGuideFragment
-import com.novahorizon.wanderly.ui.gems.GemsFragment
+import com.novahorizon.wanderly.ui.gems.GemsDestination
 import com.novahorizon.wanderly.ui.main.DevDashboardRoute
 import com.novahorizon.wanderly.ui.main.GemsRoute
 import com.novahorizon.wanderly.ui.main.GuideRoute
@@ -375,7 +375,7 @@ private fun MainHost(
         ) {
             composable<OnboardingRoute> { AndroidFragment<OnboardingFragment>(modifier = Modifier.fillMaxSize()) }
             composable<MapRoute> { AndroidFragment<MapFragment>(modifier = Modifier.fillMaxSize()) }
-            composable<GemsRoute> { AndroidFragment<GemsFragment>(modifier = Modifier.fillMaxSize()) }
+            composable<GemsRoute> { GemsDestination(snackbarHostState = snackbarHostState) }
             composable<MissionsRoute> { AndroidFragment<MissionsFragment>(modifier = Modifier.fillMaxSize()) }
             composable<SocialRoute> { AndroidFragment<SocialFragment>(modifier = Modifier.fillMaxSize()) }
             composable<ProfileRoute> { AndroidFragment<ProfileFragment>(modifier = Modifier.fillMaxSize()) }
