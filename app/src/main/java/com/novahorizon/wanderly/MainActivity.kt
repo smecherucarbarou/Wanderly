@@ -20,8 +20,11 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarVisuals
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -237,6 +240,18 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+private data class ColoredSnackbarVisuals(
+    override val message: String,
+    val isError: Boolean,
+    override val actionLabel: String? = null,
+    override val withDismissAction: Boolean = false,
+    override val duration: SnackbarDuration = SnackbarDuration.Long
+) : SnackbarVisuals
+
+suspend fun SnackbarHostState.showColoredSnackbar(message: String, isError: Boolean) {
+    showSnackbar(ColoredSnackbarVisuals(message = message, isError = isError))
+}
+
 private data class MainStartState(
     val onboardingSeen: Boolean,
     val hasPendingInvite: Boolean
@@ -335,7 +350,16 @@ private fun MainHost(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                val isError = (data.visuals as? ColoredSnackbarVisuals)?.isError == true
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (isError) colorResource(R.color.error) else colorResource(R.color.primary),
+                    contentColor = if (isError) colorResource(R.color.card_background) else colorResource(R.color.secondary)
+                )
+            }
+        },
         bottomBar = {
             if (showBottomBar) {
                 MainBottomBar(navController = navController, currentDestination = currentDestination)
